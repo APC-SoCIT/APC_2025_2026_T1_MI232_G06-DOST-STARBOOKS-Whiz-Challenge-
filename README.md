@@ -2,7 +2,7 @@
 Template repository for APC MSSYADD1
 
 G06 NEXUS
-Leader: Kelly Dumbrique
+Team Leader: Kelly Dumbrique
 Members:
 Arcielle Marie Gercan
 Shandrae Lois Quianzon
