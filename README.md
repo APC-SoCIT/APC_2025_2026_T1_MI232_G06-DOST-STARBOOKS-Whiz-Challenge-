@@ -1,5 +1,5 @@
-# apc-mssyadd1-template
-Template repository for APC MSSYADD1
+# Laravel API
+API branch for frontend-backend-database communication
 
 G06 NEXUS   
 Team Leader: Kelly Dumbrique         
