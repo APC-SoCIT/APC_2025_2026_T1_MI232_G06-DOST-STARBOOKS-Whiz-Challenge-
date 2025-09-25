@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'register.dart'; 
-import 'homepage.dart'; 
+import 'register.dart';
+import 'homepage.dart';
 
 class LogInPage extends StatefulWidget {
   const LogInPage({super.key});
@@ -12,8 +12,10 @@ class LogInPage extends StatefulWidget {
 class _LogInPageState extends State<LogInPage>
     with SingleTickerProviderStateMixin {
   bool _obscurePassword = true;
-
   late final AnimationController _controller;
+
+  // ✅ Controller to grab username input
+  final TextEditingController _usernameController = TextEditingController();
 
   @override
   void initState() {
@@ -27,6 +29,7 @@ class _LogInPageState extends State<LogInPage>
   @override
   void dispose() {
     _controller.dispose();
+    _usernameController.dispose(); // ✅ cleanup controller
     super.dispose();
   }
 
@@ -42,26 +45,18 @@ class _LogInPageState extends State<LogInPage>
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Image.asset(
-              "assets/images-logo/starbookslogo.png",
-              height: 50,
-            ),
+            Image.asset("assets/images-logo/starbookslogo.png", height: 50),
             InkWell(
               onTap: () {
                 //ADMIN supposed link
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const AdminPage(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const AdminPage()),
                 );
               },
               child: Row(
                 children: const [
-                  Icon(
-                    Icons.person,
-                    color: Color(0xFF046EB8),
-                  ),
+                  Icon(Icons.person, color: Color(0xFF046EB8)),
                   SizedBox(width: 5),
                   Text(
                     "ADMIN",
@@ -144,8 +139,9 @@ class _LogInPageState extends State<LogInPage>
                       ),
                       const SizedBox(height: 20),
 
-                      // Username
+                      // ✅ Username
                       TextField(
+                        controller: _usernameController,
                         decoration: InputDecoration(
                           labelText: "Username",
                           labelStyle: const TextStyle(fontSize: 12),
@@ -216,10 +212,23 @@ class _LogInPageState extends State<LogInPage>
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
+                            final username = _usernameController.text.trim();
+
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const HomePage(),
+                                builder: (context) => HomePage(
+                                  profile: UserProfile(
+                                    username: username.isEmpty
+                                        ? "Guest" // fallback
+                                        : username,
+                                    category: "Student",
+                                    region: "NCR",
+                                    province: "Metro Manila",
+                                    city: "Makati City",
+                                    avatar: "Astronaut",
+                                  ),
+                                ),
                               ),
                             );
                           },

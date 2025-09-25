@@ -6,8 +6,59 @@ import 'whiz_challenge.dart';
 import 'whiz_puzzle.dart';
 import 'whiz_memory_match.dart';
 
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+class UserProfile {
+  String username;
+  String school;
+  String age;
+  String category;
+  String sex;
+  String region;
+  String province;
+  String city;
+  String avatar;
+
+  UserProfile({
+    this.username = "editmyusername",
+    this.school = "Type your School",
+    this.age = "18-22",
+    this.category = "Student",
+    this.sex = "Prefer not to say",
+    this.region = "NCR",
+    this.province = "Metro Manila",
+    this.city = "Makati City",
+    this.avatar = "Astronaut",
+  });
+}
+
+class HomePage extends StatefulWidget {
+  final UserProfile profile;
+  const HomePage({super.key, required this.profile});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  void _editProfile() async {
+    final updatedProfile = await showDialog<UserProfile>(
+      context: context,
+      builder: (_) => EditProfileDialog(profile: widget.profile),
+    );
+
+    if (updatedProfile != null) {
+      setState(() {
+        widget.profile.username = updatedProfile.username;
+        widget.profile.school = updatedProfile.school;
+        widget.profile.age = updatedProfile.age;
+        widget.profile.category = updatedProfile.category;
+        widget.profile.sex = updatedProfile.sex;
+        widget.profile.region = updatedProfile.region;
+        widget.profile.province = updatedProfile.province;
+        widget.profile.city = updatedProfile.city;
+        widget.profile.avatar = updatedProfile.avatar;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,15 +72,12 @@ class HomePage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             child: Row(
               children: [
-                // Logo with image (bigger PNG, bar stays slim)
                 Image.asset(
                   "assets/images-logo/mainlogo.png",
                   width: 150,
                   height: 50,
                   fit: BoxFit.contain,
                 ),
-
-                // Centered Menu
                 Expanded(
                   child: Align(
                     alignment: Alignment.center,
@@ -38,39 +86,44 @@ class HomePage extends StatelessWidget {
                       children: [
                         TextButton(
                           onPressed: () {},
-                          child: const Text(
-                            "Home",
-                            style: TextStyle(color: Colors.black),
-                          ),
+                          child: const Text("Home",
+                              style: TextStyle(color: Colors.black)),
                         ),
                         const SizedBox(width: 20),
                         TextButton(
                           onPressed: () {},
-                          child: const Text(
-                            "Stats",
-                            style: TextStyle(color: Colors.black),
-                          ),
+                          child: const Text("Stats",
+                              style: TextStyle(color: Colors.black)),
                         ),
                       ],
                     ),
                   ),
                 ),
-
-                // Avatar placeholder
-                const CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey,
-                  child: Icon(Icons.person, color: Colors.white),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFFD13B),
+                      width: 3,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      "assets/images-avatars/${widget.profile.avatar}.png",
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
 
-          // ===== MAIN CONTENT WITH STACK =====
+          // ===== MAIN CONTENT =====
           Expanded(
             child: Stack(
               children: [
-                // ==== GAME BUTTON GRID ====
                 Padding(
                   padding: const EdgeInsets.only(top: 190, left: 70, right: 70),
                   child: GridView.count(
@@ -78,7 +131,7 @@ class HomePage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     crossAxisSpacing: 24,
                     mainAxisSpacing: 24,
-                    childAspectRatio: 0.78, // taller to fit new layout
+                    childAspectRatio: 0.78,
                     children: const [
                       _GameBox(
                         title: "Whiz Memory Match",
@@ -126,13 +179,22 @@ class HomePage extends StatelessWidget {
                     child: Row(
                       children: [
                         // Avatar
-                        const CircleAvatar(
-                          radius: 55,
-                          backgroundColor: Colors.yellow,
-                          child: Icon(
-                            Icons.person,
-                            size: 50,
-                            color: Colors.brown,
+                        Container(
+                          width: 110,
+                          height: 110,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFFFD13B),
+                              width: 6,
+                            ),
+                            color: Colors.white,
+                          ),
+                          child: ClipOval(
+                            child: Image.asset(
+                              "assets/images-avatars/${widget.profile.avatar}.png",
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -142,40 +204,32 @@ class HomePage extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
-                            children: const [
+                            children: [
                               Text(
-                                "juandelacruz",
-                                style: TextStyle(
+                                widget.profile.username,
+                                style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
                               ),
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
+                              Text(widget.profile.category,
+                                  style:
+                                      const TextStyle(color: Colors.white70)),
                               Text(
-                                "Student",
-                                style: TextStyle(color: Colors.white70),
-                              ),
-                              Text(
-                                "Makati City, Metro Manila, NCR",
-                                style: TextStyle(color: Colors.white70),
+                                "${widget.profile.city}, ${widget.profile.province}, ${widget.profile.region}",
+                                style: const TextStyle(color: Colors.white70),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 12),
 
-                        // Buttons Row
                         Row(
                           children: [
-                            // Edit Profile button
                             ElevatedButton.icon(
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => const EditProfileDialog(),
-                                );
-                              },
+                              onPressed: _editProfile,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: const Color(0xFF046EB8),
@@ -191,8 +245,6 @@ class HomePage extends StatelessWidget {
                               label: const Text("Edit Profile"),
                             ),
                             const SizedBox(width: 14),
-
-                            // Your Badges button
                             ElevatedButton.icon(
                               onPressed: () {
                                 showDialog(
@@ -201,8 +253,8 @@ class HomePage extends StatelessWidget {
                                 );
                               },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFDD000),
-                                foregroundColor: const Color(0xFF915701),
+                                backgroundColor: Color(0xFFFDD000),
+                                foregroundColor: Color(0xFF915701),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(30),
                                 ),
@@ -212,12 +264,10 @@ class HomePage extends StatelessWidget {
                                 ),
                               ),
                               icon: const Icon(Icons.emoji_events),
-                              label: const Text(
-                                "Your Badges",
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
+                              label: const Text("Your Badges",
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                             ),
-                            const SizedBox(width: 12),
                           ],
                         ),
                       ],
@@ -233,7 +283,7 @@ class HomePage extends StatelessWidget {
   }
 }
 
-// ===== GAME BOX WIDGET =====
+// ===== GAME BOX =====
 class _GameBox extends StatefulWidget {
   final String title;
   final String imagePath;
@@ -254,7 +304,6 @@ class _GameBoxState extends State<_GameBox> {
 
   void _navigateToGame(BuildContext context) {
     Widget page;
-
     switch (widget.title) {
       case "Whiz Memory Match":
         page = const WhizMemoryMatch();
@@ -269,9 +318,8 @@ class _GameBoxState extends State<_GameBox> {
         page = const WhizPuzzle();
         break;
       default:
-        return; // no navigation if no match
+        return;
     }
-
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
@@ -291,12 +339,8 @@ class _GameBoxState extends State<_GameBox> {
             boxShadow: _hovering
                 ? [
                     BoxShadow(
-                      color: const Color.fromARGB(
-                        255,
-                        255,
-                        209,
-                        59,
-                      ).withOpacity(0.8),
+                      color:
+                          const Color.fromARGB(255, 255, 209, 59).withOpacity(0.8),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -305,18 +349,15 @@ class _GameBoxState extends State<_GameBox> {
           ),
           child: Column(
             children: [
-              // ✅ Flexible game image (keeps inside box)
               Expanded(
                 child: Center(
                   child: SizedBox(
                     height: 710,
-                    width: 400, // 🔽 fixed max height for all images
+                    width: 400,
                     child: Image.asset(widget.imagePath, fit: BoxFit.contain),
                   ),
                 ),
               ),
-
-              // ✅ White box for text (dynamic height)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 10),

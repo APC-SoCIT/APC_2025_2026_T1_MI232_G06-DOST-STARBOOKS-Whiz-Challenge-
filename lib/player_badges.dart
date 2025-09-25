@@ -36,25 +36,37 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildBadgeCategory("Easy", const Color(0xFF1D9358), [
-                    "assets/images-badges/whiz-ready.png",
-                    "assets/images-badges/whiz-ready.png",
-                    "assets/images-badges/whiz-ready.png",
-                  ]),
+                  _buildBadgeCategory(
+                    "Easy",
+                    const Color(0xFF1D9358),
+                    [
+                      "assets/images-badges/whiz-ready.png",
+                      "assets/images-badges/whiz-ready.png",
+                      "assets/images-badges/whiz-ready.png",
+                    ],
+                  ),
                   const SizedBox(height: 20),
 
-                  _buildBadgeCategory("Average", const Color(0xFF046EB8), [
-                    "assets/images-badges/whiz-happy.png",
-                    "assets/images-badges/whiz-happy.png",
-                    null, // missing one
-                  ]),
+                  _buildBadgeCategory(
+                    "Average",
+                    const Color(0xFF046EB8),
+                    [
+                      "assets/images-badges/whiz-happy.png",
+                      "assets/images-badges/whiz-happy.png",
+                      null, // missing one
+                    ],
+                  ),
                   const SizedBox(height: 20),
 
-                  _buildBadgeCategory("Difficult", const Color(0xFFBD442E), [
-                    "assets/images-badges/whiz-achiever.png",
-                    null,
-                    null,
-                  ]),
+                  _buildBadgeCategory(
+                    "Difficult",
+                    const Color(0xFFBD442E),
+                    [
+                      "assets/images-badges/whiz-achiever.png",
+                      null,
+                      null,
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -90,10 +102,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
 
   // ==== Badge Row Builder ====
   Widget _buildBadgeCategory(
-    String title,
-    Color borderColor,
-    List<String?> badgePaths,
-  ) {
+      String title, Color borderColor, List<String?> badgePaths) {
     bool unlocked = badgePaths.every((p) => p != null);
     bool isClaimed = claimed[title] ?? false;
 
@@ -122,12 +131,13 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: path != null ? borderColor : Colors.grey,
-                      width: 3,
-                    ),
+                        color: path != null ? borderColor : Colors.grey,
+                        width: 3),
                   ),
                   child: path != null
-                      ? ClipOval(child: Image.asset(path, fit: BoxFit.contain))
+                      ? ClipOval(
+                          child: Image.asset(path, fit: BoxFit.contain),
+                        )
                       : null,
                 ),
               );
@@ -149,17 +159,17 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(22),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 25,
-                  vertical: 17,
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 25, vertical: 17),
                 textStyle: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               child: Text(
-                isClaimed ? "CLAIMED" : (unlocked ? "CLAIM!" : "LOCKED"),
+                isClaimed
+                    ? "CLAIMED"
+                    : (unlocked ? "CLAIM!" : "LOCKED"),
               ),
             ),
           ],
