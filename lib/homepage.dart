@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'edit_profile.dart';
+import 'player_badges.dart';
+import 'whiz_battle.dart';
+import 'whiz_challenge.dart';
+import 'whiz_puzzle.dart';
+import 'whiz_memory_match.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -7,7 +12,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF046EB8), // ✅ background
+      backgroundColor: const Color(0xFF046EB8), // background
       body: Column(
         children: [
           // ===== TOP BAR =====
@@ -67,29 +72,33 @@ class HomePage extends StatelessWidget {
               children: [
                 // ==== GAME BUTTON GRID ====
                 Padding(
-                  padding: const EdgeInsets.only(top: 200, left: 70, right: 70),
+                  padding: const EdgeInsets.only(top: 190, left: 70, right: 70),
                   child: GridView.count(
                     crossAxisCount: 4,
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     crossAxisSpacing: 24,
                     mainAxisSpacing: 24,
-                    childAspectRatio: 0.80, // taller than wide
+                    childAspectRatio: 0.78, // taller to fit new layout
                     children: const [
                       _GameBox(
                         title: "Whiz Memory Match",
-                        imagePath: "assets/images-icons/placeholder.png",
+                        imagePath: "assets/images-icons/memorymatch.png",
+                        backgroundColor: Color(0xFF656BE6),
                       ),
                       _GameBox(
                         title: "Whiz Challenge",
-                        imagePath: "assets/images-icons/placeholder.png",
+                        imagePath: "assets/images-icons/whizchallenge.png",
+                        backgroundColor: Color(0xFFFDD000),
                       ),
                       _GameBox(
                         title: "Whiz Battle",
-                        imagePath: "assets/images-icons/placeholder.png",
+                        imagePath: "assets/images-icons/whizbattle.png",
+                        backgroundColor: Color(0xFFC571E2),
                       ),
                       _GameBox(
                         title: "Whiz Puzzle",
-                        imagePath: "assets/images-icons/placeholder.png",
+                        imagePath: "assets/images-icons/whizpuzzle.png",
+                        backgroundColor: Color(0xFFE6833A),
                       ),
                     ],
                   ),
@@ -99,7 +108,8 @@ class HomePage extends StatelessWidget {
                 Align(
                   alignment: Alignment.topCenter,
                   child: Container(
-                    width: 780,
+                    height: 130,
+                    width: 800,
                     margin: const EdgeInsets.only(top: 30),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -185,11 +195,14 @@ class HomePage extends StatelessWidget {
                             // Your Badges button
                             ElevatedButton.icon(
                               onPressed: () {
-                                print("Your Badges clicked");
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => const PlayerBadgesDialog(),
+                                );
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFDD000),
-                                foregroundColor: const Color(0xFF816A03),
+                                foregroundColor: const Color(0xFF915701),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(30),
                                 ),
@@ -224,7 +237,13 @@ class HomePage extends StatelessWidget {
 class _GameBox extends StatefulWidget {
   final String title;
   final String imagePath;
-  const _GameBox({required this.title, required this.imagePath});
+  final Color backgroundColor;
+
+  const _GameBox({
+    required this.title,
+    required this.imagePath,
+    this.backgroundColor = Colors.white,
+  });
 
   @override
   State<_GameBox> createState() => _GameBoxState();
@@ -233,48 +252,86 @@ class _GameBox extends StatefulWidget {
 class _GameBoxState extends State<_GameBox> {
   bool _hovering = false;
 
+  void _navigateToGame(BuildContext context) {
+    Widget page;
+
+    switch (widget.title) {
+      case "Whiz Memory Match":
+        page = const WhizMemoryMatch();
+        break;
+      case "Whiz Challenge":
+        page = const WhizChallenge();
+        break;
+      case "Whiz Battle":
+        page = const WhizBattle();
+        break;
+      case "Whiz Puzzle":
+        page = const WhizPuzzle();
+        break;
+      default:
+        return; // no navigation if no match
+    }
+
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: () {
-          print("${widget.title} clicked"); // clickable but placeholder
-        },
+        onTap: () => _navigateToGame(context),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: _hovering ? Colors.yellow.shade300 : Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            color: widget.backgroundColor,
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(color: Colors.white, width: 5),
             boxShadow: _hovering
-                ? [const BoxShadow(color: Colors.black26, blurRadius: 8)]
+                ? [
+                    BoxShadow(
+                      color: const Color.fromARGB(
+                        255,
+                        255,
+                        209,
+                        59,
+                      ).withOpacity(0.8),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ]
                 : [],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Game icon (fills available vertical space)
+              // ✅ Flexible game image (keeps inside box)
               Expanded(
                 child: Center(
-                  child: Image.asset(
-                    widget.imagePath,
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.contain,
+                  child: SizedBox(
+                    height: 710,
+                    width: 400, // 🔽 fixed max height for all images
+                    child: Image.asset(widget.imagePath, fit: BoxFit.contain),
                   ),
                 ),
               ),
 
-              // Title closer to bottom
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+              // ✅ White box for text (dynamic height)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
+                  ),
+                ),
                 child: Text(
                   widget.title,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 21,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

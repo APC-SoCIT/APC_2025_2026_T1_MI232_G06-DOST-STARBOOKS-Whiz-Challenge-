@@ -63,9 +63,21 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/images-logo/starbookslogo.png
+    - assets/images-logo/mainlogo.png
     - assets/images-logo/starbookslogin.png
     - assets/images-icons/background1.png
     - assets/images-icons/placeholder.png
+    - assets/images-badges/whiz-achiever.png
+    - assets/images-badges/whiz-happy.png
+    - assets/images-badges/whiz-ready.png
+    - assets/images-icons/memorymatch.png
+    - assets/images-icons/whizchallenge.png
+    - assets/images-icons/whizbattle.png
+    - assets/images-icons/whizpuzzle.png
+    - assets/images-avatars/Astronaut.png
+    - assets/images-avatars/Sly-Fox.png
+    - assets/images-avatars/Twirky.png
+    - assets/images-avatars/Whiz-Busy.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

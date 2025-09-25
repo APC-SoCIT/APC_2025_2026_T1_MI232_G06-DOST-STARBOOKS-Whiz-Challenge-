@@ -62,12 +62,33 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     "Region XIII (Caraga)",
     "NIR",
   ];
+
+  /// Avatars mapped to filenames
   final List<String> avatarOptions = [
     "Default",
-    "Avatar 1",
-    "Avatar 2",
-    "Avatar 3",
+    "Sly Fox",
+    "Astronaut",
+    "Whiz Busy",
+    "Twirky",
   ];
+
+  String? _getAvatarPath(String choice) {
+    if (choice == "Default") return null;
+
+    // Direct mapping for custom names
+    switch (choice) {
+      case "Sly Fox":
+        return "assets/images-avatars/Sly-Fox.png";
+      case "Astronaut":
+        return "assets/images-avatars/Astronaut.png";
+      case "Whiz Busy":
+        return "assets/images-avatars/Whiz-Busy.png";
+      case "Twirky":
+        return "assets/images-avatars/Twirky.png";
+      default:
+        return null; // fallback
+    }
+  }
 
   final Map<String, List<String>> provinceOptions = {
     "NCR": ["Metro Manila"],
@@ -111,6 +132,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final avatarPath = _getAvatarPath(avatar);
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: Colors.white,
@@ -125,8 +148,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Row(
-                    children: [
+                  Row(
+                    children: const [
                       Icon(Icons.edit, color: Colors.black),
                       SizedBox(width: 8),
                       Text(
@@ -169,16 +192,28 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 60,
-                    backgroundColor: const Color.fromARGB(255, 255, 209, 59),
-                    child: const Icon(
-                      Icons.person,
-                      size: 60,
-                      color: Color.fromARGB(255, 68, 39, 0),
+                  // Avatar with yellow border
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFFD13B), // yellow border
+                        width: 6,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: avatarPath == null
+                          ? const Icon(
+                              Icons.person,
+                              size: 60,
+                              color: Color(0xFF442700),
+                            )
+                          : Image.asset(avatarPath, fit: BoxFit.cover),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 40),
                   Expanded(
                     child: Column(
                       children: [
@@ -203,7 +238,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                initialValue: age,
+                                value: age,
                                 items: ageOptions
                                     .map(
                                       (val) => DropdownMenuItem(
@@ -233,7 +268,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: avatar,
+                      value: avatar,
                       items: avatarOptions
                           .map(
                             (val) =>
@@ -247,7 +282,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: category,
+                      value: category,
                       items: categoryOptions
                           .map(
                             (val) =>
@@ -261,7 +296,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: sex,
+                      value: sex,
                       items: sexOptions
                           .map(
                             (val) =>
@@ -281,7 +316,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: region,
+                      value: region,
                       items: regionOptions
                           .map(
                             (val) =>
@@ -299,7 +334,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: province.isEmpty ? null : province,
+                      value: province.isEmpty ? null : province,
                       items: provinceOptions[region]
                           ?.map(
                             (val) =>
@@ -316,7 +351,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: city.isEmpty ? null : city,
+                      value: city.isEmpty ? null : city,
                       items: cityOptions[province]
                           ?.map(
                             (val) =>
@@ -348,8 +383,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color.fromARGB(255, 255, 209, 59),
-                      foregroundColor: Color.fromARGB(255, 145, 87, 1),
+                      backgroundColor: Color(0xFFFFD13B),
+                      foregroundColor: Color(0xFF915701),
                     ),
                     onPressed: saveProfile,
                     child: const Text(
