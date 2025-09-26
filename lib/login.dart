@@ -14,7 +14,6 @@ class _LogInPageState extends State<LogInPage>
   bool _obscurePassword = true;
   late final AnimationController _controller;
 
-  // ✅ Controller to grab username input
   final TextEditingController _usernameController = TextEditingController();
 
   @override
@@ -22,14 +21,14 @@ class _LogInPageState extends State<LogInPage>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 20),
+      duration: const Duration(seconds: 35),
     )..repeat();
   }
 
   @override
   void dispose() {
     _controller.dispose();
-    _usernameController.dispose(); // ✅ cleanup controller
+    _usernameController.dispose();
     super.dispose();
   }
 
@@ -41,6 +40,7 @@ class _LogInPageState extends State<LogInPage>
     return Scaffold(
       backgroundColor: const Color(0xFF94D2FD),
       appBar: AppBar(
+        automaticallyImplyLeading: false, // 🚫 remove back arrow
         backgroundColor: Colors.white,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -48,7 +48,6 @@ class _LogInPageState extends State<LogInPage>
             Image.asset("assets/images-logo/starbookslogo.png", height: 50),
             InkWell(
               onTap: () {
-                //ADMIN supposed link
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const AdminPage()),
@@ -135,11 +134,12 @@ class _LogInPageState extends State<LogInPage>
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
+                          color: Color(0xFF046EB8),
                         ),
                       ),
                       const SizedBox(height: 20),
 
-                      // ✅ Username
+                      // Username
                       TextField(
                         controller: _usernameController,
                         decoration: InputDecoration(
@@ -214,13 +214,13 @@ class _LogInPageState extends State<LogInPage>
                           onPressed: () {
                             final username = _usernameController.text.trim();
 
-                            Navigator.push(
+                            Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => HomePage(
                                   profile: UserProfile(
                                     username: username.isEmpty
-                                        ? "Guest" // fallback
+                                        ? "Guest"
                                         : username,
                                     category: "Student",
                                     region: "NCR",
@@ -257,7 +257,7 @@ class _LogInPageState extends State<LogInPage>
                           ),
                           InkWell(
                             onTap: () {
-                              Navigator.push(
+                              Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const RegisterPage(),
