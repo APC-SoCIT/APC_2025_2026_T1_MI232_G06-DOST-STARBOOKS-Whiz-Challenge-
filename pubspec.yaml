@@ -78,6 +78,9 @@ flutter:
     - assets/images-avatars/Sly-Fox.png
     - assets/images-avatars/Twirky.png
     - assets/images-avatars/Whiz-Busy.png
+    - assets/images-logo/bird1.png
+    - assets/images-logo/lab-bird.png
+    - assets/images-logo/lab-bird2.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
