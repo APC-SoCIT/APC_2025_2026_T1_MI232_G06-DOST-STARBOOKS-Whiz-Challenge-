@@ -2,18 +2,18 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\RegionController;
+use App\Http\Controllers\ProvinceController;
+use App\Http\Controllers\CityController;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| is assigned the "api" middleware group. Now create something great!
-|
-*/
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
+// Auth & User
+Route::post('/register', [UserController::class, 'register']);
+Route::post('/login', [UserController::class, 'login']);
+Route::get('/profile/{id}', [UserController::class, 'profile']);
+
+// Regions / Provinces / Cities
+Route::get('/region', [RegionController::class, 'index']);
+Route::get('/province/{regionId}', [ProvinceController::class, 'getByRegion']);
+Route::get('/city/{provinceId}', [CityController::class, 'getByProvince']);
