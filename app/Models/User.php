@@ -12,6 +12,7 @@ class User extends Model implements Authenticatable
 
     protected $connection = 'mongodb';
     protected $collection = 'player_info';
+    protected $table = 'player_info'; 
 
     protected $fillable = [
         'username',
