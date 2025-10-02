@@ -5,6 +5,7 @@ import 'whiz_battle.dart';
 import 'whiz_challenge.dart';
 import 'whiz_puzzle.dart';
 import 'whiz_memory_match.dart';
+import 'leaderboard.dart';
 
 class UserProfile {
   String username;
@@ -32,13 +33,23 @@ class UserProfile {
 
 class HomePage extends StatefulWidget {
   final UserProfile profile;
-  const HomePage({super.key, required this.profile});
+  final String initialTab;
+
+  const HomePage({super.key, required this.profile, this.initialTab = "Home"});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  late String _selectedTab;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTab = widget.initialTab;
+  }
+
   void _editProfile() async {
     final updatedProfile = await showDialog<UserProfile>(
       context: context,
@@ -60,10 +71,211 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Widget _buildTopNavButton(String label, IconData icon) {
+    final bool isActive = _selectedTab == label;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedTab = label;
+        });
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700],
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? const Color(0xFFFFD13B) : Colors.black,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 3,
+            width: isActive ? 70 : 0, // underline matches width
+            margin: const EdgeInsets.only(top: 2),
+            color: isActive ? const Color(0xFFFFD13B) : Colors.transparent,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    Widget mainContent;
+
+    if (_selectedTab == "Leaderboard") {
+      mainContent = const Leaderboard();
+    } else {
+      mainContent = Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 190, left: 70, right: 70),
+            child: GridView.count(
+              crossAxisCount: 4,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              crossAxisSpacing: 24,
+              mainAxisSpacing: 24,
+              childAspectRatio: 0.78,
+              children: const [
+                _GameBox(
+                  title: "Whiz Memory Match",
+                  imagePath: "assets/images-icons/memorymatch.png",
+                  backgroundColor: Color(0xFF656BE6),
+                ),
+                _GameBox(
+                  title: "Whiz Challenge",
+                  imagePath: "assets/images-icons/whizchallenge.png",
+                  backgroundColor: Color(0xFFFDD000),
+                ),
+                _GameBox(
+                  title: "Whiz Battle",
+                  imagePath: "assets/images-icons/whizbattle.png",
+                  backgroundColor: Color(0xFFC571E2),
+                ),
+                _GameBox(
+                  title: "Whiz Puzzle",
+                  imagePath: "assets/images-icons/whizpuzzle.png",
+                  backgroundColor: Color(0xFFE6833A),
+                ),
+              ],
+            ),
+          ),
+
+          // ==== PROFILE CARD ====
+          Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+              height: 130,
+              width: 800,
+              margin: const EdgeInsets.only(top: 30),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4A90BE),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 110,
+                    height: 110,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFFD13B),
+                        width: 6,
+                      ),
+                      color: Colors.white,
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        "assets/images-avatars/${widget.profile.avatar}.png",
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.profile.username,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.profile.category,
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        Text(
+                          "${widget.profile.city}, ${widget.profile.province}, ${widget.profile.region}",
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _editProfile,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF046EB8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                        ),
+                        icon: const Icon(Icons.edit),
+                        label: const Text("Edit Profile"),
+                      ),
+                      const SizedBox(width: 14),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => const PlayerBadgesDialog(),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Color(0xFFFDD000),
+                          foregroundColor: Color(0xFF915701),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                        ),
+                        icon: const Icon(Icons.emoji_events),
+                        label: const Text(
+                          "Your Badges",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Scaffold(
-      backgroundColor: const Color(0xFF046EB8), // background
+      backgroundColor: const Color(0xFF046EB8),
       body: Column(
         children: [
           // ===== TOP BAR =====
@@ -84,17 +296,9 @@ class _HomePageState extends State<HomePage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextButton(
-                          onPressed: () {},
-                          child: const Text("Home",
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        const SizedBox(width: 20),
-                        TextButton(
-                          onPressed: () {},
-                          child: const Text("Stats",
-                              style: TextStyle(color: Colors.black)),
-                        ),
+                        _buildTopNavButton("Home", Icons.home),
+                        const SizedBox(width: 40),
+                        _buildTopNavButton("Leaderboard", Icons.leaderboard),
                       ],
                     ),
                   ),
@@ -105,7 +309,7 @@ class _HomePageState extends State<HomePage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: const Color(0xFFFFD13B),
+                      color: const Color(0xFF046EB8),
                       width: 3,
                     ),
                   ),
@@ -121,162 +325,7 @@ class _HomePageState extends State<HomePage> {
           ),
 
           // ===== MAIN CONTENT =====
-          Expanded(
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 190, left: 70, right: 70),
-                  child: GridView.count(
-                    crossAxisCount: 4,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    crossAxisSpacing: 24,
-                    mainAxisSpacing: 24,
-                    childAspectRatio: 0.78,
-                    children: const [
-                      _GameBox(
-                        title: "Whiz Memory Match",
-                        imagePath: "assets/images-icons/memorymatch.png",
-                        backgroundColor: Color(0xFF656BE6),
-                      ),
-                      _GameBox(
-                        title: "Whiz Challenge",
-                        imagePath: "assets/images-icons/whizchallenge.png",
-                        backgroundColor: Color(0xFFFDD000),
-                      ),
-                      _GameBox(
-                        title: "Whiz Battle",
-                        imagePath: "assets/images-icons/whizbattle.png",
-                        backgroundColor: Color(0xFFC571E2),
-                      ),
-                      _GameBox(
-                        title: "Whiz Puzzle",
-                        imagePath: "assets/images-icons/whizpuzzle.png",
-                        backgroundColor: Color(0xFFE6833A),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ==== PROFILE CARD ====
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: Container(
-                    height: 130,
-                    width: 800,
-                    margin: const EdgeInsets.only(top: 30),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4A90BE),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 8,
-                          offset: Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        // Avatar
-                        Container(
-                          width: 110,
-                          height: 110,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFFFFD13B),
-                              width: 6,
-                            ),
-                            color: Colors.white,
-                          ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              "assets/images-avatars/${widget.profile.avatar}.png",
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-
-                        // Profile details
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.profile.username,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(widget.profile.category,
-                                  style:
-                                      const TextStyle(color: Colors.white70)),
-                              Text(
-                                "${widget.profile.city}, ${widget.profile.province}, ${widget.profile.region}",
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-
-                        Row(
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _editProfile,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: const Color(0xFF046EB8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
-                                ),
-                              ),
-                              icon: const Icon(Icons.edit),
-                              label: const Text("Edit Profile"),
-                            ),
-                            const SizedBox(width: 14),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => const PlayerBadgesDialog(),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFFFDD000),
-                                foregroundColor: Color(0xFF915701),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
-                                ),
-                              ),
-                              icon: const Icon(Icons.emoji_events),
-                              label: const Text("Your Badges",
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: mainContent),
         ],
       ),
     );
@@ -339,8 +388,12 @@ class _GameBoxState extends State<_GameBox> {
             boxShadow: _hovering
                 ? [
                     BoxShadow(
-                      color:
-                          const Color.fromARGB(255, 255, 209, 59).withOpacity(0.8),
+                      color: const Color.fromARGB(
+                        255,
+                        255,
+                        209,
+                        59,
+                      ).withOpacity(0.8),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),

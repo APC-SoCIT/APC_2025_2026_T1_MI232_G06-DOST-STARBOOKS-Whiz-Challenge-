@@ -25,24 +25,51 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   final TextEditingController schoolController = TextEditingController();
 
   final List<String> ageOptions = [
-    "0-12", "13-17", "18-22", "23-29", "30-39", "40+",
+    "0-12",
+    "13-17",
+    "18-22",
+    "23-29",
+    "30-39",
+    "40+",
   ];
 
   final List<String> categoryOptions = [
-    "Student", "Government Employee", "Private Employee",
-    "Self-Employed", "Not Employed", "Others",
+    "Student",
+    "Government Employee",
+    "Private Employee",
+    "Self-Employed",
+    "Not Employed",
+    "Others",
   ];
 
   final List<String> sexOptions = ["Male", "Female", "Prefer not to say"];
 
   final List<String> regionOptions = [
-    "BARMM","CAR","NCR","Region I","Region II","Region III","Region IV-A",
-    "Region IV-B","Region V","Region VI","Region VII","Region VIII",
-    "Region IX","Region X","Region XI","Region XII","Region XIII (Caraga)","NIR",
+    "BARMM",
+    "CAR",
+    "NCR",
+    "Region I",
+    "Region II",
+    "Region III",
+    "Region IV-A",
+    "Region IV-B",
+    "Region V",
+    "Region VI",
+    "Region VII",
+    "Region VIII",
+    "Region IX",
+    "Region X",
+    "Region XI",
+    "Region XII",
+    "Region XIII (Caraga)",
+    "NIR",
   ];
 
   final List<String> avatarOptions = [
-    "Sly-Fox","Astronaut","Whiz-Busy","Twirky",
+    "Sly-Fox",
+    "Astronaut",
+    "Whiz-Busy",
+    "Twirky",
   ];
 
   final Map<String, String> avatarMap = {
@@ -55,7 +82,14 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   final Map<String, List<String>> provinceOptions = {
     "NCR": ["Metro Manila"],
     "Region IV-A": ["Cavite", "Laguna", "Batangas", "Rizal", "Quezon"],
-    "Region VI": ["Aklan","Antique","Capiz","Guimaras","Iloilo","Negros Occidental"],
+    "Region VI": [
+      "Aklan",
+      "Antique",
+      "Capiz",
+      "Guimaras",
+      "Iloilo",
+      "Negros Occidental",
+    ],
   };
 
   final Map<String, List<String>> cityOptions = {
@@ -99,6 +133,28 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     );
   }
 
+  InputDecoration roundedFieldDecoration(String hint, {IconData? icon}) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: icon != null ? Icon(icon) : null,
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: const BorderSide(color: Colors.grey, width: 1),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: const BorderSide(color: Colors.grey, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: const BorderSide(color: Color(0xFF046EB8), width: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final avatarPath = avatarMap[avatar];
@@ -107,7 +163,9 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: Colors.white,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.57,
+        ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -121,11 +179,14 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                     children: const [
                       Icon(Icons.edit, color: Colors.black),
                       SizedBox(width: 8),
-                      Text("Edit Profile",
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black)),
+                      Text(
+                        "Edit Profile",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
                     ],
                   ),
                   OutlinedButton.icon(
@@ -145,8 +206,10 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                       ),
                     ),
                     icon: const Icon(Icons.key, color: Color(0xFF046EB8)),
-                    label: const Text("Change Password",
-                        style: TextStyle(color: Color(0xFF046EB8))),
+                    label: const Text(
+                      "Change Password",
+                      style: TextStyle(color: Color(0xFF046EB8)),
+                    ),
                   ),
                 ],
               ),
@@ -161,12 +224,18 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                     height: 120,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFFFFD13B), width: 6),
+                      border: Border.all(
+                        color: const Color(0xFFFFD13B),
+                        width: 6,
+                      ),
                     ),
                     child: ClipOval(
                       child: avatarPath == null
-                          ? const Icon(Icons.person,
-                              size: 60, color: Color(0xFF442700))
+                          ? const Icon(
+                              Icons.person,
+                              size: 60,
+                              color: Color(0xFF442700),
+                            )
                           : Image.asset(avatarPath, fit: BoxFit.cover),
                     ),
                   ),
@@ -176,9 +245,9 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                       children: [
                         TextField(
                           controller: usernameController,
-                          decoration: const InputDecoration(
-                            hintText: "Username",
-                            prefixIcon: Icon(Icons.person),
+                          decoration: roundedFieldDecoration(
+                            "Username",
+                            icon: Icons.person,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -187,22 +256,23 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                             Expanded(
                               child: TextField(
                                 controller: schoolController,
-                                decoration: const InputDecoration(
-                                  hintText: "School",
-                                ),
+                                decoration: roundedFieldDecoration("School"),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: age,
+                                initialValue: age.isNotEmpty ? age : null,
                                 items: ageOptions
-                                    .map((val) => DropdownMenuItem(
-                                        value: val, child: Text(val)))
+                                    .map(
+                                      (val) => DropdownMenuItem(
+                                        value: val,
+                                        child: Text(val),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (val) => setState(() => age = val!),
-                                decoration:
-                                    const InputDecoration(hintText: "Age"),
+                                decoration: roundedFieldDecoration("Age"),
                               ),
                             ),
                           ],
@@ -220,37 +290,43 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: avatar,
+                      initialValue: avatar.isNotEmpty ? avatar : null,
                       items: avatarOptions
-                          .map((val) =>
-                              DropdownMenuItem(value: val, child: Text(val)))
+                          .map(
+                            (val) =>
+                                DropdownMenuItem(value: val, child: Text(val)),
+                          )
                           .toList(),
                       onChanged: (val) => setState(() => avatar = val!),
-                      decoration: const InputDecoration(hintText: "Avatar"),
+                      decoration: roundedFieldDecoration("Avatar"),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: category,
+                      initialValue: category.isNotEmpty ? category : null,
                       items: categoryOptions
-                          .map((val) =>
-                              DropdownMenuItem(value: val, child: Text(val)))
+                          .map(
+                            (val) =>
+                                DropdownMenuItem(value: val, child: Text(val)),
+                          )
                           .toList(),
                       onChanged: (val) => setState(() => category = val!),
-                      decoration: const InputDecoration(hintText: "Category"),
+                      decoration: roundedFieldDecoration("Category"),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: sex,
+                      initialValue: sex.isNotEmpty ? sex : null,
                       items: sexOptions
-                          .map((val) =>
-                              DropdownMenuItem(value: val, child: Text(val)))
+                          .map(
+                            (val) =>
+                                DropdownMenuItem(value: val, child: Text(val)),
+                          )
                           .toList(),
                       onChanged: (val) => setState(() => sex = val!),
-                      decoration: const InputDecoration(hintText: "Sex"),
+                      decoration: roundedFieldDecoration("Sex"),
                     ),
                   ),
                 ],
@@ -262,44 +338,50 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: region,
+                      initialValue: region.isNotEmpty ? region : null,
                       items: regionOptions
-                          .map((val) =>
-                              DropdownMenuItem(value: val, child: Text(val)))
+                          .map(
+                            (val) =>
+                                DropdownMenuItem(value: val, child: Text(val)),
+                          )
                           .toList(),
                       onChanged: (val) => setState(() {
                         region = val!;
                         province = "";
                         city = "";
                       }),
-                      decoration: const InputDecoration(hintText: "Region"),
+                      decoration: roundedFieldDecoration("Region"),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: province.isEmpty ? null : province,
+                      initialValue: province.isEmpty ? null : province,
                       items: provinceOptions[region]
-                          ?.map((val) =>
-                              DropdownMenuItem(value: val, child: Text(val)))
+                          ?.map(
+                            (val) =>
+                                DropdownMenuItem(value: val, child: Text(val)),
+                          )
                           .toList(),
                       onChanged: (val) => setState(() {
                         province = val!;
                         city = "";
                       }),
-                      decoration: const InputDecoration(hintText: "Province"),
+                      decoration: roundedFieldDecoration("Province"),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: city.isEmpty ? null : city,
+                      initialValue: city.isEmpty ? null : city,
                       items: cityOptions[province]
-                          ?.map((val) =>
-                              DropdownMenuItem(value: val, child: Text(val)))
+                          ?.map(
+                            (val) =>
+                                DropdownMenuItem(value: val, child: Text(val)),
+                          )
                           .toList(),
                       onChanged: (val) => setState(() => city = val!),
-                      decoration: const InputDecoration(hintText: "City"),
+                      decoration: roundedFieldDecoration("City"),
                     ),
                   ),
                 ],
@@ -313,9 +395,13 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 children: [
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text("Cancel",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.black)),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
@@ -323,8 +409,10 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                       foregroundColor: const Color(0xFF915701),
                     ),
                     onPressed: saveProfile,
-                    child: const Text("SAVE CHANGES",
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      "SAVE CHANGES",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
