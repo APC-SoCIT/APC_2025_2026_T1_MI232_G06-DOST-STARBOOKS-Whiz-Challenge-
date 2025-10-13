@@ -75,6 +75,8 @@ flutter:
     - assets/images-icons/whizchallenge.png
     - assets/images-icons/whizbattle.png
     - assets/images-icons/whizpuzzle.png
+    - assets/images-icons/math.png
+    - assets/images-icons/science.png
     - assets/images-avatars/Astronaut.png
     - assets/images-avatars/Sly-Fox.png
     - assets/images-avatars/Twirky.png
