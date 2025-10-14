@@ -13,16 +13,21 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Starbooks Quiz',
-      home: RegisterPage(),
+      theme: ThemeData(
+        fontFamily: 'Poppins',
+      ),
+      home: const RegisterPage(),
     );
   }
 }
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+  final Function(String username, String password)? onRegister;
+
+  const RegisterPage({super.key, this.onRegister});
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -30,7 +35,6 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage>
     with TickerProviderStateMixin {
-  // UI state & controllers (kept your original UI)
   int step = 0;
   late final AnimationController _backgroundController;
   late final AnimationController _birdController;
@@ -40,19 +44,15 @@ class _RegisterPageState extends State<RegisterPage>
   bool hidePassword = true;
   bool hideConfirmPassword = true;
 
-  // Controllers for inputs
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
   final TextEditingController schoolController = TextEditingController();
 
-  // Dropdown selections & lists
   String? selectedAge;
   String? selectedCategory;
   String? selectedSex;
 
-  // For region/province/city we will store the selected id (string) and display name separately
   String? selectedRegionId;
   String? selectedRegionName;
   String? selectedProvinceId;
@@ -64,16 +64,11 @@ class _RegisterPageState extends State<RegisterPage>
   List<Map<String, String>> provinces = [];
   List<Map<String, String>> cities = [];
 
-  bool loadingRegions = false;
-  bool loadingProvinces = false;
-  bool loadingCities = false;
-
   static const String baseUrl = 'http://127.0.0.1:8000';
 
   @override
   void initState() {
     super.initState();
-
     _backgroundController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 35),
@@ -89,7 +84,6 @@ class _RegisterPageState extends State<RegisterPage>
       duration: const Duration(seconds: 3),
     )..repeat(reverse: true);
 
-    // Fetch regions at startup
     fetchRegions();
   }
 
@@ -105,39 +99,29 @@ class _RegisterPageState extends State<RegisterPage>
     super.dispose();
   }
 
-  // --------------------------
-  // API: Fetchers for dropdowns
-  // --------------------------
   Future<void> fetchRegions() async {
-    setState(() => loadingRegions = true);
     try {
       final url = Uri.parse('$baseUrl/api/region');
       final resp = await http.get(url, headers: {'Accept': 'application/json'});
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
-        // Expecting array of {id: "...", region_name: "..."}
         final parsed = <Map<String, String>>[];
         for (var e in data) {
           final id = (e['id'] ?? e['_id'] ?? '').toString();
-          final name = (e['region_name'] ?? e['name'] ?? '').toString();
-          if (id.isNotEmpty) parsed.add({'id': id, 'name': name});
+          final name = (e['region_name'] ?? '').toString();
+          if (id.isNotEmpty && name.isNotEmpty) parsed.add({'id': id, 'name': name});
         }
         setState(() {
           regions = parsed;
         });
-      } else {
-        debugPrint('fetchRegions failed: ${resp.statusCode} ${resp.body}');
       }
     } catch (e) {
       debugPrint('fetchRegions error: $e');
-    } finally {
-      setState(() => loadingRegions = false);
     }
   }
 
   Future<void> fetchProvinces(String regionId) async {
     setState(() {
-      loadingProvinces = true;
       provinces = [];
       selectedProvinceId = null;
       selectedProvinceName = null;
@@ -153,27 +137,18 @@ class _RegisterPageState extends State<RegisterPage>
         final parsed = <Map<String, String>>[];
         for (var e in data) {
           final id = (e['id'] ?? e['_id'] ?? '').toString();
-          final name = (e['province_name'] ?? e['name'] ?? '').toString();
-          if (id.isNotEmpty && name.isNotEmpty) {
-            parsed.add({'id': id, 'name': name});
-          }
+          final name = (e['province_name'] ?? '').toString();
+          if (id.isNotEmpty && name.isNotEmpty) parsed.add({'id': id, 'name': name});
         }
-        setState(() {
-          provinces = parsed;
-        });
-      } else {
-        debugPrint('fetchProvinces failed: ${resp.statusCode} ${resp.body}');
+        setState(() => provinces = parsed);
       }
     } catch (e) {
       debugPrint('fetchProvinces error: $e');
-    } finally {
-      setState(() => loadingProvinces = false);
     }
   }
 
   Future<void> fetchCities(String provinceId) async {
     setState(() {
-      loadingCities = true;
       cities = [];
       selectedCityId = null;
       selectedCityName = null;
@@ -187,26 +162,16 @@ class _RegisterPageState extends State<RegisterPage>
         for (var e in data) {
           final id = (e['id'] ?? e['_id'] ?? '').toString();
           final name = (e['city_name'] ?? '').toString();
-          if (id.isNotEmpty && name.isNotEmpty) {
-            parsed.add({'id': id, 'name': name});
-          }
+          if (id.isNotEmpty && name.isNotEmpty) parsed.add({'id': id, 'name': name});
         }
         setState(() => cities = parsed);
-      } else {
-        debugPrint('fetchCities failed: ${resp.statusCode} ${resp.body}');
       }
     } catch (e) {
       debugPrint('fetchCities error: $e');
-    } finally {
-      setState(() => loadingCities = false);
     }
   }
 
-  // --------------------------
-  // POST register
-  // --------------------------
   Future<void> registerUser() async {
-    // Basic front-end validation
     if (usernameController.text.trim().isEmpty ||
         passwordController.text.isEmpty ||
         schoolController.text.trim().isEmpty) {
@@ -215,21 +180,17 @@ class _RegisterPageState extends State<RegisterPage>
       );
       return;
     }
-
     if (passwordController.text != confirmPasswordController.text) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Passwords do not match")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Passwords do not match")),
+      );
       return;
     }
-
     if (selectedRegionId == null ||
         selectedProvinceId == null ||
         selectedCityId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please choose Region, Province and City"),
-        ),
+        const SnackBar(content: Text("Please choose Region, Province and City")),
       );
       return;
     }
@@ -251,45 +212,27 @@ class _RegisterPageState extends State<RegisterPage>
     try {
       final resp = await http.post(
         url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
         body: jsonEncode(payload),
       );
-
       if (resp.statusCode == 201 || resp.statusCode == 200) {
-        debugPrint('Registered OK: ${resp.body}');
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (c) => const LogInPage()),
         );
       } else {
-        debugPrint('Register failed: ${resp.statusCode} ${resp.body}');
-        final body = resp.body;
-        String message = 'Registration failed';
+        String message = resp.body;
         try {
-          final jsonBody = jsonDecode(body);
-          if (jsonBody is Map && jsonBody['message'] != null) {
-            message = jsonBody['message'].toString();
-          } else if (jsonBody is Map && jsonBody['errors'] != null) {
-            message = jsonBody['errors'].toString();
-          } else {
-            message = body;
-          }
-        } catch (_) {
-          message = body;
-        }
+          final jsonBody = jsonDecode(resp.body);
+          if (jsonBody is Map && jsonBody['message'] != null) message = jsonBody['message'];
+        } catch (_) {}
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Registration failed (${resp.statusCode}): $message"),
-          ),
+          SnackBar(content: Text("Registration failed (${resp.statusCode}): $message")),
         );
       }
     } catch (e) {
-      debugPrint('registerUser error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Network error. Check server/CORS.')),
@@ -297,101 +240,51 @@ class _RegisterPageState extends State<RegisterPage>
     }
   }
 
-  // --------------------------
-  // UI helpers for dynamic dropdowns
-  // --------------------------
-  Widget _regionDropdown() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: loadingRegions
-          ? const SizedBox(
-              height: 60,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : DropdownButtonFormField<String>(
-              decoration: _inputDecoration('Region'),
-              initialValue: selectedRegionId,
-              items: regions
-                  .map(
-                    (r) => DropdownMenuItem(
-                      value: r['id'],
-                      child: Text(r['name'] ?? r['id'] ?? ''),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() {
-                  selectedRegionId = v;
-                  selectedRegionName = regions.firstWhere(
-                    (r) => r['id'] == v,
-                  )['name'];
-                });
-                if (v != null) fetchProvinces(v);
-              },
-            ),
-    );
-  }
+  Widget _regionDropdown() => _buildDropdown("Region", regions, selectedRegionId,
+          (v) {
+        setState(() {
+          selectedRegionId = v;
+          selectedRegionName = regions.firstWhere((r) => r['id'] == v)['name'];
+          selectedProvinceId = null;
+          selectedProvinceName = null;
+          cities = [];
+          selectedCityId = null;
+          selectedCityName = null;
+        });
+        if (v != null) fetchProvinces(v);
+      });
 
-  Widget _provinceDropdown() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: loadingProvinces
-          ? const SizedBox(
-              height: 60,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : DropdownButtonFormField<String>(
-              decoration: _inputDecoration('Province'),
-              initialValue: selectedProvinceId,
-              items: provinces
-                  .map(
-                    (p) => DropdownMenuItem(
-                      value: p['id'],
-                      child: Text(p['name'] ?? p['id'] ?? ''),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() {
-                  selectedProvinceId = v;
-                  selectedProvinceName = provinces.firstWhere(
-                    (p) => p['id'] == v,
-                  )['name'];
-                });
-                if (v != null) fetchCities(v);
-              },
-            ),
-    );
-  }
+  Widget _provinceDropdown() => _buildDropdown("Province", provinces, selectedProvinceId,
+          (v) {
+        setState(() {
+          selectedProvinceId = v;
+          selectedProvinceName = provinces.firstWhere((p) => p['id'] == v)['name'];
+          selectedCityId = null;
+          selectedCityName = null;
+        });
+        if (v != null) fetchCities(v);
+      });
 
-  Widget _cityDropdown() {
+  Widget _cityDropdown() => _buildDropdown("City", cities, selectedCityId, (v) {
+    setState(() {
+      selectedCityId = v;
+      selectedCityName = cities.firstWhere((c) => c['id'] == v)['name'];
+    });
+  });
+
+  Widget _buildDropdown(String label, List<Map<String, String>> items, String? value,
+      void Function(String?)? onChanged) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: loadingCities
-          ? const SizedBox(
-              height: 60,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : DropdownButtonFormField<String>(
-              decoration: _inputDecoration('City'),
-              initialValue: selectedCityId,
-              items: cities
-                  .map(
-                    (c) => DropdownMenuItem(
-                      value: c['id'],
-                      child: Text(c['name'] ?? c['id'] ?? ''),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() {
-                  selectedCityId = v;
-                  selectedCityName = cities.firstWhere(
-                    (c) => c['id'] == v,
-                  )['name'];
-                });
-              },
-            ),
+      child: DropdownButtonFormField<String>(
+        decoration: _inputDecoration(label),
+        initialValue: value,
+        style: const TextStyle(fontSize: 12, fontFamily: "Poppins", color: Colors.black),
+        items: items.map((e) {
+          return DropdownMenuItem(value: e['id'], child: Text(e['name'] ?? e['id'] ?? ''));
+        }).toList(),
+        onChanged: onChanged,
+      ),
     );
   }
 
@@ -401,7 +294,10 @@ class _RegisterPageState extends State<RegisterPage>
         step--;
       });
     } else {
-      Navigator.pop(context);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LogInPage()),
+      );
     }
   }
 
@@ -454,26 +350,26 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildOutlinedButton(
-    String label,
-    VoidCallback onPressed, {
-    bool isProceed = false,
-  }) {
+      String label,
+      VoidCallback onPressed, {
+        bool isProceed = false,
+      }) {
     return OutlinedButton(
       style:
-          OutlinedButton.styleFrom(
-            side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-          ).copyWith(
-            backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-              if (states.contains(WidgetState.hovered)) {
-                return const Color(0xFF046EB8).withAlpha(50);
-              }
-              return Colors.transparent;
-            }),
-            foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-              return const Color(0xFF046EB8);
-            }),
-          ),
+      OutlinedButton.styleFrom(
+        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+      ).copyWith(
+        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.hovered)) {
+            return const Color(0xFF046EB8).withAlpha(50);
+          }
+          return Colors.transparent;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+          return const Color(0xFF046EB8);
+        }),
+      ),
       onPressed: onPressed,
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.normal)),
     );
@@ -654,10 +550,10 @@ class _RegisterPageState extends State<RegisterPage>
         const SizedBox(height: 10),
         const Text(
           "By accessing STARBOOKS WHIZ CHALLENGE, you agree to these terms and conditions. "
-          "We collect personal information and usage data to improve our services and efficiency. "
-          "We prioritize data security and do not share personal information with third parties without consent, "
-          "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
-          "For questions, contact us at support@starbookswhizbee.com",
+              "We collect personal information and usage data to improve our services and efficiency. "
+              "We prioritize data security and do not share personal information with third parties without consent, "
+              "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
+              "For questions, contact us at support@starbookswhizbee.com",
           style: TextStyle(fontSize: 14),
         ),
       ],
@@ -693,20 +589,22 @@ class _RegisterPageState extends State<RegisterPage>
                   );
                 },
                 child: CircleAvatar(
-                  radius: 80,
-                  backgroundColor: const Color(0xFFFDD000),
+                  radius: 80, // Outer circle size
+                  backgroundColor: const Color(0xFFFDD000), // Yellow border
                   child: CircleAvatar(
-                    radius: 75,
+                    radius: 75, // Inner circle size (slightly smaller)
+                    backgroundColor: Colors.white, // White background inside
+                    // If an avatar is selected, show it, else show an icon
                     backgroundImage: selectedAvatar != null
-                        ? AssetImage(selectedAvatar!)
+                        ? AssetImage(selectedAvatar!) // show the picked avatar
                         : null,
-                    backgroundColor: Colors.white,
+
                     child: selectedAvatar == null
                         ? const Icon(
-                            Icons.person,
-                            size: 40,
-                            color: Colors.white,
-                          )
+                      Icons.person,
+                      size: 40,
+                      color: Colors.grey, // Grey icon when no avatar selected
+                    )
                         : null,
                   ),
                 ),
@@ -728,7 +626,7 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Password",
                           hidePassword,
-                          (val) => setState(() => hidePassword = !hidePassword),
+                              (val) => setState(() => hidePassword = !hidePassword),
                           passwordController,
                         ),
                       ),
@@ -738,8 +636,8 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Confirm Password",
                           hideConfirmPassword,
-                          (val) => setState(
-                            () => hideConfirmPassword = !hideConfirmPassword,
+                              (val) => setState(
+                                () => hideConfirmPassword = !hideConfirmPassword,
                           ),
                           confirmPasswordController,
                         ),
@@ -758,7 +656,7 @@ class _RegisterPageState extends State<RegisterPage>
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _buildDropdown(
+                        child: _buildAgeDropdown(
                           "Age",
                           onChanged: (v) => setState(() => selectedAge = v),
                         ),
@@ -774,26 +672,26 @@ class _RegisterPageState extends State<RegisterPage>
         Row(
           children: [
             Expanded(
-              child: _buildDropdown(
+              child: _buildAvatarDropdown(
                 "Avatar",
                 icon: Icons.camera_alt,
                 onChanged: (value) {
                   setState(() {
-                    selectedAvatar = "assets/avatars/avatar${value}.png";
+                    selectedAvatar = "$value";
                   });
                 },
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildDropdown(
+              child: _buildCategoryDropdown(
                 "Category",
                 onChanged: (v) => setState(() => selectedCategory = v),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildDropdown(
+              child: _buildSexDropdown(
                 "Sex",
                 onChanged: (v) => setState(() => selectedSex = v),
               ),
@@ -832,11 +730,11 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildTextField(
-    IconData icon,
-    String hint, {
-    bool isPassword = false,
-    TextEditingController? controller,
-  }) {
+      IconData icon,
+      String hint, {
+        bool isPassword = false,
+        TextEditingController? controller,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -849,12 +747,12 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildPasswordField(
-    IconData icon,
-    String hint,
-    bool hide,
-    void Function(bool) toggle,
-    TextEditingController controller,
-  ) {
+      IconData icon,
+      String hint,
+      bool hide,
+      void Function(bool) toggle,
+      TextEditingController controller,
+      ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -874,11 +772,208 @@ class _RegisterPageState extends State<RegisterPage>
     );
   }
 
-  Widget _buildDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+  Widget _buildAvatarDropdown(
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: DropdownButtonFormField<String>(
+        decoration: _inputDecoration(label, icon: icon),
+        style: const TextStyle(
+          fontSize: 12,
+          fontFamily: "Poppins",
+          color: Colors.black,
+          fontWeight: FontWeight.w400,
+        ),
+
+        initialValue: selectedAvatar?.split('/').last.split('.').first,
+
+        items: const [
+          DropdownMenuItem(
+            value: "Adventurer",
+            child: Text("Adventurer"),
+          ),
+          DropdownMenuItem(
+            value: "Astronaut",
+            child: Text("Astronaut"),
+          ),
+          DropdownMenuItem(
+            value: "Boy",
+            child: Text("Boy"),
+          ),
+          DropdownMenuItem(
+            value: "Brainy",
+            child: Text("Brainy"),
+          ),DropdownMenuItem(
+            value: "Cool-Monkey",
+            child: Text("Cool-Monkey"),
+          ),
+          DropdownMenuItem(
+            value: "Cute-Elephant",
+            child: Text("Cute-Elephant"),
+          ),DropdownMenuItem(
+            value: "Doctor-Boy",
+            child: Text("Doctor-Boy"),
+          ),
+          DropdownMenuItem(
+            value: "Doctor-Girl",
+            child: Text("Doctor-Girl"),
+          ),DropdownMenuItem(
+            value: "Engineer-Boy",
+            child: Text("Engineer-Boy"),
+          ),
+          DropdownMenuItem(
+            value: "Engineer-Girl",
+            child: Text("Engineer-Girl"),
+          ),DropdownMenuItem(
+            value: "Girl",
+            child: Text("Girl"),
+          ),
+          DropdownMenuItem(
+            value: "Hacker",
+            child: Text("Hacker"),
+          ),
+          DropdownMenuItem(
+            value: "Leonel",
+            child: Text("Leonel"),
+          ),
+          DropdownMenuItem(
+            value: "Scientist-Boy",
+            child: Text("Scientist-Boy"),
+          ),
+          DropdownMenuItem(
+            value: "Scientist-Girl",
+            child: Text("Scientist-Girl"),
+          ),
+          DropdownMenuItem(
+            value: "Sly-Fox",
+            child: Text("Sly-Fox"),
+          ),
+          DropdownMenuItem(
+            value: "Sneaky-Snake",
+            child: Text("Sneaky-Snake"),
+          ),
+          DropdownMenuItem(
+            value: "Teacher-Boy",
+            child: Text("Teacher-Boy"),
+          ),
+          DropdownMenuItem(
+            value: "Teacher-Girl",
+            child: Text("Teacher-Girl"),
+          ),
+          DropdownMenuItem(
+            value: "Twirky",
+            child: Text("Twirky"),
+          ),DropdownMenuItem(
+            value: "Whiz-Achiever",
+            child: Text("Whiz-Achiever"),
+          ),DropdownMenuItem(
+            value: "Whiz-Busy",
+            child: Text("Whiz-Busy"),
+          ),DropdownMenuItem(
+            value: "Whiz-Happy",
+            child: Text("Whiz-Happy"),
+          ),DropdownMenuItem(
+            value: "Whiz-Ready",
+            child: Text("Whiz-Ready"),
+          ),DropdownMenuItem(
+            value: "Wise Turtle",
+            child: Text("Wise Turtle"),
+          ),
+        ],
+
+        onChanged: (value) {
+          setState(() {
+            switch (value) {
+              case "Adventurer":
+                selectedAvatar = "assets/images-avatars/Adventurer.png";
+                break;
+              case "Astronaut":
+                selectedAvatar = "assets/images-avatars/Astronaut.png";
+                break;
+              case "Boy":
+                selectedAvatar = "assets/images-avatars/Boy.png";
+                break;
+              case "Brainy":
+                selectedAvatar = "assets/images-avatars/Brainy.png";
+                break;
+              case "Cool-Monkey":
+                selectedAvatar = "assets/images-avatars/Cool-Monkey.png";
+                break;
+              case "Cute-Elephant":
+                selectedAvatar = "assets/images-avatars/Cute-Elephant.png";
+                break;
+              case "Doctor-Boy":
+                selectedAvatar = "assets/images-avatars/Doctor-Boy.png";
+                break;
+              case "Doctor-Girl":
+                selectedAvatar = "assets/images-avatars/Doctor-Girl.png";
+                break;
+              case "Engineer-Boy":
+                selectedAvatar = "assets/images-avatars/Engineer-Boy.png";
+                break;
+              case "Engineer-Girl":
+                selectedAvatar = "assets/images-avatars/Engineer-Girl.png";
+                break;
+              case "Girl":
+                selectedAvatar = "assets/images-avatars/Girl.png";
+                break;
+              case "Hacker":
+                selectedAvatar = "assets/images-avatars/Hacker.png";
+                break;
+              case "Leonel":
+                selectedAvatar = "assets/images-avatars/Leonel.png";
+                break;
+              case "Scientist-Boy":
+                selectedAvatar = "assets/images-avatars/Scientist-Boy.png";
+                break;
+              case "Scientist-Girl":
+                selectedAvatar = "assets/images-avatars/Scientist-Girl.png";
+                break;
+              case "Sly-Fox":
+                selectedAvatar = "assets/images-avatars/Sly-Fox.png";
+                break;
+              case "Sneaky-Snake":
+                selectedAvatar = "assets/images-avatars/Sneaky-Snake.png";
+                break;
+              case "Teacher-Boy":
+                selectedAvatar = "assets/images-avatars/Teacher-Boy.png";
+                break;
+              case "Teacher-Girl":
+                selectedAvatar = "assets/images-avatars/Teacher-Girl.png";
+                break;
+              case "Twirky":
+                selectedAvatar = "assets/images-avatars/Twirky.png";
+                break;
+              case "Whiz-Achiever":
+                selectedAvatar = "assets/images-avatars/Whiz-Achiever.png";
+                break;
+              case "Whiz-Busy":
+                selectedAvatar = "assets/images-avatars/Whiz-Busy.png";
+                break;
+              case "Whiz-Happy":
+                selectedAvatar = "assets/images-avatars/Whiz-Happy.png";
+                break;
+              case "Whiz-Ready":
+                selectedAvatar = "assets/images-avatars/Whiz-Ready.png";
+                break;
+              case "Wise-Turtle":
+                selectedAvatar = "assets/images-avatars/Wise-Turtle.png";
+                break;
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildAgeDropdown(
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -891,19 +986,112 @@ class _RegisterPageState extends State<RegisterPage>
         ),
         items: const [
           DropdownMenuItem(
-            value: "1",
-            child: Text("Option 1", style: TextStyle(fontSize: 12)),
+            value: "0-12",
+            child: Text("0-12", style: TextStyle(fontSize: 12)),
           ),
           DropdownMenuItem(
-            value: "2",
-            child: Text("Option 2", style: TextStyle(fontSize: 12)),
+            value: "13-17",
+            child: Text("13-17", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "18-22",
+            child: Text("18-22", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "23-29",
+            child: Text("23-29", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "30-39",
+            child: Text("30-39", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "40+",
+            child: Text("40+", style: TextStyle(fontSize: 12)),
           ),
         ],
-        onChanged: onChanged ?? (value) {},
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget _buildCategoryDropdown(
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: DropdownButtonFormField<String>(
+        decoration: _inputDecoration(label, icon: icon),
+        style: const TextStyle(
+          fontSize: 12,
+          fontFamily: "Poppins",
+          color: Colors.black,
+          fontWeight: FontWeight.w400,
+        ),
+        items: const [
+          DropdownMenuItem(
+            value: "Student",
+            child: Text("Student", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "Government Employee",
+            child: Text("Government Employee", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "Private Employee",
+            child: Text("Private Employee", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "Self-Employed",
+            child: Text("Self-Employed", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "Not Employed",
+            child: Text("Not Employed", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "Others",
+            child: Text("Others", style: TextStyle(fontSize: 12)),
+          ),
+        ],
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget _buildSexDropdown(
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: DropdownButtonFormField<String>(
+        decoration: _inputDecoration(label, icon: icon),
+        style: const TextStyle(
+          fontSize: 12,
+          fontFamily: "Poppins",
+          color: Colors.black,
+          fontWeight: FontWeight.w400,
+        ),
+        items: const [
+          DropdownMenuItem(
+            value: "Male",
+            child: Text("Male", style: TextStyle(fontSize: 12)),
+          ),
+          DropdownMenuItem(
+            value: "Female",
+            child: Text("Female", style: TextStyle(fontSize: 12)),
+          ),
+        ],
+        onChanged: onChanged,
       ),
     );
   }
 }
+
 
 class AdminPage extends StatelessWidget {
   const AdminPage({super.key});

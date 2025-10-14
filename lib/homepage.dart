@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'login.dart';
 import 'edit_profile.dart';
 import 'player_badges.dart';
 import 'whiz_battle.dart';
@@ -7,7 +10,9 @@ import 'whiz_puzzle.dart';
 import 'whiz_memory_match.dart';
 import 'leaderboard.dart';
 
+// ✅ USER PROFILE MODEL
 class UserProfile {
+  String id;
   String username;
   String school;
   String age;
@@ -19,18 +24,65 @@ class UserProfile {
   String avatar;
 
   UserProfile({
-    this.username = "editmyusername",
-    this.school = "Type your School",
-    this.age = "18-22",
-    this.category = "Student",
-    this.sex = "Prefer not to say",
-    this.region = "NCR",
-    this.province = "Metro Manila",
-    this.city = "Makati City",
-    this.avatar = "Astronaut",
+    required this.id,
+    required this.username,
+    required this.school,
+    required this.age,
+    required this.category,
+    required this.sex,
+    required this.region,
+    required this.province,
+    required this.city,
+    required this.avatar,
   });
+
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    var idValue = json['id'] ?? json['_id'] ?? '';
+    if (idValue is Map && idValue.containsKey('\$oid')) {
+      idValue = idValue['\$oid'];
+    }
+
+    return UserProfile(
+      id: idValue.toString(),
+      username: json['username'] ?? '',
+      school: json['school'] ?? '',
+      age: json['age']?.toString() ?? '',
+      category: json['category'] ?? '',
+      sex: json['sex'] ?? '',
+      region: json['region']?.toString() ?? '',
+      province: json['province']?.toString() ?? '',
+      city: json['city']?.toString() ?? '',
+      avatar: json['avatar'] ?? "assets/images-avatars/Adventurer.png",
+    );
+  }
+
+  UserProfile copyWith({
+    String? username,
+    String? school,
+    String? age,
+    String? category,
+    String? sex,
+    String? region,
+    String? province,
+    String? city,
+    String? avatar,
+  }) {
+    return UserProfile(
+      id: id,
+      username: username ?? this.username,
+      school: school ?? this.school,
+      age: age ?? this.age,
+      category: category ?? this.category,
+      sex: sex ?? this.sex,
+      region: region ?? this.region,
+      province: province ?? this.province,
+      city: city ?? this.city,
+      avatar: avatar ?? this.avatar,
+    );
+  }
 }
 
+// ✅ HOME PAGE
 class HomePage extends StatefulWidget {
   final UserProfile profile;
   final String initialTab;
@@ -42,54 +94,193 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  late UserProfile _currentProfile;
   late String _selectedTab;
+
+  bool _loadingProfile = true;
+  final String baseUrl = "http://127.0.0.1:8000";
 
   @override
   void initState() {
     super.initState();
+    _currentProfile = widget.profile;
     _selectedTab = widget.initialTab;
+
+    _loadUserWithLocationNames();
   }
 
-  void _editProfile() async {
+  // ✅ Load user with readable region/province/city names
+  Future<void> _loadUserWithLocationNames() async {
+    setState(() => _loadingProfile = true);
+    try {
+      final res = await http.get(Uri.parse("$baseUrl/api/homepage/${_currentProfile.id}"));
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        if (data['success'] == true) {
+          final user = data['user'];
+          setState(() {
+            _currentProfile = _currentProfile.copyWith(
+              region: user['region'] ?? '',
+              province: user['province'] ?? '',
+              city: user['city'] ?? '',
+            );
+            _loadingProfile = false;
+          });
+        }
+      } else {
+        debugPrint("❌ Failed to load user with location names: ${res.body}");
+        setState(() => _loadingProfile = false);
+      }
+    } catch (e) {
+      debugPrint("❌ Error loading user with location names: $e");
+      setState(() => _loadingProfile = false);
+    }
+  }
+
+  // ✅ Translate ID → Name (just fallback)
+  String get regionName => _currentProfile.region.isNotEmpty ? _currentProfile.region : "Unknown Region";
+  String get provinceName => _currentProfile.province.isNotEmpty ? _currentProfile.province : "Unknown Province";
+  String get cityName => _currentProfile.city.isNotEmpty ? _currentProfile.city : "Unknown City";
+
+  // ✅ Edit profile
+  Future<void> _editProfile() async {
     final updatedProfile = await showDialog<UserProfile>(
       context: context,
-      builder: (_) => EditProfileDialog(profile: widget.profile),
+      builder: (_) => EditProfileDialog(profile: _currentProfile),
     );
 
-    if (updatedProfile != null) {
+    if (updatedProfile != null && mounted) {
       setState(() {
-        widget.profile.username = updatedProfile.username;
-        widget.profile.school = updatedProfile.school;
-        widget.profile.age = updatedProfile.age;
-        widget.profile.category = updatedProfile.category;
-        widget.profile.sex = updatedProfile.sex;
-        widget.profile.region = updatedProfile.region;
-        widget.profile.province = updatedProfile.province;
-        widget.profile.city = updatedProfile.city;
-        widget.profile.avatar = updatedProfile.avatar;
+        _currentProfile = updatedProfile;
       });
     }
   }
 
-  Widget _buildTopNavButton(String label, IconData icon) {
-    final bool isActive = _selectedTab == label;
+  // ✅ Logout Dialog
+  Future<void> _logoutDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top picture
+              Image.asset(
+                "assets/images-icons/sadlogout.png",
+                width: 80,
+                height: 80,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(height: 15),
 
+              // Title
+              const Text(
+                "Logout Confirmation",
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Message
+              const Text(
+                "Are you sure you want to log out?",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+              ),
+              const SizedBox(height: 25),
+
+              // Buttons
+              Row(
+                children: [
+                  // Cancel Button
+                  Expanded(
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: const Text(
+                          "Cancel",
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: Color(0xFF046EB8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+
+                  // Logout Button
+                  Expanded(
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context, true);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFDD000),
+                          foregroundColor: const Color(0xFF816A03),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: const Text(
+                          "Logout",
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LogInPage()),
+      );
+    }
+  }
+
+  // ✅ Top nav button
+  Widget _buildTopNavButton(String label, IconData icon) {
+    final isActive = _selectedTab == label;
     return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedTab = label;
-        });
-      },
+      onTap: () => setState(() => _selectedTab = label),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700],
-              ),
+              Icon(icon,
+                  color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700]),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -104,8 +295,7 @@ class _HomePageState extends State<HomePage> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             height: 3,
-            width: isActive ? 70 : 0, // underline matches width
-            margin: const EdgeInsets.only(top: 2),
+            width: isActive ? 70 : 0,
             color: isActive ? const Color(0xFFFFD13B) : Colors.transparent,
           ),
         ],
@@ -115,224 +305,221 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    Widget mainContent;
-
-    if (_selectedTab == "Leaderboard") {
-      mainContent = const Leaderboard();
-    } else {
-      mainContent = Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 190, left: 70, right: 70),
-            child: GridView.count(
-              crossAxisCount: 4,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              crossAxisSpacing: 24,
-              mainAxisSpacing: 24,
-              childAspectRatio: 0.78,
-              children: const [
-                _GameBox(
-                  title: "Whiz Memory Match",
-                  imagePath: "assets/images-icons/memorymatch.png",
-                  backgroundColor: Color(0xFF656BE6),
-                ),
-                _GameBox(
-                  title: "Whiz Challenge",
-                  imagePath: "assets/images-icons/whizchallenge.png",
-                  backgroundColor: Color(0xFFFDD000),
-                ),
-                _GameBox(
-                  title: "Whiz Battle",
-                  imagePath: "assets/images-icons/whizbattle.png",
-                  backgroundColor: Color(0xFFC571E2),
-                ),
-                _GameBox(
-                  title: "Whiz Puzzle",
-                  imagePath: "assets/images-icons/whizpuzzle.png",
-                  backgroundColor: Color(0xFFE6833A),
-                ),
-              ],
-            ),
-          ),
-
-          // ==== PROFILE CARD ====
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              height: 130,
-              width: 800,
-              margin: const EdgeInsets.only(top: 30),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF4A90BE),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 110,
-                    height: 110,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFFFFD13B),
-                        width: 6,
-                      ),
-                      color: Colors.white,
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        "assets/images-avatars/${widget.profile.avatar}.png",
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.profile.username,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          widget.profile.category,
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        Text(
-                          "${widget.profile.city}, ${widget.profile.province}, ${widget.profile.region}",
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _editProfile,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF046EB8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                        ),
-                        icon: const Icon(Icons.edit),
-                        label: const Text("Edit Profile"),
-                      ),
-                      const SizedBox(width: 14),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => const PlayerBadgesDialog(),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFFFDD000),
-                          foregroundColor: Color(0xFF915701),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                        ),
-                        icon: const Icon(Icons.emoji_events),
-                        label: const Text(
-                          "Your Badges",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
+    final mainContent =
+    _selectedTab == "Leaderboard" ? const Leaderboard() : _buildHomeContent();
 
     return Scaffold(
       backgroundColor: const Color(0xFF046EB8),
-      body: Column(
+      body: _loadingProfile
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : Column(
         children: [
-          // ===== TOP BAR =====
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: Row(
-              children: [
-                Image.asset(
-                  "assets/images-logo/mainlogo.png",
-                  width: 150,
-                  height: 50,
-                  fit: BoxFit.contain,
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildTopNavButton("Home", Icons.home),
-                        const SizedBox(width: 40),
-                        _buildTopNavButton("Leaderboard", Icons.leaderboard),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF046EB8),
-                      width: 3,
-                    ),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      "assets/images-avatars/${widget.profile.avatar}.png",
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ===== MAIN CONTENT =====
+          _buildTopBar(),
           Expanded(child: mainContent),
         ],
       ),
     );
   }
+
+  // ✅ Top Bar
+  Widget _buildTopBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Row(
+        children: [
+          Image.asset(
+            "assets/images-logo/mainlogo.png",
+            width: 150,
+            height: 50,
+            fit: BoxFit.contain,
+          ),
+          Expanded(
+            child: Align(
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTopNavButton("Home", Icons.home),
+                  const SizedBox(width: 40),
+                  _buildTopNavButton("Leaderboard", Icons.leaderboard),
+                ],
+              ),
+            ),
+          ),
+          // ✅ Logout Circle with Hover Cursor
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: _logoutDialog,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF046EB8), width: 3),
+                ),
+                child: ClipOval(
+                  child: Image.asset(
+                    _currentProfile.avatar,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Profile Card
+  Widget _buildProfileCard() {
+    return Container(
+      height: 110,
+      width: 800,
+      margin: const EdgeInsets.only(top: 30),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4A90BE),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 85,
+            height: 85,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFFFD13B), width: 5),
+              color: Colors.white,
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                _currentProfile.avatar,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _currentProfile.username,
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 3),
+                Text(_currentProfile.category,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(
+                  "$cityName, $provinceName, $regionName",
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _editProfile,
+                icon: const Icon(Icons.edit, size: 16),
+                label: const Text("Edit Profile", style: TextStyle(fontSize: 13)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF046EB8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30)),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (_) => const PlayerBadgesDialog(),
+                  );
+                },
+                icon: const Icon(Icons.emoji_events, size: 16),
+                label: const Text(
+                  "Your Badges",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFDD000),
+                  foregroundColor: const Color(0xFF915701),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30)),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Home Content (games)
+  Widget _buildHomeContent() {
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 160, left: 70, right: 70),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.maxWidth < 800 ? 2 : 4;
+              return GridView.count(
+                crossAxisCount: crossAxisCount,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                crossAxisSpacing: 24,
+                mainAxisSpacing: 24,
+                childAspectRatio: 0.73,
+                children: const [
+                  _GameBox(
+                    title: "Whiz Memory Match",
+                    imagePath: "assets/images-icons/memorymatch.png",
+                    backgroundColor: Color(0xFF656BE6),
+                  ),
+                  _GameBox(
+                    title: "Whiz Challenge",
+                    imagePath: "assets/images-icons/whizchallenge.png",
+                    backgroundColor: Color(0xFFFDD000),
+                  ),
+                  _GameBox(
+                    title: "Whiz Battle",
+                    imagePath: "assets/images-icons/whizbattle.png",
+                    backgroundColor: Color(0xFFC571E2),
+                  ),
+                  _GameBox(
+                    title: "Whiz Puzzle",
+                    imagePath: "assets/images-icons/whizpuzzle.png",
+                    backgroundColor: Color(0xFFE6833A),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        Align(
+          alignment: Alignment.topCenter,
+          child: _buildProfileCard(),
+        ),
+      ],
+    );
+  }
 }
 
-// ===== GAME BOX =====
+// ✅ GameBox Widget
 class _GameBox extends StatefulWidget {
   final String title;
   final String imagePath;
@@ -377,6 +564,7 @@ class _GameBoxState extends State<_GameBox> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
+      cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () => _navigateToGame(context),
         child: AnimatedContainer(
@@ -387,28 +575,19 @@ class _GameBoxState extends State<_GameBox> {
             border: Border.all(color: Colors.white, width: 5),
             boxShadow: _hovering
                 ? [
-                    BoxShadow(
-                      color: const Color.fromARGB(
-                        255,
-                        255,
-                        209,
-                        59,
-                      ).withOpacity(0.8),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ]
+              BoxShadow(
+                color: const Color(0xFFFFD13B).withValues(alpha: 0.8),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ]
                 : [],
           ),
           child: Column(
             children: [
               Expanded(
                 child: Center(
-                  child: SizedBox(
-                    height: 710,
-                    width: 400,
-                    child: Image.asset(widget.imagePath, fit: BoxFit.contain),
-                  ),
+                  child: Image.asset(widget.imagePath, fit: BoxFit.contain),
                 ),
               ),
               Container(
@@ -424,10 +603,8 @@ class _GameBoxState extends State<_GameBox> {
                 child: Text(
                   widget.title,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style:
+                  const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
                 ),
               ),
             ],

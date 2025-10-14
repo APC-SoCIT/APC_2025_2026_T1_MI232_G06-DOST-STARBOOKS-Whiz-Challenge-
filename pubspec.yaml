@@ -68,6 +68,7 @@ flutter:
     - assets/images-logo/starbookslogin.png
     - assets/images-icons/background1.png
     - assets/images-icons/placeholder.png
+    - assets/images-icons/sadlogout.png
     - assets/images-badges/whiz-achiever.png
     - assets/images-badges/whiz-happy.png
     - assets/images-badges/whiz-ready.png
@@ -75,13 +76,8 @@ flutter:
     - assets/images-icons/whizchallenge.png
     - assets/images-icons/whizbattle.png
     - assets/images-icons/whizpuzzle.png
-    - assets/images-icons/math.png
-    - assets/images-icons/science.png
-    - assets/images-avatars/Astronaut.png
-    - assets/images-avatars/Sly-Fox.png
-    - assets/images-avatars/Twirky.png
-    - assets/images-avatars/Whiz-Busy.png
     - assets/images-avatars/Adventurer.png
+    - assets/images-avatars/Astronaut.png
     - assets/images-avatars/Boy.png
     - assets/images-avatars/Brainy.png
     - assets/images-avatars/Cool-Monkey.png
@@ -95,13 +91,18 @@ flutter:
     - assets/images-avatars/Leonel.png
     - assets/images-avatars/Scientist-Boy.png
     - assets/images-avatars/Scientist-Girl.png
+    - assets/images-avatars/Sly-Fox.png
     - assets/images-avatars/Sneaky-Snake.png
     - assets/images-avatars/Teacher-Boy.png
     - assets/images-avatars/Teacher-Girl.png
+    - assets/images-avatars/Twirky.png
+    - assets/images-avatars/Whiz-Achiever.png
+    - assets/images-avatars/Whiz-Busy.png
+    - assets/images-avatars/Whiz-Happy.png
+    - assets/images-avatars/Whiz-Ready.png
     - assets/images-avatars/Wise-Turtle.png
     - assets/images-logo/bird1.png
-    - assets/images-logo/lab-bird.png
-    - assets/images-logo/lab-bird2.png
+    - assets/images-logo/bird2.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
@@ -125,10 +126,10 @@ flutter:
   #       - asset: fonts/TrajanPro_Bold.ttf
   #         weight: 700
   fonts:
-  - family: Poppins
-    fonts:
-       - asset: assets/fonts/Poppins-Regular.ttf
-       - asset: assets/fonts/Poppins-Bold.ttf
-         weight: 700
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
