@@ -390,19 +390,19 @@ class _HomePageState extends State<HomePage> {
               children: const [
                 _GameBox(
                     title: "Whiz Memory Match",
-                    imagePath: "assets/images-icons/memorymatch.png",
+                    imagePath: "assets/images-logo/memorymatch.png",
                     backgroundColor: Color(0xFF656BE6)),
                 _GameBox(
                     title: "Whiz Challenge",
-                    imagePath: "assets/images-icons/whizchallenge.png",
+                    imagePath: "assets/images-logo/whizchallenge.png",
                     backgroundColor: Color(0xFFFDD000)),
                 _GameBox(
                     title: "Whiz Battle",
-                    imagePath: "assets/images-icons/whizbattle.png",
+                    imagePath: "assets/images-logo/whizbattle.png",
                     backgroundColor: Color(0xFFC571E2)),
                 _GameBox(
                     title: "Whiz Puzzle",
-                    imagePath: "assets/images-icons/whizpuzzle.png",
+                    imagePath: "assets/images-logo/whizpuzzle.png",
                     backgroundColor: Color(0xFFE6833A)),
               ],
             );
