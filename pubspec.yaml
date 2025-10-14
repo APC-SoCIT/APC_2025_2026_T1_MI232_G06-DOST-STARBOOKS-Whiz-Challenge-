@@ -35,6 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   http: ^1.2.2
+  url_launcher: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -66,16 +67,18 @@ flutter:
     - assets/images-logo/starbookslogo.png
     - assets/images-logo/mainlogo.png
     - assets/images-logo/starbookslogin.png
+    - assets/images-logo/memorymatch.png
+    - assets/images-logo/whizchallenge.png
+    - assets/images-logo/whizbattle.png
+    - assets/images-logo/whizpuzzle.png
     - assets/images-icons/background1.png
     - assets/images-icons/placeholder.png
     - assets/images-icons/sadlogout.png
     - assets/images-badges/whiz-achiever.png
     - assets/images-badges/whiz-happy.png
     - assets/images-badges/whiz-ready.png
-    - assets/images-icons/memorymatch.png
-    - assets/images-icons/whizchallenge.png
-    - assets/images-icons/whizbattle.png
-    - assets/images-icons/whizpuzzle.png
+    - assets/images-icons/math.png
+    - assets/images-icons/science.png
     - assets/images-avatars/Adventurer.png
     - assets/images-avatars/Astronaut.png
     - assets/images-avatars/Boy.png
@@ -102,7 +105,6 @@ flutter:
     - assets/images-avatars/Whiz-Ready.png
     - assets/images-avatars/Wise-Turtle.png
     - assets/images-logo/bird1.png
-    - assets/images-logo/bird2.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
