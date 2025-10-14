@@ -167,21 +167,52 @@ class UserController extends Controller
     }
 
     /**
-     * Update user by _id (MongoDB)
+     * Update user by _id (MongoDB) with validation
      */
     public function update(Request $request, $id)
     {
         try {
             $user = User::find(new ObjectId($id));
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Invalid ID format'], 400);
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid ID format'
+            ], 400);
         }
 
         if (!$user) {
-            return response()->json(['error' => 'User not found'], 404);
+            return response()->json([
+                'success' => false,
+                'error' => 'User not found'
+            ], 404);
         }
 
-        $user->update($request->all());
+        // Validate the incoming request data
+        $validated = $request->validate([
+            'username' => 'sometimes|string|max:255',
+            'school' => 'sometimes|string|max:255',
+            'age' => 'sometimes|string',
+            'category' => 'sometimes|string|in:Student,Government Employee,Private Employee,Self-Employed,Not Employed,Others',
+            'sex' => 'sometimes|string|in:Male,Female',
+            'avatar' => 'sometimes|string',
+            'region' => 'sometimes|integer',
+            'province' => 'sometimes|integer',
+            'city' => 'sometimes|integer',
+        ]);
+
+        // Ensure integers are properly cast for location fields
+        if (isset($validated['region'])) {
+            $validated['region'] = (int) $validated['region'];
+        }
+        if (isset($validated['province'])) {
+            $validated['province'] = (int) $validated['province'];
+        }
+        if (isset($validated['city'])) {
+            $validated['city'] = (int) $validated['city'];
+        }
+
+        // Update the user with validated data
+        $user->update($validated);
 
         return response()->json([
             'success' => true,
@@ -218,9 +249,9 @@ class UserController extends Controller
                     ->table('player_info')
                     ->where('_id', new \MongoDB\BSON\ObjectId($mongoId))
                     ->update([
-                        'region' => $regionId,
-                        'province' => $provinceId,
-                        'city' => $cityId,
+                        'region' => (int) $regionId,
+                        'province' => (int) $provinceId,
+                        'city' => (int) $cityId,
                     ]);
 
                 $fixedUsers[] = [
@@ -244,5 +275,51 @@ class UserController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * Change user password
+     */
+    
+    public function changePassword(Request $request, $id)
+    {
+        try {
+            $user = User::find(new ObjectId($id));
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid user ID format',
+            ], 400);
+        }
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found',
+            ], 404);
+        }
 
+        // Validate request
+        $validated = $request->validate([
+            'old_password' => 'required|string',
+            'new_password' => 'required|string|min:6',
+            'new_password_confirmation' => 'required|string|same:new_password',
+        ]);
+        
+        // Verify old password
+        if (!Hash::check($validated['old_password'], $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect',
+            ], 401);
+        }
+
+        // Update password
+        $user->password = Hash::make($validated['new_password']);
+        $user->save();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Password updated successfully',
+        ]);
+    }
 }
