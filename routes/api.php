@@ -12,6 +12,10 @@ use App\Http\Controllers\CityController;
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
 Route::get('/profile/{id}', [UserController::class, 'profile']);
+Route::get('/user/{id}', [UserController::class, 'show']);
+Route::put('/user/update', [UserController::class, 'update']);
+Route::get('/homepage/{id}', [App\Http\Controllers\UserController::class, 'homepage']);
+Route::get('/fix-user-locations', [UserController::class, 'fixUserLocationIds']);
 
 // Regions / Provinces / Cities
 Route::get('/region', [RegionController::class, 'index']);
