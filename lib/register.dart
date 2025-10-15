@@ -45,7 +45,7 @@ class _RegisterPageState extends State<RegisterPage>
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController =
-      TextEditingController();
+  TextEditingController();
   final TextEditingController schoolController = TextEditingController();
 
   String? selectedAge;
@@ -70,7 +70,7 @@ class _RegisterPageState extends State<RegisterPage>
     super.initState();
     _backgroundController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 35),
+      duration: const Duration(seconds: 50),
     )..repeat();
 
     _birdController = AnimationController(
@@ -370,7 +370,7 @@ class _RegisterPageState extends State<RegisterPage>
         setState(() {
           selectedProvinceId = v;
           selectedProvinceName = provinces.firstWhere(
-            (p) => p['id'] == v,
+                (p) => p['id'] == v,
           )['name'];
           selectedCityId = null;
           selectedCityName = null;
@@ -386,11 +386,11 @@ class _RegisterPageState extends State<RegisterPage>
   });
 
   Widget _buildDropdown(
-    String label,
-    List<Map<String, String>> items,
-    String? value,
-    void Function(String?)? onChanged,
-  ) {
+      String label,
+      List<Map<String, String>> items,
+      String? value,
+      void Function(String?)? onChanged,
+      ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -479,26 +479,26 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildOutlinedButton(
-    String label,
-    VoidCallback onPressed, {
-    bool isProceed = false,
-  }) {
+      String label,
+      VoidCallback onPressed, {
+        bool isProceed = false,
+      }) {
     return OutlinedButton(
       style:
-          OutlinedButton.styleFrom(
-            side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-          ).copyWith(
-            backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-              if (states.contains(WidgetState.hovered)) {
-                return const Color(0xFF046EB8).withAlpha(50);
-              }
-              return Colors.transparent;
-            }),
-            foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-              return const Color(0xFF046EB8);
-            }),
-          ),
+      OutlinedButton.styleFrom(
+        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+      ).copyWith(
+        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.hovered)) {
+            return const Color(0xFF046EB8).withAlpha(50);
+          }
+          return Colors.transparent;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+          return const Color(0xFF046EB8);
+        }),
+      ),
       onPressed: onPressed,
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.normal)),
     );
@@ -682,10 +682,10 @@ class _RegisterPageState extends State<RegisterPage>
         const SizedBox(height: 10),
         const Text(
           "By accessing STARBOOKS WHIZ CHALLENGE, you agree to these terms and conditions. "
-          "We collect personal information and usage data to improve our services and efficiency. "
-          "We prioritize data security and do not share personal information with third parties without consent, "
-          "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
-          "For questions, contact us at support@starbookswhizbee.com",
+              "We collect personal information and usage data to improve our services and efficiency. "
+              "We prioritize data security and do not share personal information with third parties without consent, "
+              "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
+              "For questions, contact us at support@starbookswhizbee.com",
           style: TextStyle(fontSize: 14),
         ),
       ],
@@ -752,7 +752,7 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Password",
                           hidePassword,
-                          (val) => setState(() => hidePassword = !hidePassword),
+                              (val) => setState(() => hidePassword = !hidePassword),
                           passwordController,
                         ),
                       ),
@@ -762,8 +762,8 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Confirm Password",
                           hideConfirmPassword,
-                          (val) => setState(
-                            () => hideConfirmPassword = !hideConfirmPassword,
+                              (val) => setState(
+                                () => hideConfirmPassword = !hideConfirmPassword,
                           ),
                           confirmPasswordController,
                         ),
@@ -856,11 +856,11 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildTextField(
-    IconData icon,
-    String hint, {
-    bool isPassword = false,
-    TextEditingController? controller,
-  }) {
+      IconData icon,
+      String hint, {
+        bool isPassword = false,
+        TextEditingController? controller,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -873,12 +873,12 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildPasswordField(
-    IconData icon,
-    String hint,
-    bool hide,
-    void Function(bool) toggle,
-    TextEditingController controller,
-  ) {
+      IconData icon,
+      String hint,
+      bool hide,
+      void Function(bool) toggle,
+      TextEditingController controller,
+      ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -899,10 +899,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAvatarDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1042,10 +1042,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAgeDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1088,10 +1088,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildCategoryDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1134,10 +1134,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildSexDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(

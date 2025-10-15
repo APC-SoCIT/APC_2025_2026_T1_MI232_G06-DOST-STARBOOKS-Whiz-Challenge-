@@ -3,8 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ChangePasswordDialog extends StatefulWidget {
-  final String userId;
-
+  final String userId; // required
   const ChangePasswordDialog({super.key, required this.userId});
 
   @override
@@ -14,23 +13,12 @@ class ChangePasswordDialog extends StatefulWidget {
 class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   final TextEditingController oldPasswordController = TextEditingController();
   final TextEditingController newPasswordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
 
   bool showOld = false;
   bool showNew = false;
   bool showConfirm = false;
   bool saving = false;
-
-  final String baseUrl = "http://127.0.0.1:8000";
-
-  @override
-  void dispose() {
-    oldPasswordController.dispose();
-    newPasswordController.dispose();
-    confirmPasswordController.dispose();
-    super.dispose();
-  }
 
   InputDecoration _inputDecoration(String hint, {IconData? icon}) {
     return InputDecoration(
@@ -52,105 +40,124 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   }
 
   Future<void> updatePassword() async {
-    final oldPassword = oldPasswordController.text.trim();
-    final newPassword = newPasswordController.text;
-    final confirmPassword = confirmPasswordController.text;
-
-    // Validation
-    if (oldPassword.isEmpty) {
+    if (newPasswordController.text.isEmpty ||
+        oldPasswordController.text.isEmpty ||
+        confirmPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter your current password."),
-          backgroundColor: Colors.orange,
-        ),
+        const SnackBar(content: Text("Please fill in all fields.")),
       );
       return;
     }
 
-    if (newPassword.isEmpty) {
+    if (newPasswordController.text != confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter a new password."),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    if (newPassword != confirmPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Passwords do not match."),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("New password must be at least 6 characters."),
-          backgroundColor: Colors.orange,
-        ),
+        const SnackBar(content: Text("Passwords do not match.")),
       );
       return;
     }
 
     setState(() => saving = true);
 
+    // Store safe references before async call
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/api/user/change-password/${widget.userId}'),
-        headers: {'Content-Type': 'application/json'},
+      final url = Uri.parse("http://127.0.0.1:8000/api/change-password"); // adjust if needed
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          'old_password': oldPassword,
-          'new_password': newPassword,
-          'new_password_confirmation': confirmPassword,
+          "user_id": widget.userId,
+          "old_password": oldPasswordController.text,
+          "new_password": newPasswordController.text,
         }),
       );
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Password updated successfully!"),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(data['message'] ?? "Failed to update password."),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        navigator.pop(); // close the change password dialog
+        await _showSuccessDialog(); // show success popup
       } else {
-        final data = jsonDecode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              data['message'] ?? "Error updating password. Please try again.",
-            ),
-            backgroundColor: Colors.red,
-          ),
+        final message = jsonDecode(response.body)['message'] ?? "Error occurred.";
+        messenger.showSnackBar(
+          SnackBar(content: Text(message)),
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) setState(() => saving = false);
     }
+  }
+
+  Future<void> _showSuccessDialog() async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            width: 350,
+            padding: const EdgeInsets.all(25),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ✅ Success image (you can replace with your asset image)
+                Image.asset(
+                  'assets/images-logo/bird1.png',
+                  width: 160,
+                  height: 160,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "Password Changed!",
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF046EB8),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Your password has been updated successfully.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 25),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFDD000),
+                    foregroundColor: const Color(0xFF816A03),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    textStyle: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -187,18 +194,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
             TextField(
               controller: oldPasswordController,
               obscureText: !showOld,
-              decoration:
-                  _inputDecoration(
-                    "Old Password",
-                    icon: Icons.lock_outline,
-                  ).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        showOld ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () => setState(() => showOld = !showOld),
-                    ),
-                  ),
+              decoration: _inputDecoration("Old Password", icon: Icons.lock_outline).copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(showOld ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => showOld = !showOld),
+                ),
+              ),
             ),
             const SizedBox(height: 15),
 
@@ -206,15 +207,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
             TextField(
               controller: newPasswordController,
               obscureText: !showNew,
-              decoration: _inputDecoration("New Password", icon: Icons.lock)
-                  .copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        showNew ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () => setState(() => showNew = !showNew),
-                    ),
-                  ),
+              decoration: _inputDecoration("New Password", icon: Icons.lock).copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(showNew ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => showNew = !showNew),
+                ),
+              ),
             ),
             const SizedBox(height: 15),
 
@@ -222,16 +220,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
             TextField(
               controller: confirmPasswordController,
               obscureText: !showConfirm,
-              decoration: _inputDecoration("Confirm Password", icon: Icons.lock)
-                  .copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        showConfirm ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () =>
-                          setState(() => showConfirm = !showConfirm),
-                    ),
-                  ),
+              decoration: _inputDecoration("Confirm Password", icon: Icons.lock).copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(showConfirm ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => showConfirm = !showConfirm),
+                ),
+              ),
             ),
 
             const SizedBox(height: 25),
@@ -245,14 +239,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   onPressed: () => Navigator.pop(context),
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF046EB8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    textStyle: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    textStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 14),
                     side: const BorderSide(color: Color(0xFF046EB8), width: 1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -266,10 +254,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFDD000),
                     foregroundColor: const Color(0xFF816A03),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                     textStyle: const TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 13,
@@ -282,15 +267,10 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   onPressed: saving ? null : updatePassword,
                   child: saving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Color(0xFF816A03),
-                            ),
-                          ),
-                        )
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                       : const Text('CHANGE PASSWORD'),
                 ),
               ],

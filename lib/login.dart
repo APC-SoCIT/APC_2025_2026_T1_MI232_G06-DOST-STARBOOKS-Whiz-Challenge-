@@ -26,7 +26,7 @@ class _LogInPageState extends State<LogInPage>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 35),
+      duration: const Duration(seconds: 50),
     )..repeat();
   }
 
