@@ -9,9 +9,6 @@ use MongoDB\BSON\ObjectId;
 
 class UserController extends Controller
 {
-    /**
-     * Register new user
-     */
     public function register(Request $request)
     {
         $validated = $request->validate([
@@ -47,9 +44,6 @@ class UserController extends Controller
         ], 201);
     }
 
-    /**
-     * User login
-     */
     public function login(Request $request)
     {
         $request->validate([
@@ -80,9 +74,6 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * Get user profile by MongoDB _id
-     */
     public function profile($id)
     {
         try {
@@ -107,9 +98,6 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * Helper: Get location name from collection
-     */
     private function getLocationName($collection, $id, $provinceId = null)
     {
         $items = \DB::connection('mongodb')->table($collection)->get();
@@ -128,9 +116,6 @@ class UserController extends Controller
         return $item ? ($collection === 'region' ? $item->region_name : ($collection === 'province' ? $item->province_name : $item->city_name)) : 'Unknown';
     }
 
-    /**
-     * Homepage — returns user with readable region/province/city names
-     */
     public function homepage($id)
     {
         try {
@@ -167,52 +152,21 @@ class UserController extends Controller
     }
 
     /**
-     * Update user by _id (MongoDB) with validation
+     * Update user by _id (MongoDB)
      */
     public function update(Request $request, $id)
     {
         try {
             $user = User::find(new ObjectId($id));
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Invalid ID format'
-            ], 400);
+            return response()->json(['error' => 'Invalid ID format'], 400);
         }
 
         if (!$user) {
-            return response()->json([
-                'success' => false,
-                'error' => 'User not found'
-            ], 404);
+            return response()->json(['error' => 'User not found'], 404);
         }
 
-        // Validate the incoming request data
-        $validated = $request->validate([
-            'username' => 'sometimes|string|max:255',
-            'school' => 'sometimes|string|max:255',
-            'age' => 'sometimes|string',
-            'category' => 'sometimes|string|in:Student,Government Employee,Private Employee,Self-Employed,Not Employed,Others',
-            'sex' => 'sometimes|string|in:Male,Female',
-            'avatar' => 'sometimes|string',
-            'region' => 'sometimes|integer',
-            'province' => 'sometimes|integer',
-            'city' => 'sometimes|integer',
-        ]);
-
-        // Ensure integers are properly cast for location fields
-        if (isset($validated['region'])) {
-            $validated['region'] = (int) $validated['region'];
-        }
-        if (isset($validated['province'])) {
-            $validated['province'] = (int) $validated['province'];
-        }
-        if (isset($validated['city'])) {
-            $validated['city'] = (int) $validated['city'];
-        }
-
-        // Update the user with validated data
-        $user->update($validated);
+        $user->update($request->all());
 
         return response()->json([
             'success' => true,
@@ -221,9 +175,7 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * Fix user location IDs in database
-     */
+    
     public function fixUserLocationIds()
     {
         try {
@@ -231,7 +183,6 @@ class UserController extends Controller
             $fixedUsers = [];
 
             foreach ($users as $user) {
-                // Extract MongoDB _id safely
                 $mongoId = isset($user->_id) ? (string)$user->_id : (isset($user->id) ? (string)$user->id : null);
                 if (!$mongoId) continue;
 
@@ -239,19 +190,17 @@ class UserController extends Controller
                 $provinceId = $user->province ?? 0;
                 $cityId = $user->city ?? 0;
 
-                // Use helper to find names
                 $regionName = $this->getLocationName('region', $regionId);
                 $provinceName = $this->getLocationName('province', $provinceId);
                 $cityName = $this->getLocationName('city', $cityId, $provinceId);
 
-                // Update MongoDB document
                 \DB::connection('mongodb')
                     ->table('player_info')
                     ->where('_id', new \MongoDB\BSON\ObjectId($mongoId))
                     ->update([
-                        'region' => (int) $regionId,
-                        'province' => (int) $provinceId,
-                        'city' => (int) $cityId,
+                        'region' => $regionId,
+                        'province' => $provinceId,
+                        'city' => $cityId,
                     ]);
 
                 $fixedUsers[] = [
@@ -275,51 +224,25 @@ class UserController extends Controller
             ], 500);
         }
     }
-    
-    /**
-     * Change user password
-     */
-    
-    public function changePassword(Request $request, $id)
+
+    public function changePassword(Request $request)
     {
-        try {
-            $user = User::find(new ObjectId($id));
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid user ID format',
-            ], 400);
-        }
-        
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User not found',
-            ], 404);
-        }
-
-        // Validate request
-        $validated = $request->validate([
-            'old_password' => 'required|string',
-            'new_password' => 'required|string|min:6',
-            'new_password_confirmation' => 'required|string|same:new_password',
+        $request->validate([
+            'user_id' => 'required',
+            'old_password' => 'required',
+            'new_password' => 'required|min:6',
         ]);
-        
-        // Verify old password
-        if (!Hash::check($validated['old_password'], $user->password)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Current password is incorrect',
-            ], 401);
+
+        $user = \App\Models\User::find($request->user_id);
+        if (!$user) return response()->json(['message' => 'User not found'], 404);
+
+        if (!\Hash::check($request->old_password, $user->password)) {
+            return response()->json(['message' => 'Old password is incorrect'], 400);
         }
 
-        // Update password
-        $user->password = Hash::make($validated['new_password']);
+        $user->password = bcrypt($request->new_password);
         $user->save();
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Password updated successfully',
-        ]);
+
+        return response()->json(['message' => 'Password updated successfully'], 200);
     }
 }
