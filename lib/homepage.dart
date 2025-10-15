@@ -11,7 +11,6 @@ import 'whiz_puzzle.dart';
 import 'whiz_memory_match.dart';
 import 'leaderboard.dart';
 
-// ✅ USER PROFILE MODEL
 class UserProfile {
   String id;
   String username;
@@ -83,7 +82,7 @@ class UserProfile {
   }
 }
 
-// ✅ HOME PAGE
+// HOME PAGE
 class HomePage extends StatefulWidget {
   final UserProfile profile;
   final String initialTab;
@@ -112,7 +111,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadUserWithLocationNames() async {
     setState(() => _loadingProfile = true);
     try {
-      final res = await http.get(Uri.parse("$baseUrl/api/homepage/${_currentProfile.id}"));
+      final res = await http.get(
+        Uri.parse("$baseUrl/api/homepage/${_currentProfile.id}"),
+      );
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data['success'] == true) {
@@ -136,9 +137,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  String get regionName => _currentProfile.region.isNotEmpty ? _currentProfile.region : "Unknown Region";
-  String get provinceName => _currentProfile.province.isNotEmpty ? _currentProfile.province : "Unknown Province";
-  String get cityName => _currentProfile.city.isNotEmpty ? _currentProfile.city : "Unknown City";
+  String get regionName => _currentProfile.region.isNotEmpty
+      ? _currentProfile.region
+      : "Unknown Region";
+  String get provinceName => _currentProfile.province.isNotEmpty
+      ? _currentProfile.province
+      : "Unknown Province";
+  String get cityName =>
+      _currentProfile.city.isNotEmpty ? _currentProfile.city : "Unknown City";
 
   Future<void> _editProfile() async {
     final updatedProfile = await showDialog<UserProfile>(
@@ -160,16 +166,33 @@ class _HomePageState extends State<HomePage> {
         child: Container(
           width: 400,
           padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16), // Match the Dialog's shape
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Image.asset("assets/images-icons/sadlogout.png", width: 80, height: 80),
+              Image.asset(
+                "assets/images-icons/sadlogout.png",
+                width: 80,
+                height: 80,
+              ),
               const SizedBox(height: 15),
-              const Text("Logout Confirmation",
-                  style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold, fontSize: 20)),
+              const Text(
+                "Logout Confirmation",
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
               const SizedBox(height: 10),
-              const Text("Are you sure you want to log out?",
-                  textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Poppins', fontSize: 14)),
+              const Text(
+                "Are you sure you want to log out?",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+              ),
               const SizedBox(height: 25),
               Row(
                 children: [
@@ -178,11 +201,22 @@ class _HomePageState extends State<HomePage> {
                       onPressed: () => Navigator.pop(context, false),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        side: const BorderSide(
+                          color: Color(0xFF046EB8),
+                          width: 1,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                      child: const Text("Cancel",
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: Color(0xFF046EB8))),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          color: Color(0xFF046EB8),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 15),
@@ -193,14 +227,22 @@ class _HomePageState extends State<HomePage> {
                         backgroundColor: const Color(0xFFFDD000),
                         foregroundColor: const Color(0xFF816A03),
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                      child: const Text("Logout",
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        "Logout",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ],
-              )
+              ),
             ],
           ),
         ),
@@ -208,7 +250,9 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (confirmed == true && mounted) {
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LogInPage()));
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LogInPage()));
     }
   }
 
@@ -219,15 +263,23 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700]),
-            const SizedBox(width: 6),
-            Text(label,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700],
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
                 style: TextStyle(
                   color: isActive ? const Color(0xFFFFD13B) : Colors.black,
                   fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                )),
-          ]),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 3),
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
@@ -242,16 +294,20 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final mainContent = _selectedTab == "Leaderboard" ? const Leaderboard() : _buildHomeContent();
+    final mainContent = _selectedTab == "Leaderboard"
+        ? const Leaderboard()
+        : _buildHomeContent();
 
     return Scaffold(
       backgroundColor: const Color(0xFF046EB8),
       body: _loadingProfile
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : Column(children: [
-        _buildTopBar(),
-        Expanded(child: mainContent),
-      ]),
+          : Column(
+              children: [
+                _buildTopBar(),
+                Expanded(child: mainContent),
+              ],
+            ),
     );
   }
 
@@ -261,15 +317,23 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: Row(
         children: [
-          Image.asset("assets/images-logo/mainlogo.png", width: 150, height: 50, fit: BoxFit.contain),
+          Image.asset(
+            "assets/images-logo/mainlogo.png",
+            width: 150,
+            height: 50,
+            fit: BoxFit.contain,
+          ),
           Expanded(
             child: Align(
               alignment: Alignment.center,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                _buildTopNavButton("Home", Icons.home),
-                const SizedBox(width: 40),
-                _buildTopNavButton("Leaderboard", Icons.leaderboard),
-              ]),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTopNavButton("Home", Icons.home),
+                  const SizedBox(width: 40),
+                  _buildTopNavButton("Leaderboard", Icons.leaderboard),
+                ],
+              ),
             ),
           ),
           MouseRegion(
@@ -279,9 +343,13 @@ class _HomePageState extends State<HomePage> {
               child: Container(
                 width: 44,
                 height: 44,
-                decoration:
-                BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFF046EB8), width: 3)),
-                child: ClipOval(child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover)),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF046EB8), width: 3),
+                ),
+                child: ClipOval(
+                  child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover),
+                ),
               ),
             ),
           ),
@@ -299,7 +367,9 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: const Color(0xFF4A90BE),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))],
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4)),
+        ],
       ),
       child: Row(
         children: [
@@ -311,7 +381,9 @@ class _HomePageState extends State<HomePage> {
               border: Border.all(color: const Color(0xFFFFD13B), width: 5),
               color: Colors.white,
             ),
-            child: ClipOval(child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover)),
+            child: ClipOval(
+              child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -319,25 +391,49 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(_currentProfile.username,
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
-                const SizedBox(height: 6),
-                Row(children: [
-                  const Icon(Icons.person, color: Colors.white, size: 16),
-                  const SizedBox(width: 5),
-                  Text(_currentProfile.category,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                ]),
-                const SizedBox(height: 4),
-                Row(children: [
-                  const Icon(Icons.location_on, color: Colors.white, size: 16),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text("$cityName, $provinceName, $regionName",
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
-                        overflow: TextOverflow.ellipsis),
+                Text(
+                  _currentProfile.username,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                ]),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.person, color: Colors.white, size: 16),
+                    const SizedBox(width: 5),
+                    Text(
+                      _currentProfile.category,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        "$cityName, $provinceName, $regionName",
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -346,26 +442,46 @@ class _HomePageState extends State<HomePage> {
               ElevatedButton.icon(
                 onPressed: _editProfile,
                 icon: const Icon(Icons.edit, size: 16),
-                label: const Text("Edit Profile", style: TextStyle(fontSize: 13)),
+                label: const Text(
+                  "Edit Profile",
+                  style: TextStyle(fontSize: 13),
+                ),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF046EB8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10)),
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF046EB8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
               ElevatedButton.icon(
                 onPressed: () {
-                  showDialog(context: context, builder: (_) => const PlayerBadgesDialog());
+                  showDialog(
+                    context: context,
+                    builder: (_) => const PlayerBadgesDialog(),
+                  );
                 },
                 icon: const Icon(Icons.emoji_events, size: 16),
-                label: const Text("Your Badges",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                label: const Text(
+                  "Your Badges",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFDD000),
-                    foregroundColor: const Color(0xFF915701),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10)),
+                  backgroundColor: const Color(0xFFFDD000),
+                  foregroundColor: const Color(0xFF915701),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                ),
               ),
             ],
           ),
@@ -379,34 +495,40 @@ class _HomePageState extends State<HomePage> {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 160, left: 70, right: 70),
-          child: LayoutBuilder(builder: (context, constraints) {
-            final crossAxisCount = constraints.maxWidth < 800 ? 2 : 4;
-            return GridView.count(
-              crossAxisCount: crossAxisCount,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              crossAxisSpacing: 24,
-              mainAxisSpacing: 24,
-              childAspectRatio: 0.73,
-              children: const [
-                _GameBox(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.maxWidth < 800 ? 2 : 4;
+              return GridView.count(
+                crossAxisCount: crossAxisCount,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                crossAxisSpacing: 24,
+                mainAxisSpacing: 24,
+                childAspectRatio: 0.73,
+                children: const [
+                  _GameBox(
                     title: "Whiz Memory Match",
                     imagePath: "assets/images-logo/memorymatch.png",
-                    backgroundColor: Color(0xFF656BE6)),
-                _GameBox(
+                    backgroundColor: Color(0xFF656BE6),
+                  ),
+                  _GameBox(
                     title: "Whiz Challenge",
                     imagePath: "assets/images-logo/whizchallenge.png",
-                    backgroundColor: Color(0xFFFDD000)),
-                _GameBox(
+                    backgroundColor: Color(0xFFFDD000),
+                  ),
+                  _GameBox(
                     title: "Whiz Battle",
                     imagePath: "assets/images-logo/whizbattle.png",
-                    backgroundColor: Color(0xFFC571E2)),
-                _GameBox(
+                    backgroundColor: Color(0xFFC571E2),
+                  ),
+                  _GameBox(
                     title: "Whiz Puzzle",
                     imagePath: "assets/images-logo/whizpuzzle.png",
-                    backgroundColor: Color(0xFFE6833A)),
-              ],
-            );
-          }),
+                    backgroundColor: Color(0xFFE6833A),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
         Align(alignment: Alignment.topCenter, child: _buildProfileCard()),
       ],
@@ -414,7 +536,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ✅ GameBox with LIFT + TWIRL animation
+// GameBox with LIFT + TWIRL animation
 class _GameBox extends StatefulWidget {
   final String title;
   final String imagePath;
@@ -430,7 +552,8 @@ class _GameBox extends StatefulWidget {
   State<_GameBox> createState() => _GameBoxState();
 }
 
-class _GameBoxState extends State<_GameBox> with SingleTickerProviderStateMixin {
+class _GameBoxState extends State<_GameBox>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _rotationAnimation;
   late Animation<double> _liftAnimation;
@@ -438,11 +561,17 @@ class _GameBoxState extends State<_GameBox> with SingleTickerProviderStateMixin 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
     _rotationAnimation = Tween<double>(begin: 0, end: pi).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic));
-    _liftAnimation = Tween<double>(begin: 0, end: -10)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutQuad));
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
+    );
+    _liftAnimation = Tween<double>(
+      begin: 0,
+      end: -10,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutQuad));
   }
 
   @override
@@ -496,8 +625,9 @@ class _GameBoxState extends State<_GameBox> with SingleTickerProviderStateMixin 
                   border: Border.all(color: Colors.white, width: 5),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFFD13B)
-                          .withValues(alpha: isBack ? 0.4 : 0.8),
+                      color: const Color(
+                        0xFFFFD13B,
+                      ).withValues(alpha: isBack ? 0.4 : 0.8),
                       blurRadius: 20,
                       spreadRadius: 2,
                       offset: const Offset(0, 8),
@@ -506,10 +636,10 @@ class _GameBoxState extends State<_GameBox> with SingleTickerProviderStateMixin 
                 ),
                 child: isBack
                     ? Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.identity()..rotateY(pi),
-                  child: _buildBackSide(),
-                )
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()..rotateY(pi),
+                        child: _buildBackSide(),
+                      )
                     : _buildFrontSide(),
               ),
             );
@@ -520,55 +650,67 @@ class _GameBoxState extends State<_GameBox> with SingleTickerProviderStateMixin 
   }
 
   Widget _buildFrontSide() {
-    return Column(children: [
-      Expanded(child: Center(child: Image.asset(widget.imagePath, fit: BoxFit.contain))),
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 22),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(20),
-            bottomRight: Radius.circular(20),
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: Image.asset(widget.imagePath, fit: BoxFit.contain),
           ),
         ),
-        child: Text(
-          widget.title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 23,
-            fontWeight: FontWeight.bold,
-            color: widget.backgroundColor,
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 22),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(20),
+              bottomRight: Radius.circular(20),
+            ),
+          ),
+          child: Text(
+            widget.title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+              color: widget.backgroundColor,
+            ),
           ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 
   Widget _buildBackSide() {
-    return Column(children: [
-      Expanded(child: Center(child: Image.asset(widget.imagePath, fit: BoxFit.contain))),
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 22),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(20),
-            bottomRight: Radius.circular(20),
-          ),
-          border: Border.all(color: Colors.white, width: 5),
-        ),
-        child: Text(
-          widget.title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 23,
-            fontWeight: FontWeight.bold,
-            color: widget.backgroundColor,
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: Image.asset(widget.imagePath, fit: BoxFit.contain),
           ),
         ),
-      ),
-    ]);
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 22),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(20),
+              bottomRight: Radius.circular(20),
+            ),
+            border: Border.all(color: Colors.white, width: 5),
+          ),
+          child: Text(
+            widget.title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+              color: widget.backgroundColor,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

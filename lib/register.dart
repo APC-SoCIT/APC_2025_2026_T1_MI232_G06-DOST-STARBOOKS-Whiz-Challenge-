@@ -16,9 +16,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Starbooks Quiz',
-      theme: ThemeData(
-        fontFamily: 'Poppins',
-      ),
+      theme: ThemeData(fontFamily: 'Poppins'),
       home: const RegisterPage(),
     );
   }
@@ -46,7 +44,8 @@ class _RegisterPageState extends State<RegisterPage>
 
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
   final TextEditingController schoolController = TextEditingController();
 
   String? selectedAge;
@@ -109,7 +108,9 @@ class _RegisterPageState extends State<RegisterPage>
         for (var e in data) {
           final id = (e['id'] ?? e['_id'] ?? '').toString();
           final name = (e['region_name'] ?? '').toString();
-          if (id.isNotEmpty && name.isNotEmpty) parsed.add({'id': id, 'name': name});
+          if (id.isNotEmpty && name.isNotEmpty) {
+            parsed.add({'id': id, 'name': name});
+          }
         }
         setState(() {
           regions = parsed;
@@ -138,7 +139,9 @@ class _RegisterPageState extends State<RegisterPage>
         for (var e in data) {
           final id = (e['id'] ?? e['_id'] ?? '').toString();
           final name = (e['province_name'] ?? '').toString();
-          if (id.isNotEmpty && name.isNotEmpty) parsed.add({'id': id, 'name': name});
+          if (id.isNotEmpty && name.isNotEmpty) {
+            parsed.add({'id': id, 'name': name});
+          }
         }
         setState(() => provinces = parsed);
       }
@@ -162,7 +165,9 @@ class _RegisterPageState extends State<RegisterPage>
         for (var e in data) {
           final id = (e['id'] ?? e['_id'] ?? '').toString();
           final name = (e['city_name'] ?? '').toString();
-          if (id.isNotEmpty && name.isNotEmpty) parsed.add({'id': id, 'name': name});
+          if (id.isNotEmpty && name.isNotEmpty) {
+            parsed.add({'id': id, 'name': name});
+          }
         }
         setState(() => cities = parsed);
       }
@@ -181,16 +186,18 @@ class _RegisterPageState extends State<RegisterPage>
       return;
     }
     if (passwordController.text != confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords do not match")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Passwords do not match")));
       return;
     }
     if (selectedRegionId == null ||
         selectedProvinceId == null ||
         selectedCityId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please choose Region, Province and City")),
+        const SnackBar(
+          content: Text("Please choose Region, Province and City"),
+        ),
       );
       return;
     }
@@ -212,36 +219,140 @@ class _RegisterPageState extends State<RegisterPage>
     try {
       final resp = await http.post(
         url,
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         body: jsonEncode(payload),
       );
       if (resp.statusCode == 201 || resp.statusCode == 200) {
         if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (c) => const LogInPage()),
+
+        // Show success dialog
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              width: 400,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFFFF),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Success icon
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 60,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Registration Successful!",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      color: Color(0xDD000000),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "Welcome, ${usernameController.text.trim()}!",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Color(0xFF000000),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    "Your account has been created successfully. You can now log in to start playing!",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      color: Color(0xCF000000),
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (c) => const LogInPage()),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFDD000),
+                        foregroundColor: const Color(0xFF816A03),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: const Text(
+                        "Go to Login",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       } else {
         String message = resp.body;
         try {
           final jsonBody = jsonDecode(resp.body);
-          if (jsonBody is Map && jsonBody['message'] != null) message = jsonBody['message'];
+          if (jsonBody is Map && jsonBody['message'] != null) {
+            message = jsonBody['message'];
+          }
         } catch (_) {}
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Registration failed (${resp.statusCode}): $message")),
+          SnackBar(
+            content: Text("Registration failed (${resp.statusCode}): $message"),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Network error. Check server/CORS.')),
+        const SnackBar(
+          content: Text('Network error. Check server/CORS.'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
 
-  Widget _regionDropdown() => _buildDropdown("Region", regions, selectedRegionId,
-          (v) {
+  Widget _regionDropdown() =>
+      _buildDropdown("Region", regions, selectedRegionId, (v) {
         setState(() {
           selectedRegionId = v;
           selectedRegionName = regions.firstWhere((r) => r['id'] == v)['name'];
@@ -254,11 +365,13 @@ class _RegisterPageState extends State<RegisterPage>
         if (v != null) fetchProvinces(v);
       });
 
-  Widget _provinceDropdown() => _buildDropdown("Province", provinces, selectedProvinceId,
-          (v) {
+  Widget _provinceDropdown() =>
+      _buildDropdown("Province", provinces, selectedProvinceId, (v) {
         setState(() {
           selectedProvinceId = v;
-          selectedProvinceName = provinces.firstWhere((p) => p['id'] == v)['name'];
+          selectedProvinceName = provinces.firstWhere(
+            (p) => p['id'] == v,
+          )['name'];
           selectedCityId = null;
           selectedCityName = null;
         });
@@ -272,16 +385,32 @@ class _RegisterPageState extends State<RegisterPage>
     });
   });
 
-  Widget _buildDropdown(String label, List<Map<String, String>> items, String? value,
-      void Function(String?)? onChanged) {
+  Widget _buildDropdown(
+    String label,
+    List<Map<String, String>> items,
+    String? value,
+    void Function(String?)? onChanged,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
+        isExpanded: true,
         decoration: _inputDecoration(label),
         initialValue: value,
-        style: const TextStyle(fontSize: 12, fontFamily: "Poppins", color: Colors.black),
+        style: const TextStyle(
+          fontSize: 11,
+          fontFamily: "Poppins",
+          color: Colors.black,
+        ),
         items: items.map((e) {
-          return DropdownMenuItem(value: e['id'], child: Text(e['name'] ?? e['id'] ?? ''));
+          return DropdownMenuItem(
+            value: e['id'],
+            child: Text(
+              e['name'] ?? e['id'] ?? '',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11),
+            ),
+          );
         }).toList(),
         onChanged: onChanged,
       ),
@@ -350,26 +479,26 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildOutlinedButton(
-      String label,
-      VoidCallback onPressed, {
-        bool isProceed = false,
-      }) {
+    String label,
+    VoidCallback onPressed, {
+    bool isProceed = false,
+  }) {
     return OutlinedButton(
       style:
-      OutlinedButton.styleFrom(
-        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-      ).copyWith(
-        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-          if (states.contains(WidgetState.hovered)) {
-            return const Color(0xFF046EB8).withAlpha(50);
-          }
-          return Colors.transparent;
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-          return const Color(0xFF046EB8);
-        }),
-      ),
+          OutlinedButton.styleFrom(
+            side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+          ).copyWith(
+            backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              if (states.contains(WidgetState.hovered)) {
+                return const Color(0xFF046EB8).withAlpha(50);
+              }
+              return Colors.transparent;
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+              return const Color(0xFF046EB8);
+            }),
+          ),
       onPressed: onPressed,
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.normal)),
     );
@@ -482,30 +611,33 @@ class _RegisterPageState extends State<RegisterPage>
             },
           ),
           Center(
-            child: Container(
-              width: 800,
-              height: 520,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  _buildStepper(),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: step == 0
-                          ? _buildPrivacyStepContent()
-                          : _buildAccountSetupStepContent(),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900, minWidth: 400),
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.9,
+                height: 520,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    _buildStepper(),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: step == 0
+                            ? _buildPrivacyStepContent()
+                            : _buildAccountSetupStepContent(),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  step == 0
-                      ? _buildPrivacyStepButtons(context)
-                      : _buildAccountSetupStepButtons(context),
-                ],
+                    const SizedBox(height: 10),
+                    step == 0
+                        ? _buildPrivacyStepButtons(context)
+                        : _buildAccountSetupStepButtons(context),
+                  ],
+                ),
               ),
             ),
           ),
@@ -550,10 +682,10 @@ class _RegisterPageState extends State<RegisterPage>
         const SizedBox(height: 10),
         const Text(
           "By accessing STARBOOKS WHIZ CHALLENGE, you agree to these terms and conditions. "
-              "We collect personal information and usage data to improve our services and efficiency. "
-              "We prioritize data security and do not share personal information with third parties without consent, "
-              "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
-              "For questions, contact us at support@starbookswhizbee.com",
+          "We collect personal information and usage data to improve our services and efficiency. "
+          "We prioritize data security and do not share personal information with third parties without consent, "
+          "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
+          "For questions, contact us at support@starbookswhizbee.com",
           style: TextStyle(fontSize: 14),
         ),
       ],
@@ -589,22 +721,16 @@ class _RegisterPageState extends State<RegisterPage>
                   );
                 },
                 child: CircleAvatar(
-                  radius: 80, // Outer circle size
-                  backgroundColor: const Color(0xFFFDD000), // Yellow border
+                  radius: 80,
+                  backgroundColor: const Color(0xFFFDD000),
                   child: CircleAvatar(
-                    radius: 75, // Inner circle size (slightly smaller)
-                    backgroundColor: Colors.white, // White background inside
-                    // If an avatar is selected, show it, else show an icon
+                    radius: 75,
+                    backgroundColor: Colors.white,
                     backgroundImage: selectedAvatar != null
-                        ? AssetImage(selectedAvatar!) // show the picked avatar
+                        ? AssetImage(selectedAvatar!)
                         : null,
-
                     child: selectedAvatar == null
-                        ? const Icon(
-                      Icons.person,
-                      size: 40,
-                      color: Colors.grey, // Grey icon when no avatar selected
-                    )
+                        ? const Icon(Icons.person, size: 40, color: Colors.grey)
                         : null,
                   ),
                 ),
@@ -626,7 +752,7 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Password",
                           hidePassword,
-                              (val) => setState(() => hidePassword = !hidePassword),
+                          (val) => setState(() => hidePassword = !hidePassword),
                           passwordController,
                         ),
                       ),
@@ -636,8 +762,8 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Confirm Password",
                           hideConfirmPassword,
-                              (val) => setState(
-                                () => hideConfirmPassword = !hideConfirmPassword,
+                          (val) => setState(
+                            () => hideConfirmPassword = !hideConfirmPassword,
                           ),
                           confirmPasswordController,
                         ),
@@ -730,11 +856,11 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildTextField(
-      IconData icon,
-      String hint, {
-        bool isPassword = false,
-        TextEditingController? controller,
-      }) {
+    IconData icon,
+    String hint, {
+    bool isPassword = false,
+    TextEditingController? controller,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -747,12 +873,12 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildPasswordField(
-      IconData icon,
-      String hint,
-      bool hide,
-      void Function(bool) toggle,
-      TextEditingController controller,
-      ) {
+    IconData icon,
+    String hint,
+    bool hide,
+    void Function(bool) toggle,
+    TextEditingController controller,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -773,10 +899,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAvatarDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -787,58 +913,27 @@ class _RegisterPageState extends State<RegisterPage>
           color: Colors.black,
           fontWeight: FontWeight.w400,
         ),
-
         initialValue: selectedAvatar?.split('/').last.split('.').first,
-
         items: const [
-          DropdownMenuItem(
-            value: "Adventurer",
-            child: Text("Adventurer"),
-          ),
-          DropdownMenuItem(
-            value: "Astronaut",
-            child: Text("Astronaut"),
-          ),
-          DropdownMenuItem(
-            value: "Boy",
-            child: Text("Boy"),
-          ),
-          DropdownMenuItem(
-            value: "Brainy",
-            child: Text("Brainy"),
-          ),DropdownMenuItem(
-            value: "Cool-Monkey",
-            child: Text("Cool-Monkey"),
-          ),
+          DropdownMenuItem(value: "Adventurer", child: Text("Adventurer")),
+          DropdownMenuItem(value: "Astronaut", child: Text("Astronaut")),
+          DropdownMenuItem(value: "Boy", child: Text("Boy")),
+          DropdownMenuItem(value: "Brainy", child: Text("Brainy")),
+          DropdownMenuItem(value: "Cool-Monkey", child: Text("Cool-Monkey")),
           DropdownMenuItem(
             value: "Cute-Elephant",
             child: Text("Cute-Elephant"),
-          ),DropdownMenuItem(
-            value: "Doctor-Boy",
-            child: Text("Doctor-Boy"),
           ),
-          DropdownMenuItem(
-            value: "Doctor-Girl",
-            child: Text("Doctor-Girl"),
-          ),DropdownMenuItem(
-            value: "Engineer-Boy",
-            child: Text("Engineer-Boy"),
-          ),
+          DropdownMenuItem(value: "Doctor-Boy", child: Text("Doctor-Boy")),
+          DropdownMenuItem(value: "Doctor-Girl", child: Text("Doctor-Girl")),
+          DropdownMenuItem(value: "Engineer-Boy", child: Text("Engineer-Boy")),
           DropdownMenuItem(
             value: "Engineer-Girl",
             child: Text("Engineer-Girl"),
-          ),DropdownMenuItem(
-            value: "Girl",
-            child: Text("Girl"),
           ),
-          DropdownMenuItem(
-            value: "Hacker",
-            child: Text("Hacker"),
-          ),
-          DropdownMenuItem(
-            value: "Leonel",
-            child: Text("Leonel"),
-          ),
+          DropdownMenuItem(value: "Girl", child: Text("Girl")),
+          DropdownMenuItem(value: "Hacker", child: Text("Hacker")),
+          DropdownMenuItem(value: "Leonel", child: Text("Leonel")),
           DropdownMenuItem(
             value: "Scientist-Boy",
             child: Text("Scientist-Boy"),
@@ -847,43 +942,20 @@ class _RegisterPageState extends State<RegisterPage>
             value: "Scientist-Girl",
             child: Text("Scientist-Girl"),
           ),
+          DropdownMenuItem(value: "Sly-Fox", child: Text("Sly-Fox")),
+          DropdownMenuItem(value: "Sneaky-Snake", child: Text("Sneaky-Snake")),
+          DropdownMenuItem(value: "Teacher-Boy", child: Text("Teacher-Boy")),
+          DropdownMenuItem(value: "Teacher-Girl", child: Text("Teacher-Girl")),
+          DropdownMenuItem(value: "Twirky", child: Text("Twirky")),
           DropdownMenuItem(
-            value: "Sly-Fox",
-            child: Text("Sly-Fox"),
-          ),
-          DropdownMenuItem(
-            value: "Sneaky-Snake",
-            child: Text("Sneaky-Snake"),
-          ),
-          DropdownMenuItem(
-            value: "Teacher-Boy",
-            child: Text("Teacher-Boy"),
-          ),
-          DropdownMenuItem(
-            value: "Teacher-Girl",
-            child: Text("Teacher-Girl"),
-          ),
-          DropdownMenuItem(
-            value: "Twirky",
-            child: Text("Twirky"),
-          ),DropdownMenuItem(
             value: "Whiz-Achiever",
             child: Text("Whiz-Achiever"),
-          ),DropdownMenuItem(
-            value: "Whiz-Busy",
-            child: Text("Whiz-Busy"),
-          ),DropdownMenuItem(
-            value: "Whiz-Happy",
-            child: Text("Whiz-Happy"),
-          ),DropdownMenuItem(
-            value: "Whiz-Ready",
-            child: Text("Whiz-Ready"),
-          ),DropdownMenuItem(
-            value: "Wise Turtle",
-            child: Text("Wise Turtle"),
           ),
+          DropdownMenuItem(value: "Whiz-Busy", child: Text("Whiz-Busy")),
+          DropdownMenuItem(value: "Whiz-Happy", child: Text("Whiz-Happy")),
+          DropdownMenuItem(value: "Whiz-Ready", child: Text("Whiz-Ready")),
+          DropdownMenuItem(value: "Wise-Turtle", child: Text("Wise-Turtle")),
         ],
-
         onChanged: (value) {
           setState(() {
             switch (value) {
@@ -970,10 +1042,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAgeDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1016,10 +1088,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildCategoryDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1062,10 +1134,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildSexDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1091,7 +1163,6 @@ class _RegisterPageState extends State<RegisterPage>
     );
   }
 }
-
 
 class AdminPage extends StatelessWidget {
   const AdminPage({super.key});
