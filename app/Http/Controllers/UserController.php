@@ -225,24 +225,44 @@ class UserController extends Controller
         }
     }
 
-    public function changePassword(Request $request)
+    public function changePassword(Request $request, $id)
     {
         $request->validate([
-            'user_id' => 'required',
             'old_password' => 'required',
             'new_password' => 'required|min:6',
+            'new_password_confirmation' => 'required|same:new_password',
         ]);
 
-        $user = \App\Models\User::find($request->user_id);
-        if (!$user) return response()->json(['message' => 'User not found'], 404);
+        try {
+            $user = User::find(new \MongoDB\BSON\ObjectId($id));
+        
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
 
-        if (!\Hash::check($request->old_password, $user->password)) {
-            return response()->json(['message' => 'Old password is incorrect'], 400);
+            if (!Hash::check($request->old_password, $user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Old password is incorrect'
+                ], 400);
+            }
+
+            $user->password = Hash::make($request->new_password);
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password updated successfully'
+            ], 200);
+        
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating password'
+            ], 500);
         }
-
-        $user->password = bcrypt($request->new_password);
-        $user->save();
-
-        return response()->json(['message' => 'Password updated successfully'], 200);
     }
 }
