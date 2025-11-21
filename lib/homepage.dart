@@ -111,7 +111,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadUserWithLocationNames() async {
     setState(() => _loadingProfile = true);
     try {
-      final res = await http.get(Uri.parse("$baseUrl/api/homepage/${_currentProfile.id}"));
+      final res = await http.get(
+        Uri.parse("$baseUrl/api/homepage/${_currentProfile.id}"),
+      );
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data['success'] == true) {
@@ -133,9 +135,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  String get regionName => _currentProfile.region.isNotEmpty ? _currentProfile.region : "Unknown Region";
-  String get provinceName => _currentProfile.province.isNotEmpty ? _currentProfile.province : "Unknown Province";
-  String get cityName => _currentProfile.city.isNotEmpty ? _currentProfile.city : "Unknown City";
+  String get regionName => _currentProfile.region.isNotEmpty
+      ? _currentProfile.region
+      : "Unknown Region";
+  String get provinceName => _currentProfile.province.isNotEmpty
+      ? _currentProfile.province
+      : "Unknown Province";
+  String get cityName =>
+      _currentProfile.city.isNotEmpty ? _currentProfile.city : "Unknown City";
 
   Future<void> _editProfile() async {
     final updatedProfile = await showDialog<UserProfile>(
@@ -158,13 +165,26 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Image.asset("assets/images-icons/sadlogout.png", width: 80, height: 80),
+              Image.asset(
+                "assets/images-icons/sadlogout.png",
+                width: 80,
+                height: 80,
+              ),
               const SizedBox(height: 15),
-              const Text("Logout Confirmation",
-                  style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold, fontSize: 20)),
+              const Text(
+                "Logout Confirmation",
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
               const SizedBox(height: 10),
-              const Text("Are you sure you want to log out?",
-                  textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Poppins', fontSize: 14)),
+              const Text(
+                "Are you sure you want to log out?",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+              ),
               const SizedBox(height: 25),
               Row(
                 children: [
@@ -173,11 +193,22 @@ class _HomePageState extends State<HomePage> {
                       onPressed: () => Navigator.pop(context, false),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        side: const BorderSide(
+                          color: Color(0xFF046EB8),
+                          width: 1,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                      child: const Text("Cancel",
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: Color(0xFF046EB8))),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          color: Color(0xFF046EB8),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 15),
@@ -188,14 +219,22 @@ class _HomePageState extends State<HomePage> {
                         backgroundColor: const Color(0xFFFDD000),
                         foregroundColor: const Color(0xFF816A03),
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                      child: const Text("Logout",
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        "Logout",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ],
-              )
+              ),
             ],
           ),
         ),
@@ -203,7 +242,9 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (confirmed == true && mounted) {
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LogInPage()));
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LogInPage()));
     }
   }
 
@@ -214,15 +255,23 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700]),
-            const SizedBox(width: 6),
-            Text(label,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700],
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
                 style: TextStyle(
                   color: isActive ? const Color(0xFFFFD13B) : Colors.black,
                   fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                )),
-          ]),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 3),
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
@@ -237,20 +286,24 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final mainContent = _selectedTab == "Leaderboard" ? const Leaderboard() : _buildHomeContent();
+    final mainContent = _selectedTab == "Leaderboard"
+        ? const Leaderboard()
+        : _buildHomeContent();
 
     return Scaffold(
       backgroundColor: const Color(0xFF046EB8),
       body: _loadingProfile
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : Stack(
-        children: [
-          Column(children: [
-            _buildTopBar(),
-            Expanded(child: mainContent),
-          ]),
-        ],
-      ),
+              children: [
+                Column(
+                  children: [
+                    _buildTopBar(),
+                    Expanded(child: mainContent),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 
@@ -260,15 +313,23 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: Row(
         children: [
-          Image.asset("assets/images-logo/mainlogo.png", width: 150, height: 50, fit: BoxFit.contain),
+          Image.asset(
+            "assets/images-logo/mainlogo.png",
+            width: 150,
+            height: 50,
+            fit: BoxFit.contain,
+          ),
           Expanded(
             child: Align(
               alignment: Alignment.center,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                _buildTopNavButton("Home", Icons.home),
-                const SizedBox(width: 40),
-                _buildTopNavButton("Leaderboard", Icons.leaderboard),
-              ]),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTopNavButton("Home", Icons.home),
+                  const SizedBox(width: 40),
+                  _buildTopNavButton("Leaderboard", Icons.leaderboard),
+                ],
+              ),
             ),
           ),
           MouseRegion(
@@ -279,8 +340,12 @@ class _HomePageState extends State<HomePage> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                    shape: BoxShape.circle, border: Border.all(color: const Color(0xFF046EB8), width: 3)),
-                child: ClipOval(child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover)),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF046EB8), width: 3),
+                ),
+                child: ClipOval(
+                  child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover),
+                ),
               ),
             ),
           ),
@@ -298,7 +363,9 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: const Color(0xFF4A90BE),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))],
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4)),
+        ],
       ),
       child: Row(
         children: [
@@ -310,7 +377,9 @@ class _HomePageState extends State<HomePage> {
               border: Border.all(color: const Color(0xFFFFD13B), width: 5),
               color: Colors.white,
             ),
-            child: ClipOval(child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover)),
+            child: ClipOval(
+              child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -318,25 +387,49 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(_currentProfile.username,
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
-                const SizedBox(height: 6),
-                Row(children: [
-                  const Icon(Icons.person, color: Colors.white, size: 16),
-                  const SizedBox(width: 5),
-                  Text(_currentProfile.category,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                ]),
-                const SizedBox(height: 4),
-                Row(children: [
-                  const Icon(Icons.location_on, color: Colors.white, size: 16),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text("$cityName, $provinceName, $regionName",
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
-                        overflow: TextOverflow.ellipsis),
+                Text(
+                  _currentProfile.username,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                ]),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.person, color: Colors.white, size: 16),
+                    const SizedBox(width: 5),
+                    Text(
+                      _currentProfile.category,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        "$cityName, $provinceName, $regionName",
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -345,26 +438,46 @@ class _HomePageState extends State<HomePage> {
               ElevatedButton.icon(
                 onPressed: _editProfile,
                 icon: const Icon(Icons.edit, size: 16),
-                label: const Text("Edit Profile", style: TextStyle(fontSize: 13)),
+                label: const Text(
+                  "Edit Profile",
+                  style: TextStyle(fontSize: 13),
+                ),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF046EB8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10)),
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF046EB8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
               ElevatedButton.icon(
                 onPressed: () {
-                  showDialog(context: context, builder: (_) => const PlayerBadgesDialog());
+                  showDialog(
+                    context: context,
+                    builder: (_) => const PlayerBadgesDialog(),
+                  );
                 },
                 icon: const Icon(Icons.emoji_events, size: 16),
-                label: const Text("Your Badges",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                label: const Text(
+                  "Your Badges",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFDD000),
-                    foregroundColor: const Color(0xFF915701),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10)),
+                  backgroundColor: const Color(0xFFFDD000),
+                  foregroundColor: const Color(0xFF915701),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                ),
               ),
             ],
           ),
@@ -382,40 +495,49 @@ class _HomePageState extends State<HomePage> {
           top: 0,
           left: 0,
           right: 0,
-          child: Align(alignment: Alignment.topCenter, child: _buildProfileCard()),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: _buildProfileCard(),
+          ),
         ),
         // Game grid on top (will appear in front of profile card)
         Positioned.fill(
           child: Padding(
             padding: const EdgeInsets.only(top: 160, left: 70, right: 70),
-            child: LayoutBuilder(builder: (context, constraints) {
-              final crossAxisCount = constraints.maxWidth < 800 ? 2 : 4;
-              return GridView.count(
-                crossAxisCount: crossAxisCount,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                crossAxisSpacing: 24,
-                mainAxisSpacing: 24,
-                childAspectRatio: 0.73,
-                children: const [
-                  _GameBox(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final crossAxisCount = constraints.maxWidth < 800 ? 2 : 4;
+                return GridView.count(
+                  crossAxisCount: crossAxisCount,
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  crossAxisSpacing: 24,
+                  mainAxisSpacing: 24,
+                  childAspectRatio: 0.73,
+                  children: const [
+                    _GameBox(
                       title: "Whiz Memory Match",
                       imagePath: "assets/images-logo/memorymatch.png",
-                      backgroundColor: Color(0xFF656BE6)),
-                  _GameBox(
+                      backgroundColor: Color(0xFF656BE6),
+                    ),
+                    _GameBox(
                       title: "Whiz Challenge",
                       imagePath: "assets/images-logo/whizchallenge.png",
-                      backgroundColor: Color(0xFFFDD000)),
-                  _GameBox(
+                      backgroundColor: Color(0xFFFDD000),
+                    ),
+                    _GameBox(
                       title: "Whiz Battle",
                       imagePath: "assets/images-logo/whizbattle.png",
-                      backgroundColor: Color(0xFFC571E2)),
-                  _GameBox(
+                      backgroundColor: Color(0xFFC571E2),
+                    ),
+                    _GameBox(
                       title: "Whiz Puzzle",
                       imagePath: "assets/images-logo/whizpuzzle.png",
-                      backgroundColor: Color(0xFFE6833A)),
-                ],
-              );
-            }),
+                      backgroundColor: Color(0xFFE6833A),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -482,13 +604,15 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
       CurvedAnimation(parent: _hoverController, curve: Curves.easeOutBack),
     );
 
-    _shadowAnimation = Tween<double>(begin: 1.0, end: 1.8).animate(
-      CurvedAnimation(parent: _hoverController, curve: Curves.easeOut),
-    );
+    _shadowAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.8,
+    ).animate(CurvedAnimation(parent: _hoverController, curve: Curves.easeOut));
 
-    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _hoverController, curve: Curves.easeOut),
-    );
+    _glowAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _hoverController, curve: Curves.easeOut));
 
     _ascendAnimation = Tween<double>(begin: 0, end: -800).animate(
       CurvedAnimation(parent: _ascendController, curve: Curves.easeInQuad),
@@ -541,13 +665,16 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
   }
 
   void _navigateToGame(BuildContext context) {
+    // Get the current profile from the HomePage
+    final homePageState = context.findAncestorStateOfType<_HomePageState>();
+    final currentProfile = homePageState?._currentProfile;
     Widget page;
     switch (widget.title) {
       case "Whiz Memory Match":
         page = const WhizMemoryMatch();
         break;
       case "Whiz Challenge":
-        page = const WhizChallenge();
+        page = WhizChallenge(profile: currentProfile);
         break;
       case "Whiz Battle":
         page = const WhizBattle();
@@ -559,13 +686,16 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
         return;
     }
 
-    Navigator.push(context, PageRouteBuilder(
-      transitionDuration: const Duration(milliseconds: 600),
-      pageBuilder: (_, __, ___) => page,
-      transitionsBuilder: (_, animation, __, child) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-    ));
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (_, __, ___) => page,
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
   }
 
   @override
@@ -577,115 +707,134 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
       child: GestureDetector(
         onTap: _onTap,
         child: AnimatedBuilder(
-          animation: Listenable.merge([_hoverController, _floatController, _ascendController]),
+          animation: Listenable.merge([
+            _hoverController,
+            _floatController,
+            _ascendController,
+          ]),
           builder: (context, child) {
-            final floatOffset = _hovering && !_isAscending ? sin(_floatController.value * 2 * pi) * 5 : 0.0;
-            final totalOffset = _liftAnimation.value + floatOffset + _ascendAnimation.value;
+            final floatOffset = _hovering && !_isAscending
+                ? sin(_floatController.value * 2 * pi) * 5
+                : 0.0;
+            final totalOffset =
+                _liftAnimation.value + floatOffset + _ascendAnimation.value;
             final fadeValue = _ascendController.value > 0.6
                 ? 1.0 - ((_ascendController.value - 0.6) / 0.4)
                 : 1.0;
 
             return Opacity(
-                opacity: fadeValue,
-                child: Transform.translate(
-                  offset: Offset(0, totalOffset),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    clipBehavior: Clip.none,
-                    children: [
-                      // 🟡 Yellow glow (only visible on hover)
-                      if (_hovering && !_isAscending)
-                        Container(
-                          width: 320,
-                          height: 400,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.yellow.withValues(alpha: 0.4 * _glowAnimation.value),
-                                blurRadius: 50,
-                                spreadRadius: 20,
+              opacity: fadeValue,
+              child: Transform.translate(
+                offset: Offset(0, totalOffset),
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    // 🟡 Yellow glow (only visible on hover)
+                    if (_hovering && !_isAscending)
+                      Container(
+                        width: 320,
+                        height: 400,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(25),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.yellow.withValues(
+                                alpha: 0.4 * _glowAnimation.value,
                               ),
-                            ],
-                          ),
-                        ),
-
-                      // 🌑 Shadow circle below (wider on hover, fades on ascend)
-                      if (!_isAscending)
-                        Positioned(
-                          bottom: -30,
-                          child: Container(
-                            width: 180 * _shadowAnimation.value,
-                            height: 35,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(100),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 20,
-                                  spreadRadius: 5,
-                                ),
-                              ],
+                              blurRadius: 50,
+                              spreadRadius: 20,
                             ),
-                          ),
+                          ],
                         ),
+                      ),
 
-                      // 🎴 The flipping and floating card itself
-                      Transform(
-                        alignment: Alignment.center,
-                        transform: Matrix4.identity()
-                          ..setEntry(3, 2, 0.001)
-                          ..rotateY(_hovering && !_isAscending ? _rotationAnimation.value : 0),
+                    // 🌑 Shadow circle below (wider on hover, fades on ascend)
+                    if (!_isAscending)
+                      Positioned(
+                        bottom: -30,
                         child: Container(
-                          width: 280,
-                          height: 360,
+                          width: 180 * _shadowAnimation.value,
+                          height: 35,
                           decoration: BoxDecoration(
-                            color: widget.backgroundColor,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(color: Colors.white, width: 5),
+                            borderRadius: BorderRadius.circular(100),
                             boxShadow: [
                               BoxShadow(
-                                color: widget.backgroundColor.withValues(alpha: 0.7),
-                                blurRadius: 30,
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 20,
                                 spreadRadius: 5,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: Center(
-                                  child: Image.asset(widget.imagePath, fit: BoxFit.contain),
-                                ),
-                              ),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 22),
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.only(
-                                    bottomLeft: Radius.circular(20),
-                                    bottomRight: Radius.circular(20),
-                                  ),
-                                ),
-                                child: Text(
-                                  widget.title,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 23,
-                                    fontWeight: FontWeight.bold,
-                                    color: widget.backgroundColor,
-                                  ),
-                                ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ));
+
+                    // 🎴 The flipping and floating card itself
+                    Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001)
+                        ..rotateY(
+                          _hovering && !_isAscending
+                              ? _rotationAnimation.value
+                              : 0,
+                        ),
+                      child: Container(
+                        width: 280,
+                        height: 360,
+                        decoration: BoxDecoration(
+                          color: widget.backgroundColor,
+                          borderRadius: BorderRadius.circular(25),
+                          border: Border.all(color: Colors.white, width: 5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: widget.backgroundColor.withValues(
+                                alpha: 0.7,
+                              ),
+                              blurRadius: 30,
+                              spreadRadius: 5,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: Image.asset(
+                                  widget.imagePath,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 22),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.only(
+                                  bottomLeft: Radius.circular(20),
+                                  bottomRight: Radius.circular(20),
+                                ),
+                              ),
+                              child: Text(
+                                widget.title,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 23,
+                                  fontWeight: FontWeight.bold,
+                                  color: widget.backgroundColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
           },
         ),
       ),
