@@ -405,7 +405,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                           const SizedBox(width: 15),
                                           Expanded(
                                             child: DropdownButtonFormField<String>(
-                                              initialValue: selectedAge,
+                                              value: selectedAge,
                                               decoration: _inputDecoration(
                                                 'Age',
                                               ),
@@ -446,7 +446,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                           Expanded(
                                             child:
                                                 DropdownButtonFormField<String>(
-                                                  initialValue: selectedAvatar,
+                                                  value: selectedAvatar,
                                                   decoration: _inputDecoration(
                                                     'Avatar',
                                                   ),
@@ -470,7 +470,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                           const SizedBox(width: 15),
                                           Expanded(
                                             child: DropdownButtonFormField<String>(
-                                              initialValue: selectedCategory,
+                                              value: selectedCategory,
                                               decoration: _inputDecoration(
                                                 'Category',
                                               ),
@@ -507,7 +507,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                           Expanded(
                                             child:
                                                 DropdownButtonFormField<String>(
-                                                  initialValue: selectedSex,
+                                                  value: selectedSex,
                                                   decoration: _inputDecoration(
                                                     'Sex',
                                                   ),
@@ -545,7 +545,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
                                     isExpanded: true,
-                                    initialValue: selectedRegionId,
+                                    value: selectedRegionId,
                                     decoration: _inputDecoration('Region'),
                                     items: regions
                                         .map(
@@ -575,7 +575,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
                                     isExpanded: true,
-                                    initialValue: selectedProvinceId,
+                                    value: selectedProvinceId,
                                     decoration: _inputDecoration('Province'),
                                     items: provinces
                                         .map(
@@ -603,7 +603,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
                                     isExpanded: true,
-                                    initialValue: selectedCityId,
+                                    value: selectedCityId,
                                     decoration: _inputDecoration('City'),
                                     items: cities
                                         .map(

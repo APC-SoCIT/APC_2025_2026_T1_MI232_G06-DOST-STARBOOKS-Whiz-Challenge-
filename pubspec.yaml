@@ -35,6 +35,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   http: ^1.2.2
+  flame_audio: ^2.11.12
+  confetti: ^0.7.0
 
 dev_dependencies:
   flutter_test:
@@ -63,19 +65,18 @@ flutter:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
   assets:
+    - assets/audio/quiz_music.mp3
     - assets/images-logo/starbookslogo.png
     - assets/images-logo/mainlogo.png
     - assets/images-logo/starbookslogin.png
     - assets/images-icons/background1.png
     - assets/images-icons/placeholder.png
     - assets/images-icons/sadlogout.png
-    - assets/images-icons/math.png
-    - assets/images-icons/science.png
     - assets/images-icons/lightbulb.png
     - assets/images-badges/whiz-achiever.png
     - assets/images-badges/whiz-happy.png
     - assets/images-badges/whiz-ready.png
-    - assets/images-logo/memorymatch.png
+    - assets/images-logo/whizmemorymatch.png
     - assets/images-logo/whizchallenge.png
     - assets/images-logo/whizbattle.png
     - assets/images-logo/whizpuzzle.png
@@ -106,6 +107,28 @@ flutter:
     - assets/images-avatars/Whiz-Ready.png
     - assets/images-avatars/Wise-Turtle.png
     - assets/images-logo/bird1.png
+    - assets/images-logo/bird2.png
+    - assets/memorymatch/easy.png
+    - assets/memorymatch/average.png
+    - assets/memorymatch/difficult.png
+    - assets/memorymatch/easy1.png
+    - assets/memorymatch/easy2.png
+    - assets/memorymatch/easy3.png
+    - assets/memorymatch/easy4.png
+    - assets/memorymatch/easy5.png
+    - assets/memorymatch/average1.png
+    - assets/memorymatch/average2.png
+    - assets/memorymatch/average3.png
+    - assets/memorymatch/average4.png
+    - assets/memorymatch/average5.png
+    - assets/memorymatch/average6.png
+    - assets/memorymatch/difficult1.png
+    - assets/memorymatch/difficult2.png
+    - assets/memorymatch/difficult3.png
+    - assets/memorymatch/difficult4.png
+    - assets/memorymatch/difficult5.png
+    - assets/memorymatch/difficult6.png
+    - assets/memorymatch/difficult7.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
