@@ -398,7 +398,7 @@ class _RegisterPageState extends State<RegisterPage>
         decoration: _inputDecoration(label),
         initialValue: value,
         style: const TextStyle(
-          fontSize: 11,
+          fontSize: 12,
           fontFamily: "Poppins",
           color: Colors.black,
         ),
@@ -408,7 +408,7 @@ class _RegisterPageState extends State<RegisterPage>
             child: Text(
               e['name'] ?? e['id'] ?? '',
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: 12),
             ),
           );
         }).toList(),
@@ -615,7 +615,7 @@ class _RegisterPageState extends State<RegisterPage>
               constraints: const BoxConstraints(maxWidth: 900, minWidth: 400),
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.9,
-                height: 520,
+                height: step == 0 ? 420 : 520,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -626,10 +626,16 @@ class _RegisterPageState extends State<RegisterPage>
                     _buildStepper(),
                     const SizedBox(height: 20),
                     Expanded(
-                      child: SingleChildScrollView(
-                        child: step == 0
-                            ? _buildPrivacyStepContent()
-                            : _buildAccountSetupStepContent(),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        transitionBuilder: (child, animation) =>
+                            FadeTransition(opacity: animation, child: child),
+                        child: SingleChildScrollView(
+                          key: ValueKey(step), // IMPORTANT for the animation to trigger
+                          child: step == 0
+                              ? _buildPrivacyStepContent()
+                              : _buildAccountSetupStepContent(),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -686,7 +692,7 @@ class _RegisterPageState extends State<RegisterPage>
               "We prioritize data security and do not share personal information with third parties without consent, "
               "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
               "For questions, contact us at support@starbookswhizbee.com",
-          style: TextStyle(fontSize: 14),
+          style: TextStyle(fontSize: 14),  textAlign: TextAlign.justify,
         ),
       ],
     );

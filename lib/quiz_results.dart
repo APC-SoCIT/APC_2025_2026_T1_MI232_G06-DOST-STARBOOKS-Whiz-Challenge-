@@ -8,6 +8,9 @@ class QuizResultScreen extends StatelessWidget {
   final int incorrectAnswers;
   final int totalQuestions;
   final double averageTime;
+  final Map<String, dynamic>? badgeAwarded;
+  final int? rewardsEarned;
+  final String? userId;
 
   const QuizResultScreen({
     super.key,
@@ -17,6 +20,9 @@ class QuizResultScreen extends StatelessWidget {
     required this.incorrectAnswers,
     required this.totalQuestions,
     required this.averageTime,
+    this.badgeAwarded,
+    this.rewardsEarned,
+    this.userId,
   });
 
   Color _getDifficultyColor() {
@@ -36,6 +42,10 @@ class QuizResultScreen extends StatelessWidget {
     return correctAnswers == totalQuestions;
   }
 
+  bool _hasBadge() {
+    return badgeAwarded != null;
+  }
+
   String _getResultImage() {
     if (_isPerfectScore()) {
       return "assets/images-badges/whiz-achiever.png";
@@ -53,8 +63,10 @@ class QuizResultScreen extends StatelessWidget {
   }
 
   String _getResultMessage() {
-    if (_isPerfectScore()) {
-      return "You've unlocked a new badge!";
+    if (_isPerfectScore() && _hasBadge()) {
+      return "Perfect score! You've earned a badge!";
+    } else if (_isPerfectScore()) {
+      return "Perfect score! Amazing work!";
     } else {
       return "Not quite there yet, but don't give up!";
     }
@@ -65,6 +77,19 @@ class QuizResultScreen extends StatelessWidget {
       return const Color(0xFFFDD000);
     } else {
       return const Color(0xFFBD442E);
+    }
+  }
+
+  String _getBadgeImage(String difficulty) {
+    switch (difficulty.toLowerCase()) {
+      case 'easy':
+        return "assets/images-badges/whiz-ready.png";
+      case 'average':
+        return "assets/images-badges/whiz-happy.png";
+      case 'difficult':
+        return "assets/images-badges/whiz-achiever.png";
+      default:
+        return "assets/images-badges/whiz-achiever.png";
     }
   }
 
@@ -89,12 +114,10 @@ class QuizResultScreen extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Result Title
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Stack(
                           children: [
-                            // Outline/stroke effect
                             Text(
                               _getResultTitle(),
                               style: TextStyle(
@@ -112,7 +135,6 @@ class QuizResultScreen extends StatelessWidget {
                               textAlign: TextAlign.center,
                               maxLines: 1,
                             ),
-                            // Filled text
                             Text(
                               _getResultTitle(),
                               style: TextStyle(
@@ -128,10 +150,7 @@ class QuizResultScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 8),
-
-                      // Result Message
                       Text(
                         _getResultMessage(),
                         style: const TextStyle(
@@ -142,10 +161,72 @@ class QuizResultScreen extends StatelessWidget {
                         ),
                         textAlign: TextAlign.center,
                       ),
-
                       const SizedBox(height: 20),
-
-                      // Result Image/Character
+                      if (_hasBadge()) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.amber.shade300,
+                                Colors.amber.shade600,
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.amber.withValues(alpha:0.5),
+                                blurRadius: 15,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Image.asset(
+                                _getBadgeImage(
+                                    badgeAwarded!['difficulty'] ?? 'easy'),
+                                width: 60,
+                                height: 60,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.emoji_events,
+                                    size: 60,
+                                    color: Colors.white,
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 16),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "🏆 BADGE EARNED!",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                                  Text(
+                                    "${badgeAwarded!['difficulty']?.toString().toUpperCase() ?? 'ACHIEVEMENT'} Level",
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white70,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
                       Image.asset(
                         _getResultImage(),
                         width: 180,
@@ -161,10 +242,7 @@ class QuizResultScreen extends StatelessWidget {
                           );
                         },
                       ),
-
                       const SizedBox(height: 20),
-
-                      // Performance Stats Card
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -176,7 +254,7 @@ class QuizResultScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(15),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
+                              color: Colors.black.withValues(alpha:0.1),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
                             ),
@@ -215,25 +293,55 @@ class QuizResultScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
+                            if (rewardsEarned != null) ...[
+                              const SizedBox(height: 15),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.amber.shade700,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.stars,
+                                      color: Colors.amber,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "+$rewardsEarned Rewards",
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.amber.shade900,
+                                        fontFamily: 'Poppins',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 25),
-
-                      // Action Buttons
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Exit Game / Home Button
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () {
-                                Navigator.of(context).popUntil(
-                                  (route) =>
-                                      route.isFirst ||
-                                      route.settings.name == '/whiz_challenge',
-                                );
+                                // Return to Whiz Challenge map with success=true to unlock next level
+                                Navigator.of(context).pop(_isPerfectScore());
                               },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF1D9358),
@@ -249,9 +357,9 @@ class QuizResultScreen extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(25),
                                 ),
                               ),
-                              child: Text(
-                                _isPerfectScore() ? "Exit Game" : "Home",
-                                style: const TextStyle(
+                              child: const Text(
+                                "Back to Map",
+                                style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                   fontFamily: 'Poppins',
@@ -259,24 +367,29 @@ class QuizResultScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-
                           const SizedBox(width: 12),
-
-                          // Continue Playing / Retry Button
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () {
                                 if (_isPerfectScore()) {
-                                  Navigator.of(context).pop();
+                                  // Go back to map and unlock next level
+                                  Navigator.of(context).pop(true);
                                 } else {
-                                  Navigator.of(context).pushReplacement(
-                                    MaterialPageRoute(
-                                      builder: (_) => QuizScreen(
-                                        category: category,
-                                        difficulty: difficulty,
+                                  // Retry same level
+                                  if (userId != null) {
+                                    Navigator.of(context).pushReplacement(
+                                      MaterialPageRoute(
+                                        builder: (_) => QuizScreen(
+                                          category: category,
+                                          difficulty: difficulty,
+                                          userId: userId!,
+                                          participationType: "Whiz Challenge",
+                                        ),
                                       ),
-                                    ),
-                                  );
+                                    );
+                                  } else {
+                                    Navigator.of(context).pop(false);
+                                  }
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -293,7 +406,7 @@ class QuizResultScreen extends StatelessWidget {
                               ),
                               child: Text(
                                 _isPerfectScore()
-                                    ? "Continue playing"
+                                    ? "Next Level"
                                     : "Retry",
                                 style: const TextStyle(
                                   fontSize: 14,
@@ -388,11 +501,5 @@ class QuizResultScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-extension StringExtension on String {
-  String capitalize() {
-    return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
   }
 }

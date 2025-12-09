@@ -81,7 +81,6 @@ flutter:
     - assets/images-logo/whizbattle.png
     - assets/images-logo/whizpuzzle.png
     - assets/images-logo/success.png
-    - assets/images-logo/smarty.png
     - assets/images-avatars/Adventurer.png
     - assets/images-avatars/Astronaut.png
     - assets/images-avatars/Boy.png
@@ -130,6 +129,12 @@ flutter:
     - assets/memorymatch/difficult5.png
     - assets/memorymatch/difficult6.png
     - assets/memorymatch/difficult7.png
+    - assets/puzzle/solar_system.png
+    - assets/puzzle/scientists.jpg
+    - assets/puzzle/human_body.png
+    - assets/puzzle/animals.jpg
+    - assets/puzzle/geometry.jpg
+    - assets/puzzle/starbookswhiz.jpeg
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

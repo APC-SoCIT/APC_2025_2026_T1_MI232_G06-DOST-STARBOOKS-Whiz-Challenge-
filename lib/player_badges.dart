@@ -42,7 +42,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
   Future<void> _fetchPlayerBadges() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/players/${widget.playerId}/badges'),
+        Uri.parse('$baseUrl/api/player-badge/${widget.playerId}/badges'),
       );
 
       if (response.statusCode == 200) {
@@ -75,7 +75,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
   Future<void> _claimBadge(String difficulty) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/players/${widget.playerId}/badges/award'),
+        Uri.parse('$baseUrl/api/player-badge/award'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'player_info_id': widget.playerId,

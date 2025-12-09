@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'quiz_questions.dart';
 import 'quiz_results.dart';
+import 'quiz_api.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 class QuizScreen extends StatefulWidget {
   final String category;
   final String difficulty;
+  final String userId;
+  final String participationType;
 
   const QuizScreen({
     super.key,
     required this.category,
     required this.difficulty,
+    required this.userId,
+    this.participationType = "Whiz Challenge",
   });
 
   @override
@@ -31,20 +37,136 @@ class _QuizScreenState extends State<QuizScreen> {
   bool _isCorrect = false;
   String? _selectedAnswer;
   bool _isAnswerLocked = false;
+  bool _isMusicEnabled = true;
+
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  DateTime? _gameStartTime;
+  int _totalGameDuration = 0;
+
+  int get _timerDuration {
+    final diff = widget.difficulty.toUpperCase();
+    switch (diff) {
+      case "EASY":
+        return 15;
+      case "AVERAGE":
+        return 20;
+      case "DIFFICULT":
+        return 25;
+      default:
+        return 15;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _gameStartTime = DateTime.now();
     _loadQuestions();
-    _startTimer();
+    _initializeAudio();
   }
 
-  void _loadQuestions() {
-    questions = QuizData.getQuestions(widget.category, widget.difficulty);
+  Future<void> _initializeAudio() async {
+    try {
+      await FlameAudio.audioCache.load('quiz_music.mp3');
+      if (_isMusicEnabled) {
+        await FlameAudio.bgm.play('quiz_music.mp3', volume: 0.2);
+      }
+    } catch (e) {
+      debugPrint('Error loading audio: $e');
+    }
+  }
+
+  Future<void> _pauseBackgroundMusic() async {
+    try {
+      FlameAudio.bgm.pause();
+    } catch (e) {
+      debugPrint('Error pausing music: $e');
+    }
+  }
+
+  Future<void> _resumeBackgroundMusic() async {
+    try {
+      FlameAudio.bgm.resume();
+    } catch (e) {
+      debugPrint('Error resuming music: $e');
+    }
+  }
+
+  Future<void> _stopBackgroundMusic() async {
+    try {
+      FlameAudio.bgm.stop();
+    } catch (e) {
+      debugPrint('Error stopping music: $e');
+    }
+  }
+
+  Future<void> _restartBackgroundMusic() async {
+    try {
+      await FlameAudio.bgm.play('quiz_music.mp3', volume: 0.2);
+    } catch (e) {
+      debugPrint('Error restarting music: $e');
+    }
+  }
+
+  void _toggleMusic() {
+    setState(() {
+      _isMusicEnabled = !_isMusicEnabled;
+    });
+
+    if (_isMusicEnabled) {
+      _resumeBackgroundMusic();
+    } else {
+      _pauseBackgroundMusic();
+    }
+  }
+
+  void _loadQuestions() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final normalizedDifficulty = widget.difficulty.toUpperCase();
+      debugPrint(
+        'Loading questions for category: ${widget.category}, difficulty: $normalizedDifficulty',
+      );
+
+      questions = await QuizData.getQuestions(
+        widget.category,
+        normalizedDifficulty,
+      );
+
+      debugPrint('Loaded ${questions.length} questions');
+
+      if (questions.isEmpty) {
+        setState(() {
+          _errorMessage =
+          'No questions available for ${widget.category} - $normalizedDifficulty';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      _startTimer();
+    } catch (e) {
+      debugPrint('ERROR loading questions: $e');
+      setState(() {
+        _errorMessage =
+        'Failed to load questions. Please check your connection.';
+        _isLoading = false;
+      });
+    }
   }
 
   void _startTimer() {
-    _secondsRemaining = 15;
+    _secondsRemaining = _timerDuration;
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
@@ -80,9 +202,11 @@ class _QuizScreenState extends State<QuizScreen> {
     _timer?.cancel();
     _isAnswerLocked = true;
 
+    _pauseBackgroundMusic();
+
     setState(() {
       incorrectAnswers++;
-      questionTimes.add(15.0);
+      questionTimes.add(_timerDuration.toDouble());
       _showFeedback = true;
       _isCorrect = false;
       _selectedAnswer = null;
@@ -95,7 +219,7 @@ class _QuizScreenState extends State<QuizScreen> {
     _timer?.cancel();
     _isAnswerLocked = true;
 
-    final timeTaken = 15 - _secondsRemaining;
+    final timeTaken = _timerDuration - _secondsRemaining;
     questionTimes.add(timeTaken.toDouble());
 
     final isCorrect = answer == questions[currentQuestionIndex].correctAnswer;
@@ -103,6 +227,8 @@ class _QuizScreenState extends State<QuizScreen> {
     setState(() {
       _selectedAnswer = answer;
     });
+
+    _pauseBackgroundMusic();
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
@@ -131,17 +257,106 @@ class _QuizScreenState extends State<QuizScreen> {
         _isAnswerLocked = false;
       });
       _startTimer();
+      if (_isMusicEnabled) {
+        _restartBackgroundMusic();
+      }
     } else {
-      _navigateToResults();
+      _saveResultAndNavigate();
     }
   }
 
-  void _navigateToResults() {
+  Future<void> _saveResultAndNavigate() async {
     _timer?.cancel();
+    _stopBackgroundMusic();
+
+    if (_gameStartTime != null) {
+      _totalGameDuration = DateTime.now().difference(_gameStartTime!).inSeconds;
+    }
 
     final avgTime = questionTimes.isNotEmpty
         ? questionTimes.reduce((a, b) => a + b) / questionTimes.length
         : 0.0;
+
+    final isPerfect = correctAnswers == questions.length;
+    final result = isPerfect ? 'won' : 'lost';
+
+    final rewards = correctAnswers * 10;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF046EB8)),
+      ),
+    );
+
+    try {
+      final response = await QuizApiService.saveGameResult(
+        playerId: widget.userId,
+        participationType: widget.participationType,
+        category: widget.category,
+        difficultyLevel: _normalizeDifficulty(widget.difficulty),
+        score: score,
+        questionsAnswered: questions.length,
+        correctAnswers: correctAnswers,
+        gameDurationSeconds: _totalGameDuration,
+        result: result,
+        rewardsEarned: rewards,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      if (response.success) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => QuizResultScreen(
+              category: widget.category,
+              difficulty: widget.difficulty,
+              correctAnswers: correctAnswers,
+              incorrectAnswers: incorrectAnswers,
+              totalQuestions: questions.length,
+              averageTime: avgTime,
+              badgeAwarded: response.badgeAwarded,
+              rewardsEarned: rewards,
+              userId: widget.userId,
+            ),
+          ),
+        );
+      } else {
+        _showErrorAndNavigate(avgTime);
+      }
+    } catch (e) {
+      debugPrint('Error saving game result: $e');
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showErrorAndNavigate(avgTime);
+    }
+  }
+
+  String _normalizeDifficulty(String diff) {
+    final normalized = diff.toUpperCase();
+    switch (normalized) {
+      case "EASY":
+        return "Easy";
+      case "AVERAGE":
+        return "Average";
+      case "DIFFICULT":
+        return "Difficult";
+      default:
+        return "Easy";
+    }
+  }
+
+  void _showErrorAndNavigate(double avgTime) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Game completed but failed to sync with server'),
+        backgroundColor: Colors.orange,
+      ),
+    );
 
     Navigator.pushReplacement(
       context,
@@ -153,14 +368,18 @@ class _QuizScreenState extends State<QuizScreen> {
           incorrectAnswers: incorrectAnswers,
           totalQuestions: questions.length,
           averageTime: avgTime,
+          userId: widget.userId,
         ),
       ),
     );
   }
 
   Future<void> _showExitDialog() async {
-    // Pause the timer
     _timer?.cancel();
+    final wasMusicEnabled = _isMusicEnabled;
+    if (wasMusicEnabled && !_showFeedback && !_isAnswerLocked) {
+      _pauseBackgroundMusic();
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -250,16 +469,20 @@ class _QuizScreenState extends State<QuizScreen> {
     );
 
     if (confirmed == true && mounted) {
+      _stopBackgroundMusic();
       Navigator.pop(context);
     } else if (mounted && !_showFeedback && !_isAnswerLocked) {
-      // Resume the timer if user cancels and game is still active (without resetting seconds)
       _resumeTimer();
+      if (wasMusicEnabled && _isMusicEnabled) {
+        _resumeBackgroundMusic();
+      }
     }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _stopBackgroundMusic();
     super.dispose();
   }
 
@@ -276,7 +499,6 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  // Get button colors based on answer index
   Color _getButtonColor(int index) {
     final colors = [
       const Color(0xFF046EB8),
@@ -289,12 +511,152 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final difficultyColor = _getDifficultyColor();
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: difficultyColor),
+              const SizedBox(height: 20),
+              const Text(
+                'Loading questions...',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(30),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 80,
+                  color: Color(0xFFE74C3C),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 16,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back, size: 18),
+                      label: const Text(
+                        'Go Back',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF046EB8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _loadQuestions,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text(
+                        'Retry',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1D9358),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (questions.isEmpty) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.quiz,
+                size: 80,
+                color: Color(0xFF046EB8),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'No questions available',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Go Back',
+                  style: TextStyle(fontFamily: 'Poppins'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     final question = questions[currentQuestionIndex];
-    final difficultyColor = _getDifficultyColor();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -349,47 +711,54 @@ class _QuizScreenState extends State<QuizScreen> {
     return Center(
       child: SingleChildScrollView(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
+          constraints: const BoxConstraints(maxWidth: 700),
           margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Exit Game Button
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _showExitDialog,
-                  icon: const Icon(
-                    Icons.arrow_back,
-                    color: Colors.black87,
-                    size: 18,
-                  ),
-                  label: const Text(
-                    'Exit Game',
-                    style: TextStyle(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton.icon(
+                    onPressed: _showExitDialog,
+                    icon: const Icon(
+                      Icons.arrow_back,
                       color: Colors.black87,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: 'Poppins',
+                      size: 18,
+                    ),
+                    label: const Text(
+                      'Exit Game',
+                      style: TextStyle(
+                        color: Colors.black87,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 0,
+                        vertical: 4,
+                      ),
                     ),
                   ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 0,
-                      vertical: 4,
+                  IconButton(
+                    onPressed: _toggleMusic,
+                    icon: Icon(
+                      _isMusicEnabled ? Icons.volume_up : Icons.volume_off,
+                      color: Colors.black87,
+                      size: 28,
                     ),
+                    tooltip: _isMusicEnabled ? 'Mute Music' : 'Unmute Music',
                   ),
-                ),
+                ],
               ),
-
               const SizedBox(height: 10),
-
-              // Timer Circle with Animation
               TweenAnimationBuilder<double>(
                 duration: const Duration(milliseconds: 300),
                 tween: Tween<double>(
-                  begin: _secondsRemaining / 15,
-                  end: _secondsRemaining / 15,
+                  begin: _secondsRemaining / _timerDuration,
+                  end: _secondsRemaining / _timerDuration,
                 ),
                 builder: (context, value, child) {
                   return SizedBox(
@@ -398,7 +767,6 @@ class _QuizScreenState extends State<QuizScreen> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        // Background circle
                         Container(
                           width: 120,
                           height: 120,
@@ -407,14 +775,13 @@ class _QuizScreenState extends State<QuizScreen> {
                             color: Colors.white,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
+                                color: Colors.black.withValues(alpha:0.15),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
                             ],
                           ),
                         ),
-                        // Animated progress ring
                         SizedBox(
                           width: 120,
                           height: 120,
@@ -428,7 +795,6 @@ class _QuizScreenState extends State<QuizScreen> {
                             strokeCap: StrokeCap.round,
                           ),
                         ),
-                        // Timer number
                         Text(
                           "$_secondsRemaining",
                           style: TextStyle(
@@ -443,10 +809,7 @@ class _QuizScreenState extends State<QuizScreen> {
                   );
                 },
               ),
-
               const SizedBox(height: 20),
-
-              // Question Counter and Score
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -468,15 +831,12 @@ class _QuizScreenState extends State<QuizScreen> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 15),
-
-              // Question Box
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: difficultyColor.withValues(alpha: 0.15),
+                  color: difficultyColor.withValues(alpha:0.15),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: difficultyColor, width: 2),
                 ),
@@ -490,10 +850,7 @@ class _QuizScreenState extends State<QuizScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // Answer Options - Grid
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -532,7 +889,7 @@ class _QuizScreenState extends State<QuizScreen> {
             border: Border.all(color: buttonColor, width: isSelected ? 4 : 3),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
+                color: Colors.black.withValues(alpha:0.08),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -561,12 +918,11 @@ class _QuizScreenState extends State<QuizScreen> {
     return Center(
       child: SingleChildScrollView(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
+          constraints: const BoxConstraints(maxWidth: 700),
           margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Feedback Title
               Text(
                 _isCorrect ? "CORRECT ANSWER!" : "WRONG ANSWER!",
                 style: TextStyle(
@@ -580,10 +936,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
-
               const SizedBox(height: 30),
-
-              // Next Question Button
               ElevatedButton(
                 onPressed: _nextQuestion,
                 style: ElevatedButton.styleFrom(
@@ -613,15 +966,12 @@ class _QuizScreenState extends State<QuizScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 30),
-
-              // Answer Box with Light Bulb Icon
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: difficultyColor.withValues(alpha: 0.15),
+                  color: difficultyColor.withValues(alpha:0.15),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: difficultyColor, width: 2),
                 ),

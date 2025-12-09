@@ -10,7 +10,6 @@ import 'whiz_challenge.dart';
 import 'whiz_puzzle.dart';
 import 'whiz_memory_match.dart';
 import 'leaderboard.dart';
-import 'quiz_setup_dialog.dart';
 
 // ✅ USER PROFILE MODEL
 class UserProfile {
@@ -276,23 +275,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
   }
 
-  // ✅ NEW METHOD: Show Quiz Setup Dialog
-  Future<void> _showQuizSetupDialog() async {
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) => const QuizSetupDialog(),
-    );
-
-    if (result != null && mounted) {
-      _triggerFlashAndNavigate(
-        QuizScreen(
-          category: result['category']!,
-          difficulty: result['difficulty']!,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final mainContent = _selectedTab == "Leaderboard"
@@ -471,27 +453,40 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 childAspectRatio: 0.73,
                 children: [
                   _GameBox(
-                      title: "Whiz Memory Match",
-                      imagePath: "assets/images-logo/whizmemorymatch.png",
-                      backgroundColor: const Color(0xFF656BE6),
-                      onTapNavigate: () => _triggerFlashAndNavigate(
-                          WhizMemoryMatch(userAvatar: _currentProfile.avatar)
-                      )),
+                    title: "Whiz Memory Match",
+                    imagePath: "assets/images-logo/whizmemorymatch.png",
+                    backgroundColor: const Color(0xFF656BE6),
+                    onTapNavigate: () => _triggerFlashAndNavigate(
+                      WhizMemoryMatch(
+                        userAvatar: _currentProfile.avatar,
+                        playerId: _currentProfile.id, // Add this line
+                      ),
+                    ),
+                  ),
                   _GameBox(
-                      title: "Whiz Challenge",
-                      imagePath: "assets/images-logo/whizchallenge.png",
-                      backgroundColor: const Color(0xFFFDD000),
-                      onTapNavigate: _showQuizSetupDialog),
+                    title: "Whiz Challenge",
+                    imagePath: "assets/images-logo/whizchallenge.png",
+                    backgroundColor: const Color(0xFFFDD000),
+                    onTapNavigate: () => _triggerFlashAndNavigate(
+                        WhizChallenge(userId: _currentProfile.id)
+                    ),
+                  ),
                   _GameBox(
                       title: "Whiz Battle",
                       imagePath: "assets/images-logo/whizbattle.png",
                       backgroundColor: const Color(0xFFC571E2),
                       onTapNavigate: () => _triggerFlashAndNavigate(const WhizBattle())),
                   _GameBox(
-                      title: "Whiz Puzzle",
-                      imagePath: "assets/images-logo/whizpuzzle.png",
-                      backgroundColor: const Color(0xFFE6833A),
-                      onTapNavigate: () => _triggerFlashAndNavigate(const WhizPuzzle())),
+                    title: "Whiz Puzzle",
+                    imagePath: "assets/images-logo/whizpuzzle.png",
+                    backgroundColor: const Color(0xFFE6833A),
+                    onTapNavigate: () => _triggerFlashAndNavigate(
+                      WhizPuzzle(
+                        userAvatar: _currentProfile.avatar,
+                        playerId: _currentProfile.id, // Add this line
+                      ),
+                    ),
+                  ),
                 ],
               );
             }),
