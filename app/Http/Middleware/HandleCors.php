@@ -1,12 +1,28 @@
 <?php
 
-public function handle($request, Closure $next)
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+
+class HandleCors
 {
-    $response = $next($request);
+    public function handle(Request $request, Closure $next)
+    {
+        // Handle preflight OPTIONS request
+        if ($request->getMethod() === "OPTIONS") {
+            return response('', 200)
+                ->header('Access-Control-Allow-Origin', '*')
+                ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+                ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        }
 
-    $response->headers->set('Access-Control-Allow-Origin', '*');
-    $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        $response = $next($request);
 
-    return $response;
+        $response->headers->set('Access-Control-Allow-Origin', '*');
+        $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+        return $response;
+    }
+}

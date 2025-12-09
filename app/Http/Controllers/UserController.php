@@ -175,7 +175,7 @@ class UserController extends Controller
         ]);
     }
 
-    
+
     public function fixUserLocationIds()
     {
         try {
@@ -235,7 +235,7 @@ class UserController extends Controller
 
         try {
             $user = User::find(new \MongoDB\BSON\ObjectId($id));
-        
+
             if (!$user) {
                 return response()->json([
                     'success' => false,
@@ -257,7 +257,7 @@ class UserController extends Controller
                 'success' => true,
                 'message' => 'Password updated successfully'
             ], 200);
-        
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
