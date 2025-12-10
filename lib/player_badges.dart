@@ -17,6 +17,7 @@ class PlayerBadgesDialog extends StatefulWidget {
 class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
   bool isLoading = true;
   Map<String, dynamic>? badgeData;
+  List<dynamic> unclaimedBadges = [];
   String? errorMessage;
   final String baseUrl = "http://127.0.0.1:8000";
 
@@ -41,26 +42,42 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
 
   Future<void> _fetchPlayerBadges() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/player-badge/${widget.playerId}/badges'),
+      // Fetch badge summary
+      final summaryResponse = await http.get(
+        Uri.parse('$baseUrl/api/badges/player/${widget.playerId}/summary'),
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success']) {
+      // Fetch unclaimed official badges
+      final unclaimedResponse = await http.get(
+        Uri.parse(
+            '$baseUrl/api/badges/official/player/${widget.playerId}/unclaimed'),
+      );
+
+      if (summaryResponse.statusCode == 200 &&
+          unclaimedResponse.statusCode == 200) {
+        final summaryData = json.decode(summaryResponse.body);
+        final unclaimedData = json.decode(unclaimedResponse.body);
+
+        if (summaryData['success'] && unclaimedData['success']) {
           setState(() {
-            badgeData = data['data'];
+            badgeData = summaryData['data'];
+            unclaimedBadges = unclaimedData['data']['badges'] ?? [];
             isLoading = false;
           });
         } else {
           setState(() {
-            errorMessage = data['message'] ?? 'Failed to load badges';
+            errorMessage =
+            'Failed to load badges: ${summaryData['message'] ?? unclaimedData['message']}';
             isLoading = false;
           });
         }
       } else {
+        final errorBody = summaryResponse.statusCode != 200
+            ? summaryResponse.body
+            : unclaimedResponse.body;
         setState(() {
-          errorMessage = 'Server error: ${response.statusCode}';
+          errorMessage =
+          'Server error ${summaryResponse.statusCode}: $errorBody';
           isLoading = false;
         });
       }
@@ -74,26 +91,48 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
 
   Future<void> _claimBadge(String difficulty) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/player-badge/award'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'player_info_id': widget.playerId,
-          'badge_username': 'Player',
-          'participates_in': 'Achievement Claim',
-          'difficulty': difficulty,
-        }),
+      // Find the unclaimed badge for this difficulty
+      final badgeToClaim = unclaimedBadges.firstWhere(
+            (badge) =>
+        badge['difficulty'] == difficulty && badge['claimed'] == false,
+        orElse: () => null,
       );
 
-      if (response.statusCode == 201) {
-        await _fetchPlayerBadges();
+      if (badgeToClaim == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${difficulty.toUpperCase()} badge claimed!'),
-              backgroundColor: badgeColors[difficulty],
+            const SnackBar(
+              content: Text('No badge available to claim'),
+              backgroundColor: Colors.orange,
             ),
           );
+        }
+        return;
+      }
+
+      // Claim the specific badge
+      final response = await http.post(
+        Uri.parse(
+            '$baseUrl/api/badges/official/${badgeToClaim['_id']}/claim'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // Refresh the badge data
+          await _fetchPlayerBadges();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    '🎉 ${difficulty.toUpperCase()} Official Badge Claimed!'),
+                backgroundColor: badgeColors[difficulty],
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
         }
       }
     } catch (e) {
@@ -106,6 +145,33 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
         );
       }
     }
+  }
+
+  // Check if there's an unclaimed badge for a specific difficulty
+  bool _hasUnclaimedBadge(String difficulty) {
+    return unclaimedBadges.any((badge) =>
+    badge['difficulty'] == difficulty && badge['claimed'] == false);
+  }
+
+  // Get the number of official badges for a difficulty
+  int _getOfficialBadgeCount(String difficulty) {
+    if (badgeData == null) return 0;
+    final officialBadges = badgeData!['official_badges'];
+    return officialBadges[difficulty] ?? 0;
+  }
+
+  // Get progress towards next badge
+  Map<String, int> _getProgress(String difficulty) {
+    if (badgeData == null) {
+      return {'current': 0, 'needed': 3, 'remaining': 3};
+    }
+
+    final progress = badgeData!['progress'][difficulty];
+    return {
+      'current': progress['current_count'] ?? 0,
+      'needed': 3,
+      'remaining': progress['badges_remaining'] ?? 3,
+    };
   }
 
   @override
@@ -128,18 +194,35 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
                 ? const Center(child: CircularProgressIndicator())
                 : errorMessage != null
                 ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(
-                    errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(
+                      errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          isLoading = true;
+                          errorMessage = null;
+                        });
+                        _fetchPlayerBadges();
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
             )
                 : SingleChildScrollView(
@@ -151,8 +234,6 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
                   _buildBadgeCategory("Average", "average"),
                   const SizedBox(height: 20),
                   _buildBadgeCategory("Difficult", "difficult"),
-                  const SizedBox(height: 20),
-                  _buildSummary(),
                 ],
               ),
             ),
@@ -185,15 +266,26 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
   Widget _buildBadgeCategory(String title, String difficulty) {
     if (badgeData == null) return const SizedBox.shrink();
 
-    final summary = badgeData!['summary'];
-    final badgeCount = summary['${difficulty}_badge_count'] ?? 0;
+    final officialCount = _getOfficialBadgeCount(difficulty);
+    final progress = _getProgress(difficulty);
+    final hasUnclaimed = _hasUnclaimedBadge(difficulty);
+
     final borderColor = badgeColors[difficulty] ?? Colors.grey;
     final badgeImage = badgeImages[difficulty] ?? "";
 
-    final bool unlocked = badgeCount >= 3;
+    // Calculate badges remaining to next milestone
+    final remaining = progress['remaining']!;
+
+    // Show count based on how many more needed (3 - remaining)
+    final currentInSet = 3 - remaining;
+    final showCount = currentInSet;
+
+    // Show unlocked if we have an unclaimed badge (meaning we hit 3)
+    final unlocked = hasUnclaimed;
+
     final List<String?> badgePaths = List.generate(
       3,
-          (i) => i < badgeCount ? badgeImage : null,
+          (i) => i < showCount ? badgeImage : null,
     );
 
     return Column(
@@ -213,11 +305,11 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: borderColor.withValues(alpha: 0.2),
+                color: borderColor.withValues(alpha:0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                '$badgeCount/3',
+                '${3 - remaining}/3',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -225,6 +317,32 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
                 ),
               ),
             ),
+            const SizedBox(width: 8),
+            if (officialCount > 0)
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha:0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade700, width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.star, size: 14, color: Colors.amber.shade700),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$officialCount Official',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
@@ -282,41 +400,6 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
           ],
         ),
       ],
-    );
-  }
-
-  Widget _buildSummary() {
-    if (badgeData == null) return const SizedBox.shrink();
-
-    final summary = badgeData!['summary'];
-    final totalBadges = summary['total_badges'] ?? 0;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          const Text(
-            'Total Badges Collected',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$totalBadges',
-            style: const TextStyle(
-              fontSize: 36,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF046EB8),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
