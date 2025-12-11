@@ -51,7 +51,7 @@ class FastestTimeController extends Controller
                 'difficulty' => $data['difficulty'],
             ];
 
-            // Add category for puzzle
+            // Add category for puzzle (IMPORTANT: Category is part of the unique record)
             if ($data['game_type'] === 'puzzle' && isset($data['category'])) {
                 $query['category'] = $data['category'];
             }
@@ -108,24 +108,33 @@ class FastestTimeController extends Controller
     }
 
     /**
-     * Get player's fastest time
+     * Get player's fastest time for specific game/difficulty/category
+     * URL: /api/game/fastest-time/{playerId}/{gameType}/{difficulty}?category=Solar%20System
      */
-    public function getPlayerFastestTime($playerId, $gameType, $difficulty, $category = null)
+    public function getPlayerFastestTime(Request $request, $playerId, $gameType, $difficulty)
     {
         try {
             $playerObjectId = new ObjectId($playerId);
+            $category = $request->query('category');
 
-            $query = [
-                'player_id' => $playerObjectId,
-                'game_type' => $gameType,
-                'difficulty' => $difficulty,
-            ];
+            $query = FastestTime::where('player_id', $playerObjectId)
+                ->where('game_type', $gameType)
+                ->where('difficulty', $difficulty);
 
-            if ($gameType === 'puzzle' && $category) {
-                $query['category'] = $category;
+            // For puzzle, category is REQUIRED to get the correct record
+            if ($gameType === 'puzzle') {
+                if ($category) {
+                    $query = $query->where('category', $category);
+                } else {
+                    // If no category provided for puzzle, return error
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Category is required for puzzle game type'
+                    ], 400);
+                }
             }
 
-            $record = FastestTime::where($query)->first();
+            $record = $query->first();
 
             return response()->json([
                 'success' => true,
@@ -142,24 +151,35 @@ class FastestTimeController extends Controller
     }
 
     /**
-     * Get global leaderboard (top 10 fastest times)
+     * Get global leaderboard (top 10 fastest times) per category per difficulty
+     * URL: /api/game/fastest-times/leaderboard?game_type=puzzle&difficulty=EASY&category=Solar%20System&limit=10
      */
     public function getGlobalLeaderboard(Request $request)
     {
         try {
             $gameType = $request->query('game_type', 'memory_match');
             $difficulty = $request->query('difficulty', 'EASY');
-            $category = $request->query('category'); // For puzzle
+            $category = $request->query('category');
             $limit = $request->query('limit', 10);
 
-            $query = FastestTime::byGameType($gameType)
-                ->byDifficulty($difficulty);
+            $query = FastestTime::where('game_type', $gameType)
+                ->where('difficulty', $difficulty);
 
-            if ($gameType === 'puzzle' && $category) {
-                $query = $query->byCategory($category);
+            // For puzzle, category is REQUIRED for accurate leaderboard
+            if ($gameType === 'puzzle') {
+                if ($category) {
+                    $query = $query->where('category', $category);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Category is required for puzzle leaderboard'
+                    ], 400);
+                }
             }
 
-            $leaderboard = $query->topFastest($limit)->get();
+            $leaderboard = $query->orderBy('time_seconds', 'asc')
+                ->limit($limit)
+                ->get();
 
             return response()->json([
                 'success' => true,
@@ -179,7 +199,8 @@ class FastestTimeController extends Controller
     }
 
     /**
-     * Get all fastest times for a player
+     * Get all fastest times for a player (grouped by game type, difficulty, and category)
+     * URL: /api/game/fastest-time/{playerId}/all
      */
     public function getPlayerAllRecords($playerId)
     {
@@ -188,12 +209,20 @@ class FastestTimeController extends Controller
 
             $records = FastestTime::where('player_id', $playerObjectId)
                 ->orderBy('achieved_at', 'desc')
-                ->get()
-                ->groupBy('game_type');
+                ->get();
+
+            // Group by game_type -> difficulty -> category
+            $grouped = $records->groupBy('game_type')->map(function ($gameRecords) {
+                return $gameRecords->groupBy('difficulty')->map(function ($difficultyRecords) {
+                    // Further group by category for puzzles
+                    return $difficultyRecords->groupBy('category');
+                });
+            });
 
             return response()->json([
                 'success' => true,
-                'data' => $records,
+                'data' => $grouped,
+                'raw_records' => $records, // Also include flat list for easier access
             ], 200);
 
         } catch (\Exception $e) {
@@ -206,7 +235,8 @@ class FastestTimeController extends Controller
     }
 
     /**
-     * Get player's rank in global leaderboard
+     * Get player's rank in global leaderboard for specific category/difficulty
+     * URL: /api/game/fastest-time/{playerId}/rank?game_type=puzzle&difficulty=EASY&category=Solar%20System
      */
     public function getPlayerRank(Request $request, $playerId)
     {
@@ -217,12 +247,12 @@ class FastestTimeController extends Controller
 
             $playerObjectId = new ObjectId($playerId);
 
-            // Get all times for this game/difficulty/category
-            $query = FastestTime::byGameType($gameType)
-                ->byDifficulty($difficulty);
+            // Build query
+            $query = FastestTime::where('game_type', $gameType)
+                ->where('difficulty', $difficulty);
 
             if ($gameType === 'puzzle' && $category) {
-                $query = $query->byCategory($category);
+                $query = $query->where('category', $category);
             }
 
             $allTimes = $query->orderBy('time_seconds', 'asc')->get();
@@ -244,12 +274,47 @@ class FastestTimeController extends Controller
                 'rank' => $rank,
                 'total_players' => $allTimes->count(),
                 'player_record' => $playerRecord,
+                'game_type' => $gameType,
+                'difficulty' => $difficulty,
+                'category' => $category,
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching player rank',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all categories with player's fastest times for a specific difficulty
+     * Useful for showing all category records at once
+     * URL: /api/game/fastest-time/{playerId}/puzzle/{difficulty}/all-categories
+     */
+    public function getPlayerPuzzleRecordsByDifficulty($playerId, $difficulty)
+    {
+        try {
+            $playerObjectId = new ObjectId($playerId);
+
+            $records = FastestTime::where('player_id', $playerObjectId)
+                ->where('game_type', 'puzzle')
+                ->where('difficulty', $difficulty)
+                ->orderBy('time_seconds', 'asc')
+                ->get()
+                ->keyBy('category'); // Key by category for easy access
+
+            return response()->json([
+                'success' => true,
+                'difficulty' => $difficulty,
+                'data' => $records,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching puzzle records',
                 'error' => $e->getMessage()
             ], 500);
         }

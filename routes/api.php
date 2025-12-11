@@ -35,35 +35,16 @@ Route::get('/game/history/{userId}', [GameController::class, 'getGameHistory']);
 Route::get('/game/stats/{userId}', [GameController::class, 'getPlayerStats']);
 
 Route::prefix('badges')->group(function () {
-
-    // Award a badge (automatically creates official badge if milestone reached)
     Route::post('/award', [PlayerBadgeController::class, 'awardBadge']);
-
-    // Get player badge summary (overview of everything)
     Route::get('/player/{playerId}/summary', [PlayerBadgeController::class, 'getPlayerBadgeSummary']);
-
-    // Get badge progress towards next milestone
     Route::get('/player/{playerId}/progress', [PlayerBadgeController::class, 'getBadgeProgress']);
-
-    // Official badge endpoints
     Route::prefix('official')->group(function () {
-        // Get all official badges for a player
         Route::get('/player/{playerId}', [PlayerBadgeController::class, 'getAllOfficialBadges']);
-
-        // Get unclaimed official badges
         Route::get('/player/{playerId}/unclaimed', [PlayerBadgeController::class, 'getUnclaimedOfficialBadges']);
-
-        // Claim a specific official badge
         Route::post('/{badgeId}/claim', [PlayerBadgeController::class, 'claimOfficialBadge']);
-
-        // Claim all unclaimed badges at once
-        Route::post('/player/{playerId}/claim-all', [PlayerBadgeController::class, 'claimAllOfficialBadges']);
+           Route::post('/player/{playerId}/claim-all', [PlayerBadgeController::class, 'claimAllOfficialBadges']);
     });
-
-    // Get badge statistics
     Route::get('/player/{playerId}/statistics', [PlayerBadgeController::class, 'getBadgeStatistics']);
-
-    // Get player badge record
     Route::get('/player/{playerId}', [PlayerBadgeController::class, 'getPlayerBadge']);
 });
 
@@ -75,8 +56,11 @@ Route::get('/leaderboard/player/{playerId}', [LeaderboardController::class, 'get
 Route::get('/fix-user-locations', [UserController::class, 'fixUserLocationIds']);
 
 // Fastest Time Records (Memory Match & Puzzle)
-Route::post('/game/fastest-time', [FastestTimeController::class, 'saveFastestTime']);
-Route::get('/game/fastest-time/{playerId}/{gameType}/{difficulty}/{category?}', [FastestTimeController::class, 'getPlayerFastestTime']);
-Route::get('/game/fastest-times/leaderboard', [FastestTimeController::class, 'getGlobalLeaderboard']);
-Route::get('/game/fastest-times/player/{playerId}/all', [FastestTimeController::class, 'getPlayerAllRecords']);
-Route::get('/game/fastest-times/player/{playerId}/rank', [FastestTimeController::class, 'getPlayerRank']);
+Route::prefix('game')->group(function () {
+    Route::post('/fastest-time', [FastestTimeController::class, 'saveFastestTime']);
+    Route::get('/fastest-time/{playerId}/{gameType}/{difficulty}', [FastestTimeController::class, 'getPlayerFastestTime']);
+    Route::get('/fastest-time/{playerId}/all', [FastestTimeController::class, 'getPlayerAllRecords']);
+    Route::get('/fastest-time/{playerId}/rank', [FastestTimeController::class, 'getPlayerRank']);
+    Route::get('/fastest-time/{playerId}/puzzle/{difficulty}/all-categories', [FastestTimeController::class, 'getPlayerPuzzleRecordsByDifficulty']);
+    Route::get('/fastest-times/leaderboard', [FastestTimeController::class, 'getGlobalLeaderboard']);
+});
