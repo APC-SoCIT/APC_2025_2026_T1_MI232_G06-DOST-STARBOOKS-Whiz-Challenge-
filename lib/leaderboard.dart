@@ -41,17 +41,16 @@ class _LeaderboardState extends State<Leaderboard> {
         debugPrint('Fetching leaderboard from: $url');
       }
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Connection timeout - check if backend is running');
-        },
-      );
+      final response = await http
+          .get(Uri.parse(url), headers: {'Content-Type': 'application/json'})
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception(
+                'Connection timeout - check if backend is running',
+              );
+            },
+          );
 
       if (kDebugMode) {
         debugPrint('Response status: ${response.statusCode}');
@@ -73,8 +72,9 @@ class _LeaderboardState extends State<Leaderboard> {
             // Find current user's position if userId is available
             if (currentUserId != null) {
               final userIndex = leaderboardData.indexWhere(
-                      (user) => user['id']?.toString() == currentUserId ||
-                      user['_id']?['\$oid']?.toString() == currentUserId
+                (user) =>
+                    user['id']?.toString() == currentUserId ||
+                    user['_id']?['\$oid']?.toString() == currentUserId,
               );
               if (userIndex != -1) {
                 currentUserRank = userIndex + 1;
@@ -147,11 +147,7 @@ class _LeaderboardState extends State<Leaderboard> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1A1A2E),
-              Color(0xFF16213E),
-              Color(0xFF0F3460),
-            ],
+            colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
           ),
         ),
         child: SafeArea(
@@ -286,7 +282,7 @@ class _LeaderboardState extends State<Leaderboard> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     letterSpacing: 1,
                   ),
                 ),
@@ -333,9 +329,7 @@ class _LeaderboardState extends State<Leaderboard> {
   Widget _buildLeaderboardList() {
     if (isLoading) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFFE94560),
-        ),
+        child: CircularProgressIndicator(color: Color(0xFFE94560)),
       );
     }
 
@@ -356,7 +350,8 @@ class _LeaderboardState extends State<Leaderboard> {
           final player = leaderboardData[index];
           final rank = index + 1;
           final playerId = _extractId(player['id'] ?? player['_id']);
-          final isCurrentUser = currentUserId != null && playerId == currentUserId;
+          final isCurrentUser =
+              currentUserId != null && playerId == currentUserId;
 
           return _buildRacerCard(player, rank, isCurrentUser);
         },
@@ -364,7 +359,11 @@ class _LeaderboardState extends State<Leaderboard> {
     );
   }
 
-  Widget _buildRacerCard(Map<String, dynamic> player, int rank, bool isCurrentUser) {
+  Widget _buildRacerCard(
+    Map<String, dynamic> player,
+    int rank,
+    bool isCurrentUser,
+  ) {
     Color cardColor = isCurrentUser
         ? const Color(0xFFE94560).withValues(alpha: 0.2)
         : Colors.white.withValues(alpha: 0.05);
@@ -382,12 +381,12 @@ class _LeaderboardState extends State<Leaderboard> {
         border: Border.all(color: borderColor, width: 2),
         boxShadow: isCurrentUser
             ? [
-          BoxShadow(
-            color: const Color(0xFFE94560).withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ]
+                BoxShadow(
+                  color: const Color(0xFFE94560).withValues(alpha: 0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ]
             : null,
       ),
       child: Row(
@@ -402,10 +401,7 @@ class _LeaderboardState extends State<Leaderboard> {
             height: 50,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(
-                color: _getRankColor(rank),
-                width: 3,
-              ),
+              border: Border.all(color: _getRankColor(rank), width: 3),
             ),
             child: ClipOval(
               child: Image.asset(
@@ -501,13 +497,13 @@ class _LeaderboardState extends State<Leaderboard> {
         child: medalIcon != null
             ? Icon(medalIcon, color: Colors.white, size: 28)
             : Text(
-          "$rank",
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
+                "$rank",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
       ),
     );
   }
@@ -577,10 +573,7 @@ class _LeaderboardState extends State<Leaderboard> {
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
       ),
     );
   }
@@ -605,10 +598,7 @@ class _LeaderboardState extends State<Leaderboard> {
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ],
       ),

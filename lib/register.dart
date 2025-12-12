@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'login.dart';
+import 'admin_login.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -45,7 +46,7 @@ class _RegisterPageState extends State<RegisterPage>
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController =
-  TextEditingController();
+      TextEditingController();
   final TextEditingController schoolController = TextEditingController();
 
   String? selectedAge;
@@ -370,7 +371,7 @@ class _RegisterPageState extends State<RegisterPage>
         setState(() {
           selectedProvinceId = v;
           selectedProvinceName = provinces.firstWhere(
-                (p) => p['id'] == v,
+            (p) => p['id'] == v,
           )['name'];
           selectedCityId = null;
           selectedCityName = null;
@@ -386,11 +387,11 @@ class _RegisterPageState extends State<RegisterPage>
   });
 
   Widget _buildDropdown(
-      String label,
-      List<Map<String, String>> items,
-      String? value,
-      void Function(String?)? onChanged,
-      ) {
+    String label,
+    List<Map<String, String>> items,
+    String? value,
+    void Function(String?)? onChanged,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -479,26 +480,26 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildOutlinedButton(
-      String label,
-      VoidCallback onPressed, {
-        bool isProceed = false,
-      }) {
+    String label,
+    VoidCallback onPressed, {
+    bool isProceed = false,
+  }) {
     return OutlinedButton(
       style:
-      OutlinedButton.styleFrom(
-        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-      ).copyWith(
-        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-          if (states.contains(WidgetState.hovered)) {
-            return const Color(0xFF046EB8).withAlpha(50);
-          }
-          return Colors.transparent;
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-          return const Color(0xFF046EB8);
-        }),
-      ),
+          OutlinedButton.styleFrom(
+            side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+          ).copyWith(
+            backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              if (states.contains(WidgetState.hovered)) {
+                return const Color(0xFF046EB8).withAlpha(50);
+              }
+              return Colors.transparent;
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+              return const Color(0xFF046EB8);
+            }),
+          ),
       onPressed: onPressed,
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.normal)),
     );
@@ -557,7 +558,9 @@ class _RegisterPageState extends State<RegisterPage>
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const AdminPage()),
+                  MaterialPageRoute(
+                    builder: (context) => const AdminLoginPage(),
+                  ),
                 );
               },
               child: Row(
@@ -615,7 +618,7 @@ class _RegisterPageState extends State<RegisterPage>
               constraints: const BoxConstraints(maxWidth: 900, minWidth: 400),
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.9,
-                height: step == 0 ? 420 : 520,
+                height: step == 0 ? 520 : 520,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -631,7 +634,9 @@ class _RegisterPageState extends State<RegisterPage>
                         transitionBuilder: (child, animation) =>
                             FadeTransition(opacity: animation, child: child),
                         child: SingleChildScrollView(
-                          key: ValueKey(step), // IMPORTANT for the animation to trigger
+                          key: ValueKey(
+                            step,
+                          ), // IMPORTANT for the animation to trigger
                           child: step == 0
                               ? _buildPrivacyStepContent()
                               : _buildAccountSetupStepContent(),
@@ -688,11 +693,12 @@ class _RegisterPageState extends State<RegisterPage>
         const SizedBox(height: 10),
         const Text(
           "By accessing STARBOOKS WHIZ CHALLENGE, you agree to these terms and conditions. "
-              "We collect personal information and usage data to improve our services and efficiency. "
-              "We prioritize data security and do not share personal information with third parties without consent, "
-              "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
-              "For questions, contact us at support@starbookswhizbee.com",
-          style: TextStyle(fontSize: 14),  textAlign: TextAlign.justify,
+          "We collect personal information and usage data to improve our services and efficiency. "
+          "We prioritize data security and do not share personal information with third parties without consent, "
+          "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
+          "For questions, contact us at support@starbookswhizbee.com",
+          style: TextStyle(fontSize: 14),
+          textAlign: TextAlign.justify,
         ),
       ],
     );
@@ -714,43 +720,164 @@ class _RegisterPageState extends State<RegisterPage>
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 20, top: 10),
-              child: AnimatedBuilder(
-                animation: _avatarController,
-                builder: (context, child) {
-                  final dy = 3 * sin(_avatarController.value * 2 * pi);
-                  final dx = 3 * cos(_avatarController.value * 2 * pi);
-                  return Transform.translate(
-                    offset: Offset(dx, dy),
-                    child: child,
-                  );
-                },
-                child: CircleAvatar(
-                  radius: 80,
-                  backgroundColor: const Color(0xFFFDD000),
-                  child: CircleAvatar(
-                    radius: 75,
-                    backgroundColor: Colors.white,
-                    backgroundImage: selectedAvatar != null
-                        ? AssetImage(selectedAvatar!)
-                        : null,
-                    child: selectedAvatar == null
-                        ? const Icon(Icons.person, size: 40, color: Colors.grey)
-                        : null,
+            // Left Column - Avatar Circle + Avatar/Region dropdowns
+            SizedBox(
+              width: 200,
+              child: Column(
+                children: [
+                  const SizedBox(height: 23),
+                  AnimatedBuilder(
+                    animation: _avatarController,
+                    builder: (context, child) {
+                      final dy = 3 * sin(_avatarController.value * 2 * pi);
+                      final dx = 3 * cos(_avatarController.value * 2 * pi);
+                      return Transform.translate(
+                        offset: Offset(dx, dy),
+                        child: child,
+                      );
+                    },
+                    child: CircleAvatar(
+                      radius: 80,
+                      backgroundColor: const Color(0xFFFDD000),
+                      child: CircleAvatar(
+                        radius: 75,
+                        backgroundColor: Colors.white,
+                        backgroundImage: selectedAvatar != null
+                            ? AssetImage(selectedAvatar!)
+                            : null,
+                        child: selectedAvatar == null
+                            ? const Icon(
+                                Icons.person,
+                                size: 40,
+                                color: Colors.grey,
+                              )
+                            : null,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 15),
+                  _buildAvatarDropdown(
+                    "Avatar",
+                    icon: Icons.camera_alt,
+                    onChanged: (value) {
+                      setState(() {
+                        switch (value) {
+                          case "Adventurer":
+                            selectedAvatar =
+                                "assets/images-avatars/Adventurer.png";
+                            break;
+                          case "Astronaut":
+                            selectedAvatar =
+                                "assets/images-avatars/Astronaut.png";
+                            break;
+                          case "Boy":
+                            selectedAvatar = "assets/images-avatars/Boy.png";
+                            break;
+                          case "Brainy":
+                            selectedAvatar = "assets/images-avatars/Brainy.png";
+                            break;
+                          case "Cool-Monkey":
+                            selectedAvatar =
+                                "assets/images-avatars/Cool-Monkey.png";
+                            break;
+                          case "Cute-Elephant":
+                            selectedAvatar =
+                                "assets/images-avatars/Cute-Elephant.png";
+                            break;
+                          case "Doctor-Boy":
+                            selectedAvatar =
+                                "assets/images-avatars/Doctor-Boy.png";
+                            break;
+                          case "Doctor-Girl":
+                            selectedAvatar =
+                                "assets/images-avatars/Doctor-Girl.png";
+                            break;
+                          case "Engineer-Boy":
+                            selectedAvatar =
+                                "assets/images-avatars/Engineer-Boy.png";
+                            break;
+                          case "Engineer-Girl":
+                            selectedAvatar =
+                                "assets/images-avatars/Engineer-Girl.png";
+                            break;
+                          case "Girl":
+                            selectedAvatar = "assets/images-avatars/Girl.png";
+                            break;
+                          case "Hacker":
+                            selectedAvatar = "assets/images-avatars/Hacker.png";
+                            break;
+                          case "Leonel":
+                            selectedAvatar = "assets/images-avatars/Leonel.png";
+                            break;
+                          case "Scientist-Boy":
+                            selectedAvatar =
+                                "assets/images-avatars/Scientist-Boy.png";
+                            break;
+                          case "Scientist-Girl":
+                            selectedAvatar =
+                                "assets/images-avatars/Scientist-Girl.png";
+                            break;
+                          case "Sly-Fox":
+                            selectedAvatar =
+                                "assets/images-avatars/Sly-Fox.png";
+                            break;
+                          case "Sneaky-Snake":
+                            selectedAvatar =
+                                "assets/images-avatars/Sneaky-Snake.png";
+                            break;
+                          case "Teacher-Boy":
+                            selectedAvatar =
+                                "assets/images-avatars/Teacher-Boy.png";
+                            break;
+                          case "Teacher-Girl":
+                            selectedAvatar =
+                                "assets/images-avatars/Teacher-Girl.png";
+                            break;
+                          case "Twirky":
+                            selectedAvatar = "assets/images-avatars/Twirky.png";
+                            break;
+                          case "Whiz-Achiever":
+                            selectedAvatar =
+                                "assets/images-avatars/Whiz-Achiever.png";
+                            break;
+                          case "Whiz-Busy":
+                            selectedAvatar =
+                                "assets/images-avatars/Whiz-Busy.png";
+                            break;
+                          case "Whiz-Happy":
+                            selectedAvatar =
+                                "assets/images-avatars/Whiz-Happy.png";
+                            break;
+                          case "Whiz-Ready":
+                            selectedAvatar =
+                                "assets/images-avatars/Whiz-Ready.png";
+                            break;
+                          case "Wise-Turtle":
+                            selectedAvatar =
+                                "assets/images-avatars/Wise-Turtle.png";
+                            break;
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _regionDropdown(),
+                ],
               ),
             ),
+            const SizedBox(width: 15),
+            // Right side - all other fields in proper layout
             Expanded(
               child: Column(
                 children: [
+                  // Username - full width at top
                   _buildTextField(
                     Icons.person,
                     "Username",
                     controller: usernameController,
                   ),
                   const SizedBox(height: 10),
+                  // Password and Confirm Password row
                   Row(
                     children: [
                       Expanded(
@@ -758,7 +885,7 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Password",
                           hidePassword,
-                              (val) => setState(() => hidePassword = !hidePassword),
+                          (val) => setState(() => hidePassword = !hidePassword),
                           passwordController,
                         ),
                       ),
@@ -768,8 +895,8 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Confirm Password",
                           hideConfirmPassword,
-                              (val) => setState(
-                                () => hideConfirmPassword = !hideConfirmPassword,
+                          (val) => setState(
+                            () => hideConfirmPassword = !hideConfirmPassword,
                           ),
                           confirmPasswordController,
                         ),
@@ -777,6 +904,7 @@ class _RegisterPageState extends State<RegisterPage>
                     ],
                   ),
                   const SizedBox(height: 10),
+                  // School and Age row
                   Row(
                     children: [
                       Expanded(
@@ -796,48 +924,37 @@ class _RegisterPageState extends State<RegisterPage>
                     ],
                   ),
                   const SizedBox(height: 10),
+                  // Category and Sex row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCategoryDropdown(
+                          "Category",
+                          onChanged: (v) =>
+                              setState(() => selectedCategory = v),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildSexDropdown(
+                          "Sex",
+                          onChanged: (v) => setState(() => selectedSex = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Province and City row
+                  Row(
+                    children: [
+                      Expanded(child: _provinceDropdown()),
+                      const SizedBox(width: 10),
+                      Expanded(child: _cityDropdown()),
+                    ],
+                  ),
                 ],
               ),
             ),
-          ],
-        ),
-        Row(
-          children: [
-            Expanded(
-              child: _buildAvatarDropdown(
-                "Avatar",
-                icon: Icons.camera_alt,
-                onChanged: (value) {
-                  setState(() {
-                    selectedAvatar = "$value";
-                  });
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildCategoryDropdown(
-                "Category",
-                onChanged: (v) => setState(() => selectedCategory = v),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildSexDropdown(
-                "Sex",
-                onChanged: (v) => setState(() => selectedSex = v),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(child: _regionDropdown()),
-            const SizedBox(width: 10),
-            Expanded(child: _provinceDropdown()),
-            const SizedBox(width: 10),
-            Expanded(child: _cityDropdown()),
           ],
         ),
       ],
@@ -862,11 +979,11 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildTextField(
-      IconData icon,
-      String hint, {
-        bool isPassword = false,
-        TextEditingController? controller,
-      }) {
+    IconData icon,
+    String hint, {
+    bool isPassword = false,
+    TextEditingController? controller,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -879,12 +996,12 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildPasswordField(
-      IconData icon,
-      String hint,
-      bool hide,
-      void Function(bool) toggle,
-      TextEditingController controller,
-      ) {
+    IconData icon,
+    String hint,
+    bool hide,
+    void Function(bool) toggle,
+    TextEditingController controller,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -905,10 +1022,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAvatarDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1048,10 +1165,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAgeDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1094,10 +1211,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildCategoryDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1140,10 +1257,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildSexDropdown(
-      String label, {
-        IconData? icon,
-        void Function(String?)? onChanged,
-      }) {
+    String label, {
+    IconData? icon,
+    void Function(String?)? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(

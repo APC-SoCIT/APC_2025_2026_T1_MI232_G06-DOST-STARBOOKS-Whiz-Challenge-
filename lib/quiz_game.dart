@@ -144,7 +144,7 @@ class _QuizScreenState extends State<QuizScreen> {
       if (questions.isEmpty) {
         setState(() {
           _errorMessage =
-          'No questions available for ${widget.category} - $normalizedDifficulty';
+              'No questions available for ${widget.category} - $normalizedDifficulty';
           _isLoading = false;
         });
         return;
@@ -159,7 +159,7 @@ class _QuizScreenState extends State<QuizScreen> {
       debugPrint('ERROR loading questions: $e');
       setState(() {
         _errorMessage =
-        'Failed to load questions. Please check your connection.';
+            'Failed to load questions. Please check your connection.';
         _isLoading = false;
       });
     }
@@ -628,11 +628,7 @@ class _QuizScreenState extends State<QuizScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.quiz,
-                size: 80,
-                color: Color(0xFF046EB8),
-              ),
+              const Icon(Icons.quiz, size: 80, color: Color(0xFF046EB8)),
               const SizedBox(height: 20),
               const Text(
                 'No questions available',
@@ -711,8 +707,8 @@ class _QuizScreenState extends State<QuizScreen> {
     return Center(
       child: SingleChildScrollView(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 700),
-          margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+          constraints: const BoxConstraints(maxWidth: 1000),
+          margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -775,7 +771,7 @@ class _QuizScreenState extends State<QuizScreen> {
                             color: Colors.white,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha:0.15),
+                                color: Colors.black.withValues(alpha: 0.15),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
@@ -836,14 +832,14 @@ class _QuizScreenState extends State<QuizScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: difficultyColor.withValues(alpha:0.15),
+                  color: difficultyColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: difficultyColor, width: 2),
                 ),
                 child: Text(
                   question.question,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.w500,
                     fontFamily: 'Poppins',
                   ),
@@ -856,9 +852,9 @@ class _QuizScreenState extends State<QuizScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 2.5,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 18,
+                  childAspectRatio: 2.8,
                 ),
                 itemCount: question.options.length,
                 itemBuilder: (context, index) {
@@ -882,14 +878,14 @@ class _QuizScreenState extends State<QuizScreen> {
         onTap: () => _handleAnswer(answer),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: isSelected ? buttonColor : Colors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: buttonColor, width: isSelected ? 4 : 3),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha:0.08),
+                color: Colors.black.withValues(alpha: 0.08),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -899,14 +895,13 @@ class _QuizScreenState extends State<QuizScreen> {
             child: Text(
               answer,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 15, // Increased from 13 to 15
                 fontWeight: FontWeight.w600,
                 color: isSelected ? Colors.white : Colors.black87,
                 fontFamily: 'Poppins',
+                height: 1.2,
               ),
               textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -918,7 +913,7 @@ class _QuizScreenState extends State<QuizScreen> {
     return Center(
       child: SingleChildScrollView(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 700),
+          constraints: const BoxConstraints(maxWidth: 900),
           margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -971,7 +966,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: difficultyColor.withValues(alpha:0.15),
+                  color: difficultyColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: difficultyColor, width: 2),
                 ),
@@ -1009,7 +1004,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           RichText(
                             text: TextSpan(
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 16,
                                 fontFamily: 'Poppins',
                                 color: Colors.black87,
                               ),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_projects/change_password.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'homepage.dart'; // contains UserProfile class
+import 'homepage.dart';
 
 class EditProfileDialog extends StatefulWidget {
   final UserProfile profile;
@@ -230,7 +230,6 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
           )['name'],
         );
 
-        // ✅ show success for 5s with fade-out
         setState(() {
           showSuccess = true;
           saving = false;
@@ -257,7 +256,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
         width: showSuccess ? 420 : 850,
-        height: showSuccess ? 320 : 370,
+        height: showSuccess ? 320 : 430,
         padding: const EdgeInsets.all(30),
         child: showSuccess
             ? AnimatedOpacity(
@@ -355,122 +354,116 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 15),
+                    const SizedBox(height: 20),
                     Expanded(
                       child: SingleChildScrollView(
-                        child: Column(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  radius: 75,
-                                  backgroundColor: const Color(0xFFFDD000),
-                                  child: CircleAvatar(
-                                    radius: 70,
-                                    backgroundColor: Colors.white,
-                                    backgroundImage: selectedAvatar != null
-                                        ? AssetImage(selectedAvatar!)
-                                        : null,
-                                    child: selectedAvatar == null
-                                        ? const Icon(
-                                            Icons.person,
-                                            size: 25,
-                                            color: Colors.grey,
-                                          )
-                                        : null,
+                            // LEFT COLUMN: Avatar Circle + Avatar + Region
+                            SizedBox(
+                              width: 180,
+                              child: Column(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 75,
+                                    backgroundColor: const Color(0xFFFDD000),
+                                    child: CircleAvatar(
+                                      radius: 70,
+                                      backgroundColor: Colors.white,
+                                      backgroundImage: selectedAvatar != null
+                                          ? AssetImage(selectedAvatar!)
+                                          : null,
+                                      child: selectedAvatar == null
+                                          ? const Icon(
+                                              Icons.person,
+                                              size: 25,
+                                              color: Colors.grey,
+                                            )
+                                          : null,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 30),
-                                Expanded(
-                                  child: Column(
-                                    children: [
-                                      TextFormField(
-                                        controller: usernameController,
-                                        decoration: _inputDecoration(
-                                          'Username',
+                                  const SizedBox(height: 15),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: selectedAvatar,
+                                    decoration: _inputDecoration('Avatar'),
+                                    isExpanded: true,
+                                    items: List.generate(
+                                      avatarPaths.length,
+                                      (index) => DropdownMenuItem(
+                                        value: avatarPaths[index],
+                                        child: Text(
+                                          avatarNames[index],
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      const SizedBox(height: 15),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextFormField(
+                                    ),
+                                    onChanged: (val) =>
+                                        setState(() => selectedAvatar = val),
+                                  ),
+                                  const SizedBox(height: 15),
+                                  DropdownButtonFormField<String>(
+                                    isExpanded: true,
+                                    initialValue: selectedRegionId,
+                                    decoration: _inputDecoration('Region'),
+                                    items: regions
+                                        .map(
+                                          (r) => DropdownMenuItem(
+                                            value: r['id'],
+                                            child: Text(
+                                              r['name'] ?? '',
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (val) {
+                                      if (val == null) return;
+                                      setState(() {
+                                        selectedRegionId = val;
+                                        selectedProvinceId = null;
+                                        selectedCityId = null;
+                                        provinces = [];
+                                        cities = [];
+                                      });
+                                      fetchProvinces(val);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+
+                            // RIGHT SIDE: Username + 2 columns (Middle + Right)
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 30),
+                                  // Username - Full width
+                                  TextFormField(
+                                    controller: usernameController,
+                                    decoration: _inputDecoration('Username'),
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Row with Middle and Right columns
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // MIDDLE COLUMN: School, Category, Province
+                                      Expanded(
+                                        child: Column(
+                                          children: [
+                                            TextFormField(
                                               controller: schoolController,
                                               decoration: _inputDecoration(
                                                 'School',
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 15),
-                                          Expanded(
-                                            child: DropdownButtonFormField<String>(
-                                              value: selectedAge,
-                                              decoration: _inputDecoration(
-                                                'Age',
-                                              ),
-                                              isExpanded: true,
-                                              items:
-                                                  const [
-                                                        "0-12",
-                                                        "13-17",
-                                                        "18-22",
-                                                        "23-29",
-                                                        "30-39",
-                                                        "40+",
-                                                      ]
-                                                      .map(
-                                                        (
-                                                          age,
-                                                        ) => DropdownMenuItem(
-                                                          value: age,
-                                                          child: Text(
-                                                            age,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                      )
-                                                      .toList(),
-                                              onChanged: (val) => setState(
-                                                () => selectedAge = val,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 15),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child:
-                                                DropdownButtonFormField<String>(
-                                                  value: selectedAvatar,
-                                                  decoration: _inputDecoration(
-                                                    'Avatar',
-                                                  ),
-                                                  isExpanded: true,
-                                                  items: List.generate(
-                                                    avatarPaths.length,
-                                                    (index) => DropdownMenuItem(
-                                                      value: avatarPaths[index],
-                                                      child: Text(
-                                                        avatarNames[index],
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  onChanged: (val) => setState(
-                                                    () => selectedAvatar = val,
-                                                  ),
-                                                ),
-                                          ),
-                                          const SizedBox(width: 15),
-                                          Expanded(
-                                            child: DropdownButtonFormField<String>(
-                                              value: selectedCategory,
+                                            const SizedBox(height: 40),
+                                            DropdownButtonFormField<String>(
+                                              initialValue: selectedCategory,
                                               decoration: _inputDecoration(
                                                 'Category',
                                               ),
@@ -502,24 +495,68 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                                 () => selectedCategory = val,
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 15),
-                                          Expanded(
-                                            child:
-                                                DropdownButtonFormField<String>(
-                                                  value: selectedSex,
-                                                  decoration: _inputDecoration(
-                                                    'Sex',
-                                                  ),
-                                                  isExpanded: true,
-                                                  items: const ["Male", "Female"]
+                                            const SizedBox(height: 15),
+                                            DropdownButtonFormField<String>(
+                                              isExpanded: true,
+                                              initialValue: selectedProvinceId,
+                                              decoration: _inputDecoration(
+                                                'Province',
+                                              ),
+                                              items: provinces
+                                                  .map(
+                                                    (p) => DropdownMenuItem(
+                                                      value: p['id'],
+                                                      child: Text(
+                                                        p['name'] ?? '',
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style:
+                                                            const TextStyle(),
+                                                      ),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                              onChanged: (val) {
+                                                if (val == null) return;
+                                                setState(() {
+                                                  selectedProvinceId = val;
+                                                  selectedCityId = null;
+                                                  cities = [];
+                                                });
+                                                fetchCities(val);
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 15),
+
+                                      // RIGHT COLUMN: Age, Sex, City
+                                      Expanded(
+                                        child: Column(
+                                          children: [
+                                            DropdownButtonFormField<String>(
+                                              initialValue: selectedAge,
+                                              decoration: _inputDecoration(
+                                                'Age',
+                                              ),
+                                              isExpanded: true,
+                                              items:
+                                                  const [
+                                                        "0-12",
+                                                        "13-17",
+                                                        "18-22",
+                                                        "23-29",
+                                                        "30-39",
+                                                        "40+",
+                                                      ]
                                                       .map(
                                                         (
-                                                          sex,
+                                                          age,
                                                         ) => DropdownMenuItem(
-                                                          value: sex,
+                                                          value: age,
                                                           child: Text(
-                                                            sex,
+                                                            age,
                                                             overflow:
                                                                 TextOverflow
                                                                     .ellipsis,
@@ -527,100 +564,64 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                                                         ),
                                                       )
                                                       .toList(),
-                                                  onChanged: (val) => setState(
-                                                    () => selectedSex = val,
-                                                  ),
-                                                ),
-                                          ),
-                                        ],
+                                              onChanged: (val) => setState(
+                                                () => selectedAge = val,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 40),
+
+                                            DropdownButtonFormField<String>(
+                                              initialValue: selectedSex,
+                                              decoration: _inputDecoration(
+                                                'Sex',
+                                              ),
+                                              isExpanded: true,
+                                              items: const ["Male", "Female"]
+                                                  .map(
+                                                    (sex) => DropdownMenuItem(
+                                                      value: sex,
+                                                      child: Text(
+                                                        sex,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                              onChanged: (val) => setState(
+                                                () => selectedSex = val,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 15),
+                                            DropdownButtonFormField<String>(
+                                              isExpanded: true,
+                                              initialValue: selectedCityId,
+                                              decoration: _inputDecoration(
+                                                'City',
+                                              ),
+                                              items: cities
+                                                  .map(
+                                                    (c) => DropdownMenuItem(
+                                                      value: c['id'],
+                                                      child: Text(
+                                                        c['name'] ?? '',
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                              onChanged: (val) => setState(
+                                                () => selectedCityId = val,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 15),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    value: selectedRegionId,
-                                    decoration: _inputDecoration('Region'),
-                                    items: regions
-                                        .map(
-                                          (r) => DropdownMenuItem(
-                                            value: r['id'],
-                                            child: Text(
-                                              r['name'] ?? '',
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (val) {
-                                      if (val == null) return;
-                                      setState(() {
-                                        selectedRegionId = val;
-                                        selectedProvinceId = null;
-                                        selectedCityId = null;
-                                        provinces = [];
-                                        cities = [];
-                                      });
-                                      fetchProvinces(val);
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 15),
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    value: selectedProvinceId,
-                                    decoration: _inputDecoration('Province'),
-                                    items: provinces
-                                        .map(
-                                          (p) => DropdownMenuItem(
-                                            value: p['id'],
-                                            child: Text(
-                                              p['name'] ?? '',
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (val) {
-                                      if (val == null) return;
-                                      setState(() {
-                                        selectedProvinceId = val;
-                                        selectedCityId = null;
-                                        cities = [];
-                                      });
-                                      fetchCities(val);
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 15),
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    value: selectedCityId,
-                                    decoration: _inputDecoration('City'),
-                                    items: cities
-                                        .map(
-                                          (c) => DropdownMenuItem(
-                                            value: c['id'],
-                                            child: Text(
-                                              c['name'] ?? '',
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (val) =>
-                                        setState(() => selectedCityId = val),
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
