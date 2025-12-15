@@ -1,0 +1,83 @@
+id,province_name,region_id
+1,Ilocos Norte,1
+2,Ilocos Sur,1
+3,La Union,1
+4,Pangasinan,1
+5,Batanes,2
+6,Cagayan,2
+7,Isabela,2
+8,Nueva Vizcaya,2
+9,Quirino,2
+10,Aurora,3
+11,Bataan,3
+12,Bulacan,3
+13,Nueva Ecija,3
+14,Pampanga,3
+15,Tarlac,3
+16,Zambales,3
+17,Batangas,4
+18,Cavite,4
+19,Laguna,4
+20,Quezon,4
+21,Rizal,4
+22,Marinduque,5
+23,Occidental Mindoro,5
+24,Oriental Mindoro,5
+25,Palawan,5
+26,Romblon,5
+27,Albay,6
+28,Camarines Norte,6
+29,Camarines Sur,6
+30,Catanduanes,6
+31,Masbate,6
+32,Sorsogon,6
+33,Aklan,7
+34,Antique,7
+35,Capiz,7
+36,Guimaras,7
+37,Iloilo,7
+38,Negros Occidental,7
+39,Bohol,8
+40,Cebu,8
+41,Negros Oriental,8
+42,Siquijor,8
+43,Biliran,9
+44,Eastern Samar,9
+45,Leyte,9
+46,Northern Samar,9
+47,Samar,9
+48,Southern Leyte,9
+49,Zamboanga Del Norte,10
+50,Zamboanga Del Sur,10
+51,Zamboanga Sibugay,10
+52,Bukidnon,11
+53,Camiguin,11
+54,Lanao Del Norte,11
+55,Misamis Occidental,11
+56,Misamis Oriental,11
+57,Davao De Oro,12
+58,Davao Del Norte,12
+59,Davao Del Sur,12
+60,Davao Occidental,12
+61,Davao Oriental,12
+62,Cotabato,13
+63,Sarangani,13
+64,South Cotabato,13
+65,Sultan Kudarat,13
+66,Agusan Del Norte,14
+67,Agusan Del Sur,14
+68,Dinagat Islands,14
+69,Surigao Del Norte,14
+70,Surigao Del Sur,14
+71,Basilan,15
+72,Lanao Del Sur,15
+73,Maguindanao,15
+74,Sulu,15
+75,Tawi-Tawi,15
+76,Abra,16
+77,Apayao,16
+78,Benguet,16
+79,Ifugao,16
+80,Kalinga,16
+81,Mountain Province,16
+82,Metro Manila,17

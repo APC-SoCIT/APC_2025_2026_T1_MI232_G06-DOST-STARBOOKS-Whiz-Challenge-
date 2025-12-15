@@ -1,0 +1,1614 @@
+id,city_name,province_id
+1,Adams,1
+2,Bacarra,1
+3,Badoc,1
+4,Bangui,1
+5,Banna,1
+6,Batac City,1
+7,Burgos,1
+8,Carasi,1
+9,Currimao,1
+10,Dingras,1
+11,Dumalneg,1
+12,Laoag City,1
+13,Marcos,1
+14,Nueva Era,1
+15,Pagudpud,1
+16,Paoay,1
+17,Pasuquin,1
+18,Piddig,1
+19,Pinili,1
+20,San Nicolas,1
+21,Sarrat,1
+22,Solsona,1
+23,Vintar,1
+1,Alilem,2
+2,Banayoyo,2
+3,Bantay,2
+4,Burgos,2
+5,Cabugao,2
+6,Candon,2
+7,Caoayan,2
+8,Cervantes,2
+9,Galimuyod,2
+10,Gregorio Del Pilar,2
+11,Lidlidda,2
+12,Magsingal,2
+13,Nagbukel,2
+14,Narvacan,2
+15,Quirino,2
+16,Salcedo,2
+17,San Emilio,2
+18,San Esteban,2
+19,San Ildefonso,2
+20,San Juan,2
+21,San Vicente,2
+22,Santa,2
+23,Santa Catalina,2
+24,Santa Cruz,2
+25,Santa Lucia,2
+26,Santa Maria,2
+27,Santiago,2
+28,Santo Domingo,2
+29,Sigay,2
+30,Sinait,2
+31,Sugpon,2
+32,Suyo,2
+33,Tagudin,2
+34,Vigan City,2
+1,Agoo,3
+2,Aringay,3
+3,Bacnotan,3
+4,Bagulin,3
+5,Balaoan,3
+6,Bangar,3
+7,Bauang,3
+8,Burgos,3
+9,Caba,3
+10,Luna,3
+11,Naguilian,3
+12,Pugo,3
+13,Rosario,3
+14,San Fernando,3
+15,San Gabriel,3
+16,San Juan,3
+17,Santo Tomas,3
+18,Santol,3
+19,Sudipen,3
+20,Tubao,3
+1,Agno,4
+2,Aguilar,4
+3,Alaminos,4
+4,Alcala,4
+5,Anda,4
+6,Asingan,4
+7,Balungao,4
+8,Bani,4
+9,Basista,4
+10,Bautista,4
+11,Bayambang,4
+12,Binalonan,4
+13,Binmaley,4
+14,Bolinao,4
+15,Bugallon,4
+16,Burgos,4
+17,Calasiao,4
+18,Dagupan,4
+19,Dasol,4
+20,Infanta,4
+21,Labrador,4
+22,Laoac,4
+23,Lingayen,4
+24,Mabini,4
+25,Malasiqui,4
+26,Manaoag,4
+27,Mangaldan,4
+28,Mangatarem,4
+29,Mapandan,4
+30,Natividad,4
+31,Pozorrubio,4
+32,Rosales,4
+33,San Carlos,4
+34,San Fabian,4
+35,San Jacinto,4
+36,San Manuel,4
+37,San Nicolas,4
+38,San Quintin,4
+39,Santa Barbara,4
+40,Santa Maria,4
+41,Santo Tomas,4
+42,Sison,4
+43,Sual,4
+44,Tayug,4
+45,Umingan,4
+46,Urbiztondo,4
+47,Urdaneta,4
+48,Villasis,4
+1,Basco,5
+2,Itbayat,5
+3,Ivana,5
+4,Mahatao,5
+5,Sabtang,5
+6,Uyugan,5
+1,Abulug,6
+2,Alcala,6
+3,Allacapan,6
+4,Amulung,6
+5,Aparri,6
+6,Baggao,6
+7,Ballesteros,6
+8,Buguey,6
+9,Calayan,6
+10,Camalaniugan,6
+11,Claveria,6
+12,Enrile,6
+13,Gattaran,6
+14,Gonzaga,6
+15,Iguig,6
+16,Lal-Lo,6
+17,Lasam,6
+18,Pamplona,6
+19,Peñablanca,6
+20,Piat,6
+21,Rizal,6
+22,Sanchez-Mira,6
+23,Santa Ana,6
+24,Santa Praxedes,6
+25,Santa Teresita,6
+26,Santo Niño,6
+27,Solana,6
+28,Tuao,6
+29,Tuguegarao,6
+1,Alicia,7
+2,Angadanan,7
+3,Aurora,7
+4,Benito Soliven,7
+5,Burgos,7
+6,Cabagan,7
+7,Cabatuan,7
+8,Cauayan,7
+9,Cordon,7
+10,Delfin Albano,7
+11,Dinapigue,7
+12,Divilacan,7
+13,Echague,7
+14,Gamu,7
+15,Ilagan,7
+16,Jones,7
+17,Luna,7
+18,Maconacon,7
+19,Mallig,7
+20,Naguilian,7
+21,Palanan,7
+22,Quezon,7
+23,Quirino,7
+24,Ramon,7
+25,Reina Mercedes,7
+26,Roxas,7
+27,San Agustin,7
+28,San Guillermo,7
+29,San Isidro,7
+30,San Manuel,7
+31,San Mariano,7
+32,San Mateo,7
+33,San Pablo,7
+34,Santa Maria,7
+35,Santiago,7
+36,Santo Tomas,7
+37,Tumauini,7
+1,Alfonso Castañeda,8
+2,Ambaguio,8
+3,Aritao,8
+4,Bagabag,8
+5,Bambang,8
+6,Bayombong,8
+7,Diadi,8
+8,Dupax Del Norte,8
+9,Dupax Del Sur,8
+10,Kasibu,8
+11,Kayapa,8
+12,Quezon,8
+13,Santa Fe,8
+14,Solano,8
+15,Villaverde,8
+1,Aglipay,9
+2,Cabarroguis,9
+3,Diffun,9
+4,Maddela,9
+5,Nagtipunan,9
+6,Saguday,9
+1,Baler,10
+2,Casiguran,10
+3,Dilasag,10
+4,Dinalungan,10
+5,Dingalan,10
+6,Dipaculao,10
+7,Maria Aurora,10
+8,San Luis,10
+1,Abucay,11
+2,Bagac,11
+3,Balanga,11
+4,Dinalupihan,11
+5,Hermosa,11
+6,Limay,11
+7,Mariveles,11
+8,Morong,11
+9,Orani,11
+10,Orion,11
+11,Pilar,11
+12,Samal,11
+1,Angat,12
+2,Balagtas,12
+3,Baliuag,12
+4,Bocaue,12
+5,Bulakan,12
+6,Bustos,12
+7,Calumpit,12
+8,Doña Remedios Trinidad,12
+9,Guiguinto,12
+10,Hagonoy,12
+11,Malolos,12
+12,Marilao,12
+13,Meycauayan,12
+14,Norzagaray,12
+15,Obando,12
+16,Pandi,12
+17,Paombong,12
+18,Plaridel,12
+19,Pulilan,12
+20,San Ildefonso,12
+21,San Jose Del Monte,12
+22,San Miguel,12
+23,San Rafael,12
+24,Santa Maria,12
+1,Aliaga,13
+2,Bongabon,13
+3,Cabanatuan,13
+4,Cabiao,13
+5,Carranglan,13
+6,Cuyapo,13
+7,Gapan,13
+8,General Mamerto Natividad,13
+9,General Tinio,13
+10,Guimba,13
+11,Jaen,13
+12,Laur,13
+13,Licab,13
+14,Llanera,13
+15,Lupao,13
+16,Muñoz,13
+17,Nampicuan,13
+18,Palayan,13
+19,Pantabangan,13
+20,Peñaranda,13
+21,Quezon,13
+22,Rizal,13
+23,San Antonio,13
+24,San Isidro,13
+25,San Jose,13
+26,San Leonardo,13
+27,Santa Rosa,13
+28,Santo Domingo,13
+29,Talavera,13
+30,Talugtug,13
+31,Zaragoza,13
+1,Angeles,14
+2,Apalit,14
+3,Arayat,14
+4,Bacolor,14
+5,Candaba,14
+6,Floridablanca,14
+7,Guagua,14
+8,Lubao,14
+9,Mabalacat,14
+10,Macabebe,14
+11,Magalang,14
+12,Masantol,14
+13,Mexico,14
+14,Minalin,14
+15,Porac,14
+16,San Fernando,14
+17,San Luis,14
+18,San Simon,14
+19,Santa Ana,14
+20,Santa Rita,14
+21,Santo Tomas,14
+22,Sasmuan,14
+1,Anao,15
+2,Bamban,15
+3,Camiling,15
+4,Capas,15
+5,Concepcion,15
+6,Gerona,15
+7,La Paz,15
+8,Mayantoc,15
+9,Moncada,15
+10,Paniqui,15
+11,Pura,15
+12,Ramos,15
+13,San Clemente,15
+14,San Jose,15
+15,San Manuel,15
+16,Santa Ignacia,15
+17,Tarlac City,15
+18,Victoria,15
+1,Botolan,16
+2,Cabangan,16
+3,Candelaria,16
+4,Castillejos,16
+5,Iba,16
+6,Masinloc,16
+7,Olongapo,16
+8,Palauig,16
+9,San Antonio,16
+10,San Felipe,16
+11,San Marcelino,16
+12,San Narciso,16
+13,Santa Cruz,16
+14,Subic,16
+1,Agoncillo,17
+2,Alitagtag,17
+3,Balayan,17
+4,Balete,17
+5,Batangas City,17
+6,Bauan,17
+7,Calaca,17
+8,Calatagan,17
+9,Cuenca,17
+10,Ibaan,17
+11,Laurel,17
+12,Lemery,17
+13,Lian,17
+14,Lipa,17
+15,Lobo,17
+16,Mabini,17
+17,Malvar,17
+18,Mataas Na Kahoy,17
+19,Nasugbu,17
+20,Padre Garcia,17
+21,Rosario,17
+22,San Jose,17
+23,San Juan,17
+24,San Luis,17
+25,San Nicolas,17
+26,San Pascual,17
+27,San Teresita,17
+28,Santo Tomas,17
+29,Taal,17
+30,Talisay,17
+31,Tanauan,17
+32,Taysan,17
+33,Tingloy,17
+34,Tuy,17
+1,Alfonso,18
+2,Amadeo,18
+3,Bacoor,18
+4,Carmona,18
+5,Cavite City,18
+6,Dasmariñas,18
+7,General Emilio Aguinaldo,18
+8,General Mariano Alvarez,18
+9,General Trias,18
+10,Imus,18
+11,Indang,18
+12,Kawit,18
+13,Magallanes,18
+14,Maragondon,18
+15,Mendez,18
+16,Naic,18
+17,Noveleta,18
+18,Rosario,18
+19,Silang,18
+20,Tagaytay City,18
+21,Tanza,18
+22,Ternate,18
+23,Trece Martires,18
+1,Alaminos,19
+2,Bay,19
+3,Biñan,19
+4,Cabuyao,19
+5,Calamba,19
+6,Calauan,19
+7,Cavinti,19
+8,Famy,19
+9,Kalayaan,19
+10,Liliw,19
+11,Los Baños,19
+12,Luisiana,19
+13,Lumban,19
+14,Mabitac,19
+15,Magdalena,19
+16,Majayjay,19
+17,Nagcarlan,19
+18,Paete,19
+19,Pagsanjan,19
+20,Pakil,19
+21,Pangil,19
+22,Pila,19
+23,Rizal,19
+24,San Pablo,19
+25,San Pedro,19
+26,Santa Cruz,19
+27,Santa Maria,19
+28,Santa Rosa,19
+29,Siniloan,19
+30,Victoria,19
+1,Agdangan,20
+2,Alabat,20
+3,Atimonan,20
+4,Buenavista,20
+5,Burdeos,20
+6,Calauag,20
+7,Candelaria,20
+8,Catanuan,20
+9,Dolores,20
+10,General Luna,20
+11,General Nakar,20
+12,Guinayangan,20
+13,Gumaca,20
+14,Infanta,20
+15,Jomalig,20
+16,Lopez,20
+17,Lucban,20
+18,Lucena,20
+19,Macalelon,20
+20,Mauban,20
+21,Mulanay,20
+22,Padre Burgos,20
+23,Pagbilao,20
+24,Panukulan,20
+25,Patnanungan,20
+26,Perez,20
+27,Pitogo,20
+28,Plaridel,20
+29,Polillo,20
+30,Quezon,20
+31,Real,20
+32,Sampaloc,20
+33,San Andres,20
+34,San Antonio,20
+35,San Francisco,20
+36,San Narciso,20
+37,Sariaya,20
+38,Tagkawayan,20
+39,Tayabas,20
+40,Tiaong,20
+41,Unisan,20
+1,Angono,21
+2,Antipolo,21
+3,Baras,21
+4,Binangonan,21
+5,Cainta,21
+6,Cardona,21
+7,Jala-Jala,21
+8,Morong,21
+9,Pililla,21
+10,Rodriguez,21
+11,San Mateo,21
+12,Tanay,21
+13,Taytay,21
+14,Teresa,21
+1,Boac,22
+2,Buenavista,22
+3,Gasan,22
+4,Mogpog,22
+5,Santa Cruz,22
+6,Torrijos,22
+1,Abra De Ilog,23
+2,Calintaan,23
+3,Looc,23
+4,Lubang,23
+5,Magsaysay,23
+6,Mamburao,23
+7,Paluan,23
+8,Rizal,23
+9,Sablayan,23
+10,San Jose,23
+11,Santa Cruz,23
+1,Baco,24
+2,Bansud,24
+3,Bongabong,24
+4,Bulalacao,24
+5,Calapan,24
+6,Gloria,24
+7,Mansalay,24
+8,Naujan,24
+9,Pinamalayan,24
+10,Pola,24
+11,Puerto Galera,24
+12,Roxas,24
+13,San Teodoro,24
+14,Socorro,24
+15,Victoria,24
+1,Aborlan,25
+2,Agutaya,25
+3,Araceli,25
+4,Balabac,25
+5,Bataraza,25
+6,Brooke's Point,25
+7,Busuanga,25
+8,Cagayancillo,25
+9,Coron,25
+10,Culion,25
+11,Cuyo,25
+12,Dumaran,25
+13,El Nido,25
+14,Kalayaan,25
+15,Linapacan,25
+16,Magsaysay,25
+17,Narra,25
+18,Puerto Princesa,25
+19,Quezon,25
+20,Rizal,25
+21,Roxas,25
+22,San Vicente,25
+23,Sofronio Española,25
+24,Taytay,25
+1,Alcantara,26
+2,Banton,26
+3,Cajidiocan,26
+4,Calatrava,26
+5,Concepcion,26
+6,Corcuera,26
+7,Ferrol,26
+8,Looc,26
+9,Magdiwang,26
+10,Odiongan,26
+11,Romblon,26
+12,San Agustin,26
+13,San Andres,26
+14,San Fernando,26
+15,San Jose,26
+16,Santa Fe,26
+17,Santa Maria,26
+1,Bacacay,27
+2,Camalig,27
+3,Daraga,27
+4,Guinobatan,27
+5,Jovellar,27
+6,Legazpi,27
+7,Libon,27
+8,Ligao,27
+9,Malilipot,27
+10,Malinao,27
+11,Manito,27
+12,Oas,27
+13,Pio Duran,27
+14,Polangui,27
+15,Rapu-Rapu,27
+16,Santo Domingo,27
+17,Tabaco,27
+18,Tiwi,27
+1,Basud,28
+2,Capalonga,28
+3,Daet,28
+4,Jose Panganiban,28
+5,Labao,28
+6,Mercedes,28
+7,Paracale,28
+8,San Lorenzo Ruiz,28
+9,San Vicente,28
+10,Santa Elena,28
+11,Talisay,28
+12,Vinzons,28
+1,Baao,29
+2,Balatan,29
+3,Bato,29
+4,Bombon,29
+5,Buhi,29
+6,Bula,29
+7,Cabasao,29
+8,Calabanga,29
+9,Camaligan,29
+10,Canaman,29
+11,Caramoan,29
+12,Del Gallego,29
+13,Gainza,29
+14,Garchitorena,29
+15,Goa,29
+16,Iriga,29
+17,Lagonoy,29
+18,Libmanan,29
+19,Lupi,29
+20,Magarao,29
+21,Milaor,29
+22,Minalabac,29
+23,Nabua,29
+24,Naga,29
+25,Ocampo,29
+26,Pamplona,29
+27,Pasacao,29
+28,Pili,29
+29,Presentacion,29
+30,Ragay,29
+31,Sagnay,29
+32,San Fernando,29
+33,San Jose,29
+34,Sipocot,29
+35,Siruma,29
+36,Tigaon,29
+37,Tinambac,29
+1,Bagamanoc,30
+2,Baras,30
+3,Bato,30
+4,Caramoran,30
+5,Gigmoto,30
+6,Pandan,30
+7,Panganiban,30
+8,San Andres,30
+9,San Miguel,30
+10,Viga,30
+11,Virac,30
+1,Aroroy,31
+2,Baleno,31
+3,Balud,31
+4,Batuan,31
+5,Cataingan,31
+6,Cawayan,31
+7,Claveria,31
+8,Dimasalang,31
+9,Esperanza,31
+10,Mandaon,31
+11,Masbate City,31
+12,Milagros,31
+13,Mobo,31
+14,Monreal,31
+15,Palanas,31
+16,Pio V. Corpuz,31
+17,Placer,31
+18,San Fernando,31
+19,San Jacinto,31
+20,San Pascual,31
+21,Uson,31
+1,Barcelona,32
+2,Bulan,32
+3,Bulusan,32
+4,Casiguran,32
+5,Castilla,32
+6,Donsol,32
+7,Gubat,32
+8,Irosin,32
+9,Juban,32
+10,Magallanes,32
+11,Matnog,32
+12,Pilar,32
+13,Prieto Diaz,32
+14,Santa Magdalena,32
+15,Sorsogon City,32
+1,Alvatas,33
+2,Balete,33
+3,Banga,33
+4,Batan,33
+5,Buruanga,33
+6,Ibajay,33
+7,Kalibo,33
+8,Lezo,33
+9,Libacao,33
+10,Madalag,33
+11,Makato,33
+12,Malay,33
+13,Malinao,33
+14,Nabas,33
+15,New Washington,33
+16,Numancia,33
+17,Tangalan,33
+1,Anini-Y,34
+2,Barbaza,34
+3,Belison,34
+4,Bugasong,34
+5,Caluya,34
+6,Culasi,34
+7,Hamtic,34
+8,Laua-An,34
+9,Libertad,34
+10,Pandan,34
+11,Patnongon,34
+12,San Jose De Buenavista,34
+13,San Remigio,34
+14,Sebaste,34
+15,Sibalom,34
+16,Tibiao,34
+17,Tobias Fornier,34
+18,Valderrama,34
+1,Cuartero,35
+2,Dao,35
+3,Dumalag,35
+4,Dumarao,35
+5,Ivisan,35
+6,Jamindan,35
+7,Maayon,35
+8,Mambusao,35
+9,Panay,35
+10,Panitan,35
+11,Pilar,35
+12,Pontevedra,35
+13,President Roxas,35
+14,Roxas City,35
+15,Sapian,35
+16,Sigma,35
+17,Tapaz,35
+1,Buenavista,36
+2,Jordan,36
+3,Nueva Valencia,36
+4,San Lorenzo,36
+5,Sibunag,36
+1,Ajuy,37
+2,Alimodian,37
+3,Anilao,37
+4,Badiangan,37
+5,Balasan,37
+6,Banate,37
+7,Barotac Nuevo,37
+8,Barotac Viejo,37
+9,Batad,37
+10,Bingawan,37
+11,Cabatuan,37
+12,Calinog,37
+13,Carles,37
+14,Concepcion,37
+15,Dingle,37
+16,Dueñas,37
+17,Dumangas,37
+18,Estancia,37
+19,Guimbal,37
+20,Igbaras,37
+21,Iloilo City,37
+22,Janiuay,37
+23,Labunao,37
+24,Leganes,37
+25,Lemery,37
+26,Leon,37
+27,Maasin,37
+28,Miagao,37
+29,Mina,37
+30,New Lucena,37
+31,Oton,37
+32,Passi,37
+33,Pavia,37
+34,Pototan,37
+35,San Dionisio,37
+36,San Enrique,37
+37,San Joaquin,37
+38,San Miguel,37
+39,San Rafael,37
+40,Santa Barbara,37
+41,Sara,37
+42,Tigbauan,37
+1,Bacolod,38
+2,Bago,38
+3,Binalbagan,38
+4,Cadiz,38
+5,Calatrava,38
+6,Candoni,38
+7,Cauayan,38
+8,Enrique B. Magalona,38
+9,Escalante,38
+10,Himamaylan,38
+11,Hinigaran,38
+12,Hinoba-An,38
+13,Ilog,38
+14,Isabela,38
+15,Kabankalan,38
+16,La Carlota,38
+17,La Castellana,38
+18,Manapla,38
+19,Moises Padilla,38
+20,Murcia,38
+21,Pontevedra,38
+22,Pulupandan,38
+23,Sagay,38
+24,Salvador Benedicto,38
+25,San Carlos,38
+26,San Enrique,38
+27,Silay,38
+28,Sipalay,38
+29,Talisay,38
+30,Toboso,38
+31,Valladolid,38
+32,Victorias,38
+1,Alburquerque,39
+2,Alicia,39
+3,Anda,39
+4,Antequera,39
+5,Baclayon,39
+6,Balilihan,39
+7,Batuan,39
+8,Bien Unido,39
+9,Bilar,39
+10,Buenavista,39
+11,Calape,39
+12,Candijay,39
+13,Carmen,39
+14,Catigbian,39
+15,Clarin,39
+16,Corella,39
+17,Cortes,39
+18,Dagohoy,39
+19,Danao,39
+20,Dauis,39
+21,Dimiao,39
+22,Duero,39
+23,Garcia Hernandez,39
+24,Getafe,39
+25,Guindulman,39
+26,Inabanga,39
+27,Jagna,39
+28,Lila,39
+29,Loay,39
+30,Loboc,39
+31,Loon,39
+32,Mabini,39
+33,Maribojoc,39
+34,Panglao,39
+35,Pilar,39
+36,President Carlos P. Garcia,39
+37,Sagbayan,39
+38,San Isidro,39
+39,San Miguel,39
+40,Sevilla,39
+41,Sierra Bullones,39
+42,Sikatuna,39
+43,Tagbilaran,39
+44,Talibon,39
+45,Trinidad,39
+46,Tubigon,39
+47,Ubay,39
+48,Valencia,39
+1,Alcantara,40
+2,Alcoy,40
+3,Alegria,40
+4,Aloguinsan,40
+5,Argao,40
+6,Asturias,40
+7,Badian,40
+8,Balamban,40
+9,Bantayan,40
+10,Barili,40
+11,Bogo,40
+12,Boljoon,40
+13,Borbon,40
+14,Carcar,40
+15,Carmen,40
+16,Catmon,40
+17,Cebu City,40
+18,Compostela,40
+19,Consolacion,40
+20,Cordova,40
+21,Daanbantayan,40
+22,Dalaguete,40
+23,Danao,40
+24,Dumanjug,40
+25,Ginatilan,40
+26,Lapu-Lapu,40
+27,Liloan,40
+28,Madridejos,40
+29,Malabuyoc,40
+30,Mandaue,40
+31,Medellin,40
+32,Minglanilla,40
+33,Moalboal,40
+34,Naga,40
+35,Oslob,40
+36,Pilar,40
+37,Pinamungajan,40
+38,Poro,40
+39,Ronda,40
+40,Samboan,40
+41,San Fernando,40
+42,San Francisco,40
+43,San Remigio,40
+44,Santa Fe,40
+45,Santander,40
+46,Sibonga,40
+47,Sogod,40
+48,Tabogon,40
+49,Tabuelan,40
+50,Talisay,40
+51,Toledo,40
+52,Tuburan,40
+53,Tudela,40
+1,Amlan,41
+2,Ayungon,41
+3,Bacong,41
+4,Bais,41
+5,Basay,41
+6,Bayawan,41
+7,Bindoy,41
+8,Canlaon,41
+9,Dauin,41
+10,Dumaguete,41
+11,Guihulngan,41
+12,Jimalalud,41
+13,La Libertad,41
+14,Mabinay,41
+15,Manjuyod,41
+16,Pamplona,41
+17,San Jose,41
+18,Santa Catalina,41
+19,Siaton,41
+20,Sibulan,41
+21,Tanjay,41
+22,Tayasan,41
+23,Valencia,41
+24,Vallehermoso,41
+25,Zamboanguita,41
+1,Enrique Villanueva,42
+2,Larena,42
+3,Lazi,42
+4,Maria,42
+5,San Juan,42
+6,Siquijor,42
+1,Almeria,43
+2,Biliran,43
+3,Cabucgayan,43
+4,Caibiran,43
+5,Culaba,43
+6,Kawayan,43
+7,Maripipi,43
+8,Naval,43
+1,Arteche,44
+2,Balangiga,44
+3,Balangkayan,44
+4,Borongan,44
+5,Can-Avid,44
+6,Dolores,44
+7,General MacArthur,44
+8,Giporlos,44
+9,Guiuan,44
+10,Hernani,44
+11,Jipapad,44
+12,Lawaan,44
+13,Llorente,44
+14,Maslog,44
+15,Maydolong,44
+16,Mercedes,44
+17,Oras,44
+18,Quinapondan,44
+19,Salcedo,44
+20,San Julian,44
+21,San Policarpo,44
+22,Sulat,44
+23,Taft,44
+1,Abuyog,45
+2,Alangalang,45
+3,Albuera,45
+4,Babatngon,45
+5,Barugo,45
+6,Bato,45
+7,Baybay,45
+8,Burauen,45
+9,Calubian,45
+10,Capoocan,45
+11,Carigara,45
+12,Dagami,45
+13,Dulag,45
+14,Hilongos,45
+15,Hindang,45
+16,Inopacan,45
+17,Isabel,45
+18,Jaro,45
+19,Javier,45
+20,Julita,45
+21,Kananga,45
+22,La Paz,45
+23,Leyte,45
+24,MacArthur,45
+25,Mahaplag,45
+26,Matag-Ob,45
+27,Matalom,45
+28,Mayorga,45
+29,Merida,45
+30,Ormoc,45
+31,Palo,45
+32,Palompon,45
+33,Pastrana,45
+34,San Isidro,45
+35,San Miguel,45
+36,Santa Fe,45
+37,Tabango,45
+38,Tabontabon,45
+39,Tacloban City,45
+40,Tanauan,45
+41,Tolosa,45
+42,Tunga,45
+43,Villaba,45
+1,Allen,46
+2,Biri,46
+3,Bobon,46
+4,Capul,46
+5,Catarman,46
+6,Catubig,46
+7,Gamay,46
+8,Laoang,46
+9,Lapinig,46
+10,Las Navas,46
+11,Lavezares,46
+12,Lope De Vega,46
+13,Mapanas,46
+14,Mondragon,46
+15,Palapag,46
+16,Pambujan,46
+17,Rosario,46
+18,San Antonio,46
+19,San Isidro,46
+20,San Jose,46
+21,San Roque,46
+22,San Vicente,46
+23,Silvino Lobos,46
+24,Victoria,46
+1,Almagro,47
+2,Basey,47
+3,Calbayog,47
+4,Calbiga,47
+5,Catbalogan,47
+6,Daram,47
+7,Gandara,47
+8,Hinabangan,47
+9,Jiabong,47
+10,Marabut,47
+11,Matuguinao,47
+12,Motiong,47
+13,Pagsanghan,47
+14,Paranas,47
+15,Pinabacdao,47
+16,San Jorge,47
+17,San Jose De Buan,47
+18,San Sebastian,47
+19,Santa Margarita,47
+20,Santa Rita,47
+21,Santo Niño,47
+22,Tagapul-An,47
+23,Talalora,47
+24,Tarangnan,47
+25,Villareal,47
+26,Zumarraga,47
+1,Anahawan,48
+2,Bontoc,48
+3,Hinunangan,48
+4,Hinundayan,48
+5,Libagon,48
+6,Liloan,48
+7,Limasawa,48
+8,Maasin,48
+9,Macrohon,48
+10,Malitbog,48
+11,Padre Burgos,48
+12,Pintuyan,48
+13,Saint Bernard,48
+14,San Francisco,48
+15,San Juan,48
+16,San Ricardo,48
+17,Silago,48
+18,Sogod,48
+19,Tomas Oppus,48
+1,Baliguian,49
+2,Dapitan,49
+3,Dipolog,49
+4,Godod,49
+5,Gutalac,49
+6,Jose Dalman,49
+7,Kalawit,49
+8,Katipunan,49
+9,La Libertad,49
+10,Labason,49
+11,Leon B. Postigo,49
+12,Liloy,49
+13,Manukan,49
+14,Mutia,49
+15,Piñan,49
+16,Polanco,49
+17,President Manuel A. Roxas,49
+18,Rizal,49
+19,Salug,49
+20,Sergio Osmeña Sr.,49
+21,Siayan,49
+22,Sibuco,49
+23,Sibutad,49
+24,Sindangan,49
+25,Siocon,49
+26,Sirawai,49
+27,Tampilisan,49
+1,Aurora,50
+2,Bayog,50
+3,Dimataling,50
+4,Dinas,50
+5,Dumalinao,50
+6,Dumingag,50
+7,Guipos,50
+8,Josefina,50
+9,Kumalarang,50
+10,Labangan,50
+11,Lakewood,50
+12,Lapuyan,50
+13,Mahayag,50
+14,Margosatubig,50
+15,Midsalip,50
+16,Molave,50
+17,Pagadian,50
+18,Pitogo,50
+19,Ramon Magsaysay,50
+20,San Miguel,50
+21,San Pablo,50
+22,Sominot,50
+23,Tabina,50
+24,Tambulig,50
+25,Tigbao,50
+26,Tukuran,50
+27,Vincenzo A. Sagun,50
+28,Zamboanga City,50
+1,Alicia,51
+2,Buug,51
+3,Diplahan,51
+4,Imelda,51
+5,Ipil,51
+6,Kabasalan,51
+7,Mabuhay,51
+8,Malangas,51
+9,Naga,51
+10,Olutanga,51
+11,Payao,51
+12,Roseller Lim,51
+13,Siay,51
+14,Talusan,51
+15,Titay,51
+16,Tungawan,51
+1,Baungon,52
+2,Cabanglasan,52
+3,Damulog,52
+4,Dangcagan,52
+5,Don Carlos,52
+6,Impasugong,52
+7,Kadingilan,52
+8,Kalilangan,52
+9,Kibawe,52
+10,Kitaotao,52
+11,Lantapan,52
+12,Libona,52
+13,Malaybalay,52
+14,Malitbog,52
+15,Manolo Fortich,52
+16,Maramag,52
+17,Pangantucan,52
+18,Quezon,52
+19,San Fernando,52
+20,Sumilao,52
+21,Talakag,52
+22,Valencia,52
+1,Catarman,53
+2,Guinsiliban,53
+3,Mahinog,53
+4,Mambajao,53
+5,Sagay,53
+1,Bacolod,54
+2,Baloi,54
+3,Baroy,54
+4,Iligan,54
+5,Kapatagan,54
+6,Kauswagan,54
+7,Kolambugan,54
+8,Lala,54
+9,Linamon,54
+10,Magsaysay,54
+11,Maigo,54
+12,Matungao,54
+13,Munai,54
+14,Nunungan,54
+15,Pantao Ragat,54
+16,Pantar,54
+17,Poona Piagapo,54
+18,Salvador,54
+19,Sapad,54
+20,Sultan Naga Dimaporo,54
+21,Tagoloan,54
+22,Tangcal,54
+23,Tubod,54
+1,Aloran,55
+2,Baliangao,55
+3,Bonifacio,55
+4,Calamba,55
+5,Clarin,55
+6,Concepcion,55
+7,Don Victoriano Chiongbian,55
+8,Jimenez,55
+9,Lopez Jaena,55
+10,Oroquieta,55
+11,Ozamiz,55
+12,Panaon,55
+13,Plaridel,55
+14,Sapang Dalaga,55
+15,Sinacaban,55
+16,Tangub,55
+17,Tudela,55
+1,Alubijid,56
+2,Balingasag,56
+3,Balingoan,56
+4,Binuangan,56
+5,Cagayan De Oro,56
+6,Claveria,56
+7,El Salvador,56
+8,Gingoog,56
+9,Gitagum,56
+10,Initao,56
+11,Jasaan,56
+12,Kinoguitan,56
+13,Lagonglong,56
+14,Laguindingan,56
+15,Libertad,56
+16,Lugait,56
+17,Magsaysay,56
+18,Manticao,56
+19,Medina,56
+20,Naawan,56
+21,Opol,56
+22,Salay,56
+23,Sugbongcogon,56
+24,Tagoloan,56
+25,Talisayan,56
+26,Villanueva,56
+1,Compostela,57
+2,Laak,57
+3,Mabini,57
+4,Maco,57
+5,Maragusan,57
+6,Mawab,57
+7,Monkayo,57
+8,Montevista,57
+9,Nabunturan,57
+10,New Bataan,57
+11,Pantukan,57
+1,Asuncion,58
+2,Braulio E. Dujali,58
+3,Carmen,58
+4,Kapalong,58
+5,New Corella,58
+6,Panabo,58
+7,Samal,58
+8,San Isidro,58
+9,Santo Tomas,58
+10,Tagum,58
+1,Digos,59
+2,Bansalan,59
+3,Hagonoy,59
+4,Kiblawan,59
+5,Magsaysay,59
+6,Malalag,59
+7,Matanao,59
+8,Padada,59
+9,Santa Cruz,59
+10,Sulop,59
+11,Malita,60
+12,Don Marcelino,60
+13,Jose Abad Santos,60
+14,Santa Maria,60
+15,Sarangani,60
+1,Banganga,61
+2,Banaybanay,61
+3,Boston,61
+4,Caraga,61
+5,Cateel,61
+6,Governor Generoso,61
+7,Lupon,61
+8,Manay,61
+9,Mati,61
+10,San Isidro,61
+11,Tarragona,61
+1,Alamada,62
+2,Aleosan,62
+3,Antipas,62
+4,Apakan,62
+5,Banisilan,62
+6,Carmen,62
+7,Kabacan,62
+8,Kidapawan,62
+9,Libungan,62
+10,Magpet,62
+11,Makilala,62
+12,Matalam,62
+13,Midsayap,62
+14,M'Lang,62
+15,Pigcawayan,62
+16,Pikit,62
+17,President Roxas,62
+18,Tulunan,62
+1,Alabel,63
+2,Glan,63
+3,Kiamba,63
+4,Maasim,63
+5,Maitum,63
+6,Malapatan,63
+7,Malungon,63
+1,Banga,64
+2,General Santos,64
+3,Koronadal,64
+4,Lake Sebu,64
+5,Norala,64
+6,Polomolok,64
+7,Santo Niño,64
+8,Surallah,64
+9,Tampakan,64
+10,Tantangan,64
+11,T'Boli,64
+12,Tupi,64
+1,Bagumbayan,65
+2,Columbio,65
+3,Esperanza,65
+4,Isulan,65
+5,Kalamansig,65
+6,Lambayong,65
+7,Lebak,65
+8,Lutayan,65
+9,Palimbang,65
+10,President Quirino,65
+11,Senator Ninoy Aquino,65
+12,Tacurong,65
+1,Buenavista,66
+2,Cabadbaran,66
+3,Carmen,66
+4,Jabonga,66
+5,Kitcharao,66
+6,Las Nieves,66
+7,Magallanes,66
+8,Nasipit,66
+9,Remedios T. Romualdez,66
+10,Santiago,66
+11,Tubay,66
+1,Bayugan,67
+2,Bunawan,67
+3,Esperanza,67
+4,La Paz,67
+5,Loreto,67
+6,Prosperidad,67
+7,Rosario,67
+8,San Francisco,67
+9,San Luis,67
+10,Santa Josefa,67
+11,Sibagat,67
+12,Talacogon,67
+13,Trento,67
+14,Veruela,67
+1,Basilisa,68
+2,Cagdianao,68
+3,Dinagat,68
+4,Libjo,68
+5,Loreto,68
+6,San Jose,68
+7,Tubajon,68
+1,Alegria,69
+2,Bacuag,69
+3,Burgos,69
+4,Claver,69
+5,Dapa,69
+6,Del Carmen,69
+7,General Luna,69
+8,Gigaquit,69
+9,Mainit,69
+10,Malimono,69
+11,Pilar,69
+12,Placer,69
+13,San Benito,69
+14,San Francisco,69
+15,San Isidro,69
+16,Santa Monica,69
+17,Sison,69
+18,Socorro,69
+19,Surigao City,69
+20,Tagana-An,69
+21,Tubod,69
+1,Barobo,70
+2,Bayabas,70
+3,Bislig,70
+4,Cagwait,70
+5,Cantilan,70
+6,Carmen,70
+7,Carrascal,70
+8,Cortes,70
+9,Hinatuan,70
+10,Lanuza,70
+11,Lianga,70
+12,Lingig,70
+13,Madrid,70
+14,Marihatag,70
+15,San Agustin,70
+16,San Miguel,70
+17,Tagbina,70
+18,Tago,70
+19,Tandag,70
+1,Akbar,71
+2,Al-Barka,71
+3,Hadji Mohammad Ajul,71
+4,Hadji Muhtamad,71
+5,Isabela,71
+6,Lamitan,71
+7,Lantawan,71
+8,Maluso,71
+9,Sumisip,71
+10,Tabuan-Lasa,71
+11,Tipo-Tipo,71
+12,Tuburan,71
+13,Ungkaya Pukan,71
+1,Amai Manabilang,72
+2,Bacolod-Kalawi,72
+3,Balabagan,72
+4,Balindong,72
+5,Bayang,72
+6,Binidayan,72
+7,Buadiposo-Buntong,72
+8,Bubong,72
+9,Butig,72
+10,Calanogas,72
+11,Ditsaan-Ramain,72
+12,Ganassi,72
+13,Kapai,72
+14,Kapatagan,72
+15,Lumba-Bayabao,72
+16,Lumbaca-Unayan,72
+17,Lumbatan,72
+18,Lumbayanague,72
+19,Madalum,72
+20,Madamba,72
+21,Maguing,72
+22,Malabang,72
+23,Marantao,72
+24,Marawi,72
+25,Marogong,72
+26,Masiu,72
+27,Mulondo,72
+28,Pagayawan,72
+29,Piagapo,72
+30,Picong,72
+31,Poona Bayabao,72
+32,Pualas,72
+33,Saguiaran,72
+34,Sultan Dumalondong,72
+35,Tagoloan II,72
+36,Tamparan,72
+37,Taraka,72
+38,Tubaran,72
+39,Tugaya,72
+40,Wao,72
+1,Bacolod,73
+2,Baloi,73
+3,Baroy,73
+4,Iligan,73
+5,Kapatagan,73
+6,Kauswagan,73
+7,Kolambugan,73
+8,Lala,73
+9,Linamon,73
+10,Magsaysay,73
+11,Maigo,73
+12,Matungao,73
+13,Munai,73
+14,Nunungan,73
+15,Pantao Ragat,73
+16,Pantar,73
+17,Poona Piagapo,73
+18,Salvador,73
+19,Sapad,73
+20,Sultan Naga Dimaporo,73
+21,Tagoloan,73
+22,Tangcal,73
+23,Tubod,73
+1,Banguingui,74
+2,Hadji Panglima Tahil,74
+3,Indanan,74
+4,Jolo,74
+5,Kalingalan Caluang,74
+6,Lugus,74
+7,Luuk,74
+8,Maimbung,74
+9,Old Panamao,74
+10,Omar,74
+11,Pandami,74
+12,Panglima Estino,74
+13,Pangutaran,74
+14,Parang,74
+15,Pata,74
+16,Patikul,74
+17,Siasi,74
+18,Talipao,74
+19,Tapul,74
+1,Bongao,75
+2,Languyan,75
+3,Mapun,75
+4,Panglima Sugala,75
+5,Sapa-Sapa,75
+6,Sibutu,75
+7,Simunul,75
+8,Sitangkai,75
+9,South Ubian,75
+10,Tandubas,75
+11,Turtle Islands,75
+1,Bangued,76
+2,Boliney,76
+3,Bucay,76
+4,Bucloc,76
+5,Daguioman,76
+6,Danglas,76
+7,Dolores,76
+8,La Paz,76
+9,Lacub,76
+10,Lagangilag,76
+11,Lagayan,76
+12,Langiden,76
+13,Licuan-Baay,76
+14,Luba,76
+15,Malibcong,76
+16,Manabo,76
+17,Peñarrubia,76
+18,Pidigan,76
+19,Pilar,76
+20,Sallapadan,76
+21,San Isidro,76
+22,San Juan,76
+23,San Quintin,76
+24,Tayum,76
+25,Tineg,76
+26,Tubo,76
+27,Villaviciosa,76
+1,Calanasan,77
+2,Conner,77
+3,Flora,77
+4,Kabugao,77
+5,Luna,77
+6,Pudtol,77
+7,Santa Marcela,77
+1,Atok,78
+2,Baguio City,78
+3,Bakun,78
+4,Bokod,78
+5,Buguias,78
+6,Itogon,78
+7,Kabayan,78
+8,Kapangan,78
+9,Libingan,78
+10,La Trinidad,78
+11,Manyakan,78
+12,Sablan,78
+13,Tuba,78
+14,Tublay,78
+1,Aguinaldo,79
+2,Alfonso Lista,79
+3,Asipulo,79
+4,Banaue,79
+5,Hingyon,79
+6,Hungduan,79
+7,Kiangan,79
+8,Lagawe,79
+9,Lamut,79
+10,Mayoyao,79
+11,Tinoc,79
+1,Balbalan,80
+2,Lubuagan,80
+3,Pasil,80
+4,Pinukpuk,80
+5,Rizal,80
+6,Tabuk,80
+7,Tanudan,80
+8,Tinglayan,80
+1,Barlig,81
+2,Bauko,81
+3,Besao,81
+4,Bontoc,81
+5,Natonin,81
+6,Paracelis,81
+7,Sabangan,81
+8,Sadanga,81
+9,Sagada,81
+10,Tadian,81
+1,Caloocan,82
+2,Las Piñas,82
+3,Makati,82
+4,Mandaluyong,82
+5,Manila,82
+6,Marikina,82
+7,Muntinlupa,82
+8,Navotas,82
+9,Parañaque,82
+10,Pasay,82
+11,Pasig,82
+12,Pateros,82
+13,Quezon,82
+14,San Juan,82
+15,Taguig,82
+16,Valenzuela,82
