@@ -5,11 +5,13 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\RegionController;
 use App\Http\Controllers\ProvinceController;
 use App\Http\Controllers\CityController;
-use App\Http\Controllers\PlayerBadgeController;
 use App\Http\Controllers\LeaderboardController;
 use App\Http\Controllers\QuizController;
 use App\Http\Controllers\GameController;
 use App\Http\Controllers\FastestTimeController;
+use App\Http\Controllers\PlayerBadgeController;
+use App\Http\Controllers\OfficialBadgeController; // THIS IS CRITICAL!
+use App\Http\Controllers\TestBadgeController; // FOR TESTING ONLY
 
 // Auth & User
 Route::post('/register', [UserController::class, 'register']);
@@ -34,20 +36,6 @@ Route::post('/game/save-result', [GameController::class, 'saveGameResult']);
 Route::get('/game/history/{userId}', [GameController::class, 'getGameHistory']);
 Route::get('/game/stats/{userId}', [GameController::class, 'getPlayerStats']);
 
-Route::prefix('badges')->group(function () {
-    Route::post('/award', [PlayerBadgeController::class, 'awardBadge']);
-    Route::get('/player/{playerId}/summary', [PlayerBadgeController::class, 'getPlayerBadgeSummary']);
-    Route::get('/player/{playerId}/progress', [PlayerBadgeController::class, 'getBadgeProgress']);
-    Route::prefix('official')->group(function () {
-        Route::get('/player/{playerId}', [PlayerBadgeController::class, 'getAllOfficialBadges']);
-        Route::get('/player/{playerId}/unclaimed', [PlayerBadgeController::class, 'getUnclaimedOfficialBadges']);
-        Route::post('/{badgeId}/claim', [PlayerBadgeController::class, 'claimOfficialBadge']);
-           Route::post('/player/{playerId}/claim-all', [PlayerBadgeController::class, 'claimAllOfficialBadges']);
-    });
-    Route::get('/player/{playerId}/statistics', [PlayerBadgeController::class, 'getBadgeStatistics']);
-    Route::get('/player/{playerId}', [PlayerBadgeController::class, 'getPlayerBadge']);
-});
-
 // Leaderboard
 Route::get('/leaderboard', [LeaderboardController::class, 'getLeaderboard']);
 Route::get('/leaderboard/player/{playerId}', [LeaderboardController::class, 'getPlayerRank']);
@@ -64,3 +52,30 @@ Route::prefix('game')->group(function () {
     Route::get('/fastest-time/{playerId}/puzzle/{difficulty}/all-categories', [FastestTimeController::class, 'getPlayerPuzzleRecordsByDifficulty']);
     Route::get('/fastest-times/leaderboard', [FastestTimeController::class, 'getGlobalLeaderboard']);
 });
+
+// UPDATED BADGE SYSTEM - Official Badges with Claim Feature
+Route::prefix('badges')->group(function () {
+    // NEW: Get player's badge summary (progress + official badges count)
+    Route::get('/player/{playerId}/summary', [OfficialBadgeController::class, 'getPlayerSummary']);
+
+    // NEW: Get unclaimed official badges for a player
+    Route::get('/official/player/{playerId}/unclaimed', [OfficialBadgeController::class, 'getUnclaimedBadges']);
+
+    // NEW: Claim a specific official badge
+    Route::post('/official/{badgeId}/claim', [OfficialBadgeController::class, 'claimBadge']);
+
+    // OLD routes (can keep for backward compatibility or remove if not used)
+    Route::post('/record-perfect-quiz', [PlayerBadgeController::class, 'recordPerfectQuiz']);
+    Route::get('/player/{playerId}', [PlayerBadgeController::class, 'getPlayerBadges']);
+    Route::post('/claim', [PlayerBadgeController::class, 'claimBadge']);
+});
+
+// ===== TEST ROUTES - REMOVE IN PRODUCTION =====
+Route::prefix('test-badges')->group(function () {
+    Route::get('/create/{playerId}', [TestBadgeController::class, 'createTestBadges']);
+    Route::get('/create-all/{playerId}', [TestBadgeController::class, 'createAllClaimableBadges']);
+    Route::get('/reset/{playerId}', [TestBadgeController::class, 'resetBadges']);
+    Route::get('/status/{playerId}', [TestBadgeController::class, 'viewBadgeStatus']);
+    Route::get('/add-more/{playerId}', [TestBadgeController::class, 'addMoreUnclaimedBadges']);
+});
+// ===== END TEST ROUTES =====

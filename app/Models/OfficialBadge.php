@@ -16,12 +16,14 @@ class OfficialBadge extends Model
         'earned_date',
         'badge_number', // Which official badge is this (1st, 2nd, 3rd, etc.)
         'claimed',
+        'claimed_at', // When the badge was claimed
     ];
 
     protected $casts = [
         'earned_date' => 'datetime',
         'badge_number' => 'integer',
         'claimed' => 'boolean',
+        'claimed_at' => 'datetime',
     ];
 
     /**
@@ -62,6 +64,7 @@ class OfficialBadge extends Model
     public function markAsClaimed()
     {
         $this->claimed = true;
+        $this->claimed_at = now();
         $this->save();
     }
 }
