@@ -9,11 +9,13 @@ import 'leaderboard.dart';
 class WhizMemoryMatch extends StatefulWidget {
   final String userAvatar;
   final String playerId;
+  final String username; // Add this
 
   const WhizMemoryMatch({
     super.key,
     this.userAvatar = "assets/images-avatars/Adventurer.png",
     required this.playerId,
+    required this.username, // Add this
   });
 
   @override
@@ -611,7 +613,11 @@ class _WhizMemoryMatchState extends State<WhizMemoryMatch>
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => Leaderboard(currentUserId: widget.userAvatar),
+                            builder: (_) => Leaderboard(
+                              currentUserId: widget.playerId,
+                              userAvatar: widget.userAvatar,
+                              username: widget.username,
+                            ),
                           ),
                         );
                       }),
@@ -619,7 +625,7 @@ class _WhizMemoryMatchState extends State<WhizMemoryMatch>
                   ),
                 ),
               ),
-              MouseRegion(
+                  MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: GestureDetector(
                   onTap: _logoutDialog,

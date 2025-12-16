@@ -293,43 +293,6 @@ class QuizResultScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            if (rewardsEarned != null) ...[
-                              const SizedBox(height: 15),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.amber.shade700,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.stars,
-                                      color: Colors.amber,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "+$rewardsEarned Rewards",
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.amber.shade900,
-                                        fontFamily: 'Poppins',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
                           ],
                         ),
                       ),
@@ -340,7 +303,6 @@ class QuizResultScreen extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () {
-                                // Return to Whiz Challenge map with success=true to unlock next level
                                 Navigator.of(context).pop(_isPerfectScore());
                               },
                               style: OutlinedButton.styleFrom(
@@ -358,7 +320,7 @@ class QuizResultScreen extends StatelessWidget {
                                 ),
                               ),
                               child: const Text(
-                                "Back to Map",
+                                "Exit",
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -372,10 +334,8 @@ class QuizResultScreen extends StatelessWidget {
                             child: ElevatedButton(
                               onPressed: () {
                                 if (_isPerfectScore()) {
-                                  // Go back to map and unlock next level
                                   Navigator.of(context).pop(true);
                                 } else {
-                                  // Retry same level
                                   if (userId != null) {
                                     Navigator.of(context).pushReplacement(
                                       MaterialPageRoute(

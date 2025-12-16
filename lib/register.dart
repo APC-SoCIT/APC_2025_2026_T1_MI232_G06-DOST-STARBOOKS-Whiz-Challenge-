@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'login.dart';
-import 'admin_login.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -554,29 +553,19 @@ class _RegisterPageState extends State<RegisterPage>
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Image.asset("assets/images-logo/starbookslogo.png", height: 50),
-            InkWell(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AdminLoginPage(),
+            Row(
+              children: const [
+                Icon(Icons.person, color: Color(0xFF046EB8)),
+                SizedBox(width: 5),
+                Text(
+                  "ADMIN",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: Color(0xFF046EB8),
                   ),
-                );
-              },
-              child: Row(
-                children: const [
-                  Icon(Icons.person, color: Color(0xFF046EB8)),
-                  SizedBox(width: 5),
-                  Text(
-                    "ADMIN",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: Color(0xFF046EB8),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),

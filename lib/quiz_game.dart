@@ -144,7 +144,7 @@ class _QuizScreenState extends State<QuizScreen> {
       if (questions.isEmpty) {
         setState(() {
           _errorMessage =
-              'No questions available for ${widget.category} - $normalizedDifficulty';
+          'No questions available for ${widget.category} - $normalizedDifficulty';
           _isLoading = false;
         });
         return;
@@ -159,7 +159,7 @@ class _QuizScreenState extends State<QuizScreen> {
       debugPrint('ERROR loading questions: $e');
       setState(() {
         _errorMessage =
-            'Failed to load questions. Please check your connection.';
+        'Failed to load questions. Please check your connection.';
         _isLoading = false;
       });
     }
@@ -673,17 +673,16 @@ class _QuizScreenState extends State<QuizScreen> {
     return Container(
       width: double.infinity,
       color: difficultyColor,
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         children: [
-          const SizedBox(height: 4),
           Text(
             widget.category.toUpperCase(),
             style: const TextStyle(
-              fontSize: 30,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.white,
-              letterSpacing: 1.5,
+              letterSpacing: 1.2,
               fontFamily: 'Poppins',
             ),
           ),
@@ -691,13 +690,12 @@ class _QuizScreenState extends State<QuizScreen> {
           Text(
             widget.difficulty.toUpperCase(),
             style: const TextStyle(
-              fontSize: 20,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               color: Colors.white,
               fontFamily: 'Poppins',
             ),
           ),
-          const SizedBox(height: 4),
         ],
       ),
     );

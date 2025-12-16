@@ -3,10 +3,14 @@ import 'quiz_game.dart';
 
 class WhizChallenge extends StatefulWidget {
   final String userId;
+  final String userAvatar;
+  final String username;
 
   const WhizChallenge({
     super.key,
     required this.userId,
+    required this.userAvatar,
+    required this.username,
   });
 
   @override
@@ -16,240 +20,422 @@ class WhizChallenge extends StatefulWidget {
 class _WhizChallengeState extends State<WhizChallenge> {
   String selectedCategory = 'Science';
   String selectedDifficulty = 'Easy';
+  String? _hoveredCategory;
 
-  // Map of levels - can be expanded
-  final Map<String, List<Map<String, dynamic>>> levelMaps = {
-    'Science-Easy': [
-      {'level': 1, 'unlocked': true},
-      {'level': 2, 'unlocked': false},
-      {'level': 3, 'unlocked': false},
-      {'level': 4, 'unlocked': false},
-      {'level': 5, 'unlocked': false},
-      {'level': 6, 'unlocked': false},
-      {'level': 7, 'unlocked': false},
-      {'level': 8, 'unlocked': false},
-      {'level': 9, 'unlocked': false},
-      {'level': 10, 'unlocked': false},
-    ],
-    'Science-Average': [
-      {'level': 1, 'unlocked': true},
-      {'level': 2, 'unlocked': false},
-      {'level': 3, 'unlocked': false},
-      {'level': 4, 'unlocked': false},
-      {'level': 5, 'unlocked': false},
-      {'level': 6, 'unlocked': false},
-      {'level': 7, 'unlocked': false},
-      {'level': 8, 'unlocked': false},
-      {'level': 9, 'unlocked': false},
-      {'level': 10, 'unlocked': false},
-    ],
-    'Science-Difficult': [
-      {'level': 1, 'unlocked': true},
-      {'level': 2, 'unlocked': false},
-      {'level': 3, 'unlocked': false},
-      {'level': 4, 'unlocked': false},
-      {'level': 5, 'unlocked': false},
-      {'level': 6, 'unlocked': false},
-      {'level': 7, 'unlocked': false},
-      {'level': 8, 'unlocked': false},
-      {'level': 9, 'unlocked': false},
-      {'level': 10, 'unlocked': false},
-    ],
-    'Math-Easy': [
-      {'level': 1, 'unlocked': true},
-      {'level': 2, 'unlocked': false},
-      {'level': 3, 'unlocked': false},
-      {'level': 4, 'unlocked': false},
-      {'level': 5, 'unlocked': false},
-      {'level': 6, 'unlocked': false},
-      {'level': 7, 'unlocked': false},
-      {'level': 8, 'unlocked': false},
-      {'level': 9, 'unlocked': false},
-      {'level': 10, 'unlocked': false},
-    ],
-    'Math-Average': [
-      {'level': 1, 'unlocked': true},
-      {'level': 2, 'unlocked': false},
-      {'level': 3, 'unlocked': false},
-      {'level': 4, 'unlocked': false},
-      {'level': 5, 'unlocked': false},
-      {'level': 6, 'unlocked': false},
-      {'level': 7, 'unlocked': false},
-      {'level': 8, 'unlocked': false},
-      {'level': 9, 'unlocked': false},
-      {'level': 10, 'unlocked': false},
-    ],
-    'Math-Difficult': [
-      {'level': 1, 'unlocked': true},
-      {'level': 2, 'unlocked': false},
-      {'level': 3, 'unlocked': false},
-      {'level': 4, 'unlocked': false},
-      {'level': 5, 'unlocked': false},
-      {'level': 6, 'unlocked': false},
-      {'level': 7, 'unlocked': false},
-      {'level': 8, 'unlocked': false},
-      {'level': 9, 'unlocked': false},
-      {'level': 10, 'unlocked': false},
-    ],
-  };
-
-  String get currentMapKey => '$selectedCategory-$selectedDifficulty';
-
-  List<Map<String, dynamic>> get currentLevels => levelMaps[currentMapKey] ?? [];
-
-  Color get difficultyColor {
-    switch (selectedDifficulty) {
-      case 'Easy':
-        return const Color(0xFF1D9358);
-      case 'Average':
-        return const Color(0xFF046EB8);
-      case 'Difficult':
-        return const Color(0xFFBD442E);
-      default:
-        return const Color(0xFF1D9358);
-    }
-  }
-
-  String get backgroundImage {
-    if (selectedCategory == 'Science') {
-      switch (selectedDifficulty) {
-        case 'Easy':
-          return 'assets/images/science-easy-bg.png'; // Your green science bg
-        case 'Average':
-          return 'assets/images/science-average-bg.png'; // Your blue science bg
-        case 'Difficult':
-          return 'assets/images/science-difficult-bg.png'; // Your volcano science bg
-      }
-    } else {
-      // Math backgrounds
-      switch (selectedDifficulty) {
-        case 'Easy':
-          return 'assets/images/math-easy-bg.png';
-        case 'Average':
-          return 'assets/images/math-average-bg.png';
-        case 'Difficult':
-          return 'assets/images/math-difficult-bg.png';
-      }
-    }
-    return 'assets/images/science-easy-bg.png';
-  }
-
-  void _selectCategoryAndDifficulty() {
-    showDialog(
+  Future<void> _logoutDialog() async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 500,
-          padding: const EdgeInsets.all(30),
+          width: 400,
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Image.asset("assets/images-icons/sadlogout.png", width: 80, height: 80),
+              const SizedBox(height: 15),
               const Text(
-                'Select Category & Difficulty',
+                "Logout Confirmation",
                 style: TextStyle(
-                  fontSize: 20,
+                  fontFamily: 'Poppins',
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'Poppins',
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Category Selection
-              const Text(
-                'Select Category',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Poppins',
+                  fontSize: 20,
                 ),
               ),
               const SizedBox(height: 10),
+              const Text(
+                "Are you sure you want to log out?",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+              ),
+              const SizedBox(height: 25),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildCategoryButton('Science'),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      ),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          color: Color(0xFF046EB8),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 15),
-                  _buildCategoryButton('Math'),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFDD000),
+                        foregroundColor: const Color(0xFF816A03),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      ),
+                      child: const Text(
+                        "Logout",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
-              ),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
 
-              const SizedBox(height: 25),
+    if (confirmed == true && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
 
-              // Difficulty Selection
-              const Text(
-                'Difficulty Level',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Poppins',
-                ),
-              ),
-              const SizedBox(height: 10),
-              Column(
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Column(
+        children: [
+          _buildTopBar(),
+          _buildHeaderBar(),
+          Expanded(
+            child: _buildSelectionScreen(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 28),
+            onPressed: () => Navigator.pop(context),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 12),
+          Image.asset(
+            "assets/images-logo/mainlogo.png",
+            width: 150,
+            height: 50,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                width: 150,
+                height: 50,
+                color: Colors.grey[300],
+                child: const Center(child: Text('Logo')),
+              );
+            },
+          ),
+          Expanded(
+            child: Align(
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildDifficultyButton('Easy', const Color(0xFF1D9358)),
-                  const SizedBox(height: 10),
-                  _buildDifficultyButton('Average', const Color(0xFF046EB8)),
-                  const SizedBox(height: 10),
-                  _buildDifficultyButton('Difficult', const Color(0xFFBD442E)),
+                  _buildTopNavButton("Home", Icons.home, () {
+                    Navigator.pop(context);
+                  }),
+                  const SizedBox(width: 40),
+                  _buildTopNavButton("Leaderboard", Icons.leaderboard, () {
+                    // Navigate to leaderboard
+                  }),
                 ],
               ),
-
-              const SizedBox(height: 25),
-
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  setState(() {});
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFDD000),
-                  foregroundColor: const Color(0xFF915701),
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
+            ),
+          ),
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: _logoutDialog,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF046EB8), width: 3),
+                ),
+                child: ClipOval(
+                  child: Image.asset(
+                    widget.userAvatar,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: const Color(0xFF046EB8),
+                        child: const Icon(Icons.person, color: Colors.white),
+                      );
+                    },
                   ),
                 ),
-                child: const Text(
-                  'Apply',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Poppins',
-                  ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopNavButton(String label, IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.grey[700]),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.normal,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 3),
+          Container(height: 3, width: 0, color: Colors.transparent),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFDD000),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 3,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Text(
+        "Whiz Challenge",
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Color(0xFF915701),
+          fontSize: 17,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionScreen() {
+    return Container(
+      color: const Color(0xFFF5F5F5),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Category Selection
+                    Column(
+                      children: [
+                        const Text(
+                          "Select Category",
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFDD000),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        Row(
+                          children: [
+                            _buildCategoryCard('Science', 'assets/images-icons/science.png'),
+                            const SizedBox(width: 30),
+                            _buildCategoryCard('Math', 'assets/images-icons/math.png'),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 80),
+                    // Difficulty Selection
+                    Column(
+                      children: [
+                        const Text(
+                          "Difficulty Level",
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFDD000),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        _buildDifficultyButton('Easy', const Color(0xFF1D9358)),
+                        _buildDifficultyButton('Average', const Color(0xFF046EB8)),
+                        _buildDifficultyButton('Difficult', const Color(0xFFBD442E)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 50),
+                // PLAY Button
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => QuizScreen(
+                          category: selectedCategory,
+                          difficulty: selectedDifficulty,
+                          userId: widget.userId,
+                          participationType: 'Whiz Challenge',
+                        ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFDD000),
+                    foregroundColor: const Color(0xFF915701),
+                    padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    elevation: 4,
+                  ),
+                  child: const Text(
+                    "PLAY",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildCategoryButton(String category) {
+  Widget _buildCategoryCard(String category, String imagePath) {
     final isSelected = selectedCategory == category;
-    return GestureDetector(
-      onTap: () => setState(() => selectedCategory = category),
-      child: Container(
-        width: 120,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF046EB8) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF046EB8) : Colors.grey,
-            width: 2,
+    final isHovered = _hoveredCategory == category;
+    final showColorful = isSelected || isHovered;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hoveredCategory = category),
+      onExit: (_) => setState(() => _hoveredCategory = null),
+      child: GestureDetector(
+        onTap: () => setState(() => selectedCategory = category),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 220,
+          height: 280,
+          padding: EdgeInsets.zero,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? const Color(0xFFFDD000) : Colors.grey[300]!,
+              width: isSelected ? 4 : 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isHovered ? 0.15 : 0.1),
+                blurRadius: isHovered ? 12 : 8,
+                offset: Offset(0, isHovered ? 6 : 4),
+              ),
+            ],
           ),
-        ),
-        child: Text(
-          category,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: isSelected ? Colors.white : Colors.black87,
-            fontFamily: 'Poppins',
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // Image section - fills available space
+              // Image section - fills available space
+              // Image section - fills available space
+              // Image section - fills available space
+              Expanded(
+                child: ClipRect(
+                  child: Transform.scale(
+                    scale: 1.35, // Adjust this value to make image bigger (1.3 = 30% bigger)
+                    child: Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.zero,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: ColorFiltered(
+                          key: ValueKey(showColorful),
+                          colorFilter: showColorful
+                              ? const ColorFilter.mode(
+                            Colors.transparent,
+                            BlendMode.dst,
+                          )
+                              : const ColorFilter.matrix([
+                            0.2126, 0.7152, 0.0722, 0, 0,
+                            0.2126, 0.7152, 0.0722, 0, 0,
+                            0.2126, 0.7152, 0.0722, 0, 0,
+                            0,      0,      0,      1, 0,
+                          ]),
+                          child: Image.asset(
+                            imagePath,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Divider line
+              Container(
+                height: 2,
+                width: double.infinity,
+                color: Colors.grey[300],
+              ),
+              // Text section
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  category,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Colors.black : Colors.grey[700],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -261,246 +447,28 @@ class _WhizChallengeState extends State<WhizChallenge> {
     return GestureDetector(
       onTap: () => setState(() => selectedDifficulty = difficulty),
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        width: 280,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color, width: 2),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: color, width: 3),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Text(
           difficulty.toUpperCase(),
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
             color: isSelected ? Colors.white : color,
-            fontFamily: 'Poppins',
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _playLevel(int level) async {
-    final isUnlocked = currentLevels[level - 1]['unlocked'] ?? false;
-
-    if (!isUnlocked) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Complete previous level to unlock this!'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    // Navigate to quiz
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => QuizScreen(
-          category: selectedCategory,
-          difficulty: selectedDifficulty,
-          userId: widget.userId,
-          participationType: 'Whiz Challenge',
-        ),
-      ),
-    );
-
-    // If completed successfully, unlock next level
-    if (result == true && mounted) {
-      setState(() {
-        if (level < currentLevels.length) {
-          currentLevels[level]['unlocked'] = true;
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage(backgroundImage),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              Container(
-                color: difficultyColor,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    ),
-                    const Spacer(),
-                    Column(
-                      children: [
-                        Text(
-                          selectedCategory.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            fontFamily: 'Poppins',
-                          ),
-                        ),
-                        Text(
-                          '${selectedDifficulty.toUpperCase()} LEVEL',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.white,
-                            fontFamily: 'Poppins',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: _selectCategoryAndDifficulty,
-                      icon: const Icon(Icons.settings, color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Level Map
-              Expanded(
-                child: Stack(
-                  children: [
-                    // Level circles positioned on the map
-                    Positioned(
-                      left: 40,
-                      bottom: 50,
-                      child: _buildLevelCircle(1),
-                    ),
-                    Positioned(
-                      left: 60,
-                      bottom: 120,
-                      child: _buildLevelCircle(2),
-                    ),
-                    Positioned(
-                      left: 90,
-                      bottom: 180,
-                      child: _buildLevelCircle(3),
-                    ),
-                    Positioned(
-                      left: 130,
-                      bottom: 230,
-                      child: _buildLevelCircle(4),
-                    ),
-                    Positioned(
-                      left: 180,
-                      bottom: 260,
-                      child: _buildLevelCircle(5),
-                    ),
-                    Positioned(
-                      right: 180,
-                      bottom: 280,
-                      child: _buildLevelCircle(6),
-                    ),
-                    Positioned(
-                      right: 120,
-                      bottom: 240,
-                      child: _buildLevelCircle(7),
-                    ),
-                    Positioned(
-                      right: 80,
-                      bottom: 180,
-                      child: _buildLevelCircle(8),
-                    ),
-                    Positioned(
-                      right: 60,
-                      bottom: 120,
-                      child: _buildLevelCircle(9),
-                    ),
-                    Positioned(
-                      right: 50,
-                      bottom: 50,
-                      child: _buildLevelCircle(10),
-                    ),
-
-                    // Instructions
-                    Positioned(
-                      bottom: 150,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha:0.9),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'Get all the answers right to unlock badges!',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLevelCircle(int level) {
-    final isUnlocked = currentLevels[level - 1]['unlocked'] ?? false;
-
-    return GestureDetector(
-      onTap: () => _playLevel(level),
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isUnlocked ? difficultyColor : Colors.grey,
-          border: Border.all(color: Colors.white, width: 3),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha:0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Center(
-          child: isUnlocked
-              ? Text(
-            '$level',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              fontFamily: 'Poppins',
-            ),
-          )
-              : const Icon(
-            Icons.lock,
-            color: Colors.white,
-            size: 24,
           ),
         ),
       ),
