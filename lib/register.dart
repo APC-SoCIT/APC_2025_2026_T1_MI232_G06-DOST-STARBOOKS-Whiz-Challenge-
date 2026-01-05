@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'dart:math';
 import 'login.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flame_audio/flame_audio.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,10 +34,12 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage>
     with TickerProviderStateMixin {
   int step = 0;
-  late final AnimationController _backgroundController;
-  late final AnimationController _birdController;
-  late final AnimationController _avatarController;
   String? selectedAvatar;
+
+  late AnimationController _buttonScaleController;
+  late Animation<double> _buttonScale;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
 
   bool hidePassword = true;
   bool hideConfirmPassword = true;
@@ -45,7 +47,7 @@ class _RegisterPageState extends State<RegisterPage>
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController =
-      TextEditingController();
+  TextEditingController();
   final TextEditingController schoolController = TextEditingController();
 
   String? selectedAge;
@@ -59,43 +61,135 @@ class _RegisterPageState extends State<RegisterPage>
   String? selectedCityId;
   String? selectedCityName;
 
+  // Password validation according to SS-007
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
+    }
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters';
+    }
+
+    // Check for uppercase
+    if (!value.contains(RegExp(r'[A-Z]'))) {
+      return 'Password must contain at least one uppercase letter';
+    }
+
+    // Check for lowercase
+    if (!value.contains(RegExp(r'[a-z]'))) {
+      return 'Password must contain at least one lowercase letter';
+    }
+
+    // Check for number
+    if (!value.contains(RegExp(r'[0-9]'))) {
+      return 'Password must contain at least one number';
+    }
+
+    // Check for special character
+    if (!value.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
+      return 'Password must contain at least one special character';
+    }
+
+    return null;
+  }
+
+
+
+// Username validation
+  String? _validateUsername(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Username is required';
+    }
+    if (value.trim().length < 3) {
+      return 'Username must be at least 3 characters';
+    }
+    if (value.trim().length > 20) {
+      return 'Username must not exceed 20 characters';
+    }
+    // Only alphanumeric and underscores
+    if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value.trim())) {
+      return 'Username can only contain letters, numbers, and underscores';
+    }
+    return null;
+  }
+
+  String? _validateSchool(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'School is required';
+    }
+    if (value.trim().length < 2) {
+      return 'School name must be at least 2 characters';
+    }
+    return null;
+  }
+
   List<Map<String, String>> regions = [];
   List<Map<String, String>> provinces = [];
   List<Map<String, String>> cities = [];
 
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  static const String baseUrl = 'http://localhost:8000';
 
   @override
   void initState() {
     super.initState();
-    _backgroundController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 50),
-    )..repeat();
 
-    _birdController = AnimationController(
+    // Button scale animation
+    _buttonScaleController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 150),
+    );
 
-    _avatarController = AnimationController(
+    _buttonScale = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(
+        parent: _buttonScaleController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    // Fade animation for form fields
+    _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _fadeController,
+        curve: Curves.easeIn,
+      ),
+    );
 
     fetchRegions();
+    _fadeController.forward(); // Start fade animation
   }
 
   @override
   void dispose() {
-    _backgroundController.dispose();
-    _birdController.dispose();
-    _avatarController.dispose();
     usernameController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
     schoolController.dispose();
+    _buttonScaleController.dispose();
+    _fadeController.dispose();
     super.dispose();
+  }
+
+  void _playClickSound() async {
+    try {
+      await FlameAudio.play('click1.wav');
+    } catch (e) {
+      debugPrint('Button click sound not found: $e');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   Future<void> fetchRegions() async {
@@ -115,9 +209,12 @@ class _RegisterPageState extends State<RegisterPage>
         setState(() {
           regions = parsed;
         });
+      } else {
+        _showError('Failed to load regions');
       }
     } catch (e) {
       debugPrint('fetchRegions error: $e');
+      _showError('Network error loading regions');
     }
   }
 
@@ -177,31 +274,96 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Future<void> registerUser() async {
-    if (usernameController.text.trim().isEmpty ||
-        passwordController.text.isEmpty ||
-        schoolController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill username, password, school")),
-      );
-      return;
+    _playClickSound();
+    await _buttonScaleController.forward();
+    await _buttonScaleController.reverse();
+
+    List<String> missingFields = [];
+
+    if (usernameController.text.trim().isEmpty) {
+      missingFields.add('Username');
     }
-    if (passwordController.text != confirmPasswordController.text) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Passwords do not match")));
-      return;
+    if (passwordController.text.isEmpty) {
+      missingFields.add('Password');
     }
-    if (selectedRegionId == null ||
-        selectedProvinceId == null ||
-        selectedCityId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please choose Region, Province and City"),
-        ),
-      );
+    if (confirmPasswordController.text.isEmpty) {
+      missingFields.add('Confirm Password');
+    }
+    if (schoolController.text.trim().isEmpty) {
+      missingFields.add('School');
+    }
+    if (selectedAge == null) {
+      missingFields.add('Age range');  // Changed from 'Age' to 'Age range'
+    }
+    if (selectedCategory == null) {
+      missingFields.add('Category');
+    }
+    if (selectedSex == null) {
+      missingFields.add('Sex');
+    }
+    if (selectedAvatar == null) {
+      missingFields.add('Avatar');
+    }
+    if (selectedRegionId == null) {
+      missingFields.add('Region');
+    }
+    if (selectedProvinceId == null) {
+      missingFields.add('Province');
+    }
+    if (selectedCityId == null) {
+      missingFields.add('City');
+    }
+
+    // If multiple fields are missing, show general message
+    if (missingFields.length > 2) {
+      _showError('Please fill in all required fields');
       return;
     }
 
+    // If 1-2 fields missing, show specific message
+    if (missingFields.isNotEmpty) {
+      // Special handling for age range message
+      if (missingFields.length == 1 && missingFields[0] == 'Age range') {
+        _showError('Please select an age range');
+      } else if (missingFields.length == 2 && missingFields.contains('Age range')) {
+        // If age range is one of two missing fields, use better grammar
+        String otherField = missingFields.firstWhere((f) => f != 'Age range');
+        _showError('$otherField and Age range are required');
+      } else {
+        // Standard message for other combinations
+        _showError('${missingFields.join(' and ')} ${missingFields.length == 1 ? 'is' : 'are'} required');
+      }
+      return;
+    }
+
+    // Validate username format
+    String? usernameError = _validateUsername(usernameController.text);
+    if (usernameError != null) {
+      _showError(usernameError);
+      return;
+    }
+
+    // Validate password format
+    String? passwordError = _validatePassword(passwordController.text);
+    if (passwordError != null) {
+      _showError(passwordError);
+      return;
+    }
+
+    // Validate password match
+    if (passwordController.text != confirmPasswordController.text) {
+      _showError('Passwords do not match');
+      return;
+    }
+
+    // Validate school
+    String? schoolError = _validateSchool(schoolController.text);
+    if (schoolError != null) {
+      _showError(schoolError);
+      return;
+    }
+
+    // All validations passed, proceed with registration
     final payload = {
       "username": usernameController.text.trim(),
       "password": passwordController.text,
@@ -215,7 +377,7 @@ class _RegisterPageState extends State<RegisterPage>
       "city": selectedCityId,
     };
 
-    final url = Uri.parse('$baseUrl/api/register');
+    final url = Uri.parse('$baseUrl/api/user/register');
     try {
       final resp = await http.post(
         url,
@@ -225,6 +387,7 @@ class _RegisterPageState extends State<RegisterPage>
         },
         body: jsonEncode(payload),
       );
+
       if (resp.statusCode == 201 || resp.statusCode == 200) {
         if (!mounted) return;
 
@@ -291,14 +454,17 @@ class _RegisterPageState extends State<RegisterPage>
                     ),
                   ),
                   const SizedBox(height: 25),
+                  // Replace the existing ElevatedButton in your success dialog with this:
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
+                        _playClickSound(); // Add this line
                         Navigator.pop(context);
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(builder: (c) => const LogInPage()),
+                          MaterialPageRoute(builder: (c) => const LoginScreen()),
                         );
                       },
                       style: ElevatedButton.styleFrom(
@@ -318,36 +484,36 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                       ),
                     ),
-                  ),
+                  )
                 ],
               ),
             ),
           ),
         );
       } else {
-        String message = resp.body;
+        // Handle server errors
+        String message = 'Registration failed';
         try {
           final jsonBody = jsonDecode(resp.body);
-          if (jsonBody is Map && jsonBody['message'] != null) {
-            message = jsonBody['message'];
+          if (jsonBody is Map) {
+            // Handle Laravel validation errors
+            if (jsonBody['errors'] != null) {
+              final errors = jsonBody['errors'] as Map<String, dynamic>;
+              final firstError = errors.values.first;
+              message = firstError is List ? firstError.first : firstError.toString();
+            } else if (jsonBody['message'] != null) {
+              message = jsonBody['message'];
+            }
           }
-        } catch (_) {}
+        } catch (_) {
+          message = resp.body;
+        }
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Registration failed (${resp.statusCode}): $message"),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showError(message);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Network error. Check server/CORS.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('Network error. Please check your connection.');
     }
   }
 
@@ -370,7 +536,7 @@ class _RegisterPageState extends State<RegisterPage>
         setState(() {
           selectedProvinceId = v;
           selectedProvinceName = provinces.firstWhere(
-            (p) => p['id'] == v,
+                (p) => p['id'] == v,
           )['name'];
           selectedCityId = null;
           selectedCityName = null;
@@ -386,11 +552,11 @@ class _RegisterPageState extends State<RegisterPage>
   });
 
   Widget _buildDropdown(
-    String label,
-    List<Map<String, String>> items,
-    String? value,
-    void Function(String?)? onChanged,
-  ) {
+      String label,
+      List<Map<String, String>> items,
+      String? value,
+      void Function(String?)? onChanged,
+      ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -425,7 +591,7 @@ class _RegisterPageState extends State<RegisterPage>
     } else {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const LogInPage()),
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
       );
     }
   }
@@ -479,27 +645,29 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildOutlinedButton(
-    String label,
-    VoidCallback onPressed, {
-    bool isProceed = false,
-  }) {
+      String label,
+      VoidCallback onPressed, {
+        bool isProceed = false,
+      }) {
     return OutlinedButton(
-      style:
-          OutlinedButton.styleFrom(
-            side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-          ).copyWith(
-            backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-              if (states.contains(WidgetState.hovered)) {
-                return const Color(0xFF046EB8).withAlpha(50);
-              }
-              return Colors.transparent;
-            }),
-            foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-              return const Color(0xFF046EB8);
-            }),
-          ),
-      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+      ).copyWith(
+        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.hovered)) {
+            return const Color(0xFF046EB8).withAlpha(50);
+          }
+          return Colors.transparent;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+          return const Color(0xFF046EB8);
+        }),
+      ),
+      onPressed: () {
+        _playClickSound();
+        onPressed();
+      },
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.normal)),
     );
   }
@@ -510,9 +678,11 @@ class _RegisterPageState extends State<RegisterPage>
       children: [
         _buildOutlinedButton("Back", () => _handleBack(context)),
         _buildOutlinedButton("Proceed", () {
+          _fadeController.reset();
           setState(() {
             step = 1;
           });
+          _fadeController.forward();
         }, isProceed: true),
       ],
     );
@@ -523,16 +693,19 @@ class _RegisterPageState extends State<RegisterPage>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _buildOutlinedButton("Back", () => _handleBack(context)),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFFDD000),
-            foregroundColor: const Color(0xFFAC8337),
-            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-          ),
-          onPressed: registerUser,
-          child: const Text(
-            "REGISTER",
-            style: TextStyle(fontWeight: FontWeight.w700),
+        Transform.scale(
+          scale: _buttonScale.value,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFDD000),
+              foregroundColor: const Color(0xFFAC8337),
+              padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+            ),
+            onPressed: registerUser,
+            child: const Text(
+              "REGISTER",
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ),
       ],
@@ -541,111 +714,111 @@ class _RegisterPageState extends State<RegisterPage>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery
+        .of(context)
+        .size
+        .width;
+    final screenHeight = MediaQuery
+        .of(context)
+        .size
+        .height;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF94D2FD),
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: Colors.white,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Image.asset("assets/images-logo/starbookslogo.png", height: 50),
-            Row(
-              children: const [
-                Icon(Icons.person, color: Color(0xFF046EB8)),
-                SizedBox(width: 5),
-                Text(
-                  "ADMIN",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: Color(0xFF046EB8),
+    return AnimatedBuilder(
+        animation: Listenable.merge([_buttonScaleController, _fadeController]),
+        builder: (context, child) {
+          return Scaffold(
+            backgroundColor: const Color(0xFF94D2FD),
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              backgroundColor: Colors.white,
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Image.asset(
+                      "assets/images-logo/starbooksnewlogo.png", height: 50),
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const AdminPage()),
+                      );
+                    },
+                    child: Row(
+                      children: const [
+                        Icon(Icons.person, color: Color(0xFF046EB8)),
+                        SizedBox(width: 5),
+                        Text(
+                          "ADMIN",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: Color(0xFF046EB8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            body: Stack(
+              children: [
+                Image.asset(
+                  "assets/images-icons/background1.png",
+                  width: screenWidth,
+                  height: screenHeight,
+                  fit: BoxFit.cover,
+                ),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                        maxWidth: 900, minWidth: 400),
+                    child: Container(
+                      width: MediaQuery
+                          .of(context)
+                          .size
+                          .width * 0.9,
+                      height: step == 0 ? 420 : 520,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildStepper(),
+                          const SizedBox(height: 20),
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 600),
+                              transitionBuilder: (child, animation) =>
+                                  FadeTransition(
+                                      opacity: animation, child: child),
+                              child: SingleChildScrollView(
+                                key: ValueKey(step),
+                                // IMPORTANT for the animation to trigger
+                                child: step == 0
+                                    ? _buildPrivacyStepContent()
+                                    : _buildAccountSetupStepContent(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          step == 0
+                              ? _buildPrivacyStepButtons(context)
+                              : _buildAccountSetupStepButtons(context),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-      body: Stack(
-        children: [
-          AnimatedBuilder(
-            animation: _backgroundController,
-            builder: (context, child) {
-              final offset = (_backgroundController.value * screenWidth);
-              return Stack(
-                children: [
-                  Positioned(
-                    left: offset % screenWidth - screenWidth,
-                    top: 0,
-                    child: Image.asset(
-                      "assets/images-icons/background1.png",
-                      width: screenWidth,
-                      height: screenHeight,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Positioned(
-                    left: offset % screenWidth,
-                    top: 0,
-                    child: Image.asset(
-                      "assets/images-icons/background1.png",
-                      width: screenWidth,
-                      height: screenHeight,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900, minWidth: 400),
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.9,
-                height: step == 0 ? 520 : 520,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    _buildStepper(),
-                    const SizedBox(height: 20),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        transitionBuilder: (child, animation) =>
-                            FadeTransition(opacity: animation, child: child),
-                        child: SingleChildScrollView(
-                          key: ValueKey(
-                            step,
-                          ), // IMPORTANT for the animation to trigger
-                          child: step == 0
-                              ? _buildPrivacyStepContent()
-                              : _buildAccountSetupStepContent(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    step == 0
-                        ? _buildPrivacyStepButtons(context)
-                        : _buildAccountSetupStepButtons(context),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+          );
+        }
     );
   }
-
   Widget _buildPrivacyStepContent() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -662,15 +835,7 @@ class _RegisterPageState extends State<RegisterPage>
         ),
         const SizedBox(height: 10),
         Center(
-          child: AnimatedBuilder(
-            animation: _birdController,
-            builder: (context, child) {
-              final dx = 15 * sin(_birdController.value * 2 * pi);
-              final dy = 15 * cos(_birdController.value * 2 * pi);
-              return Transform.translate(offset: Offset(dx, dy), child: child);
-            },
-            child: Image.asset("assets/images-logo/bird1.png", height: 140),
-          ),
+        child: Image.asset("assets/images-logo/bird1.png", height: 140),
         ),
         const SizedBox(height: 10),
         const Center(
@@ -682,21 +847,22 @@ class _RegisterPageState extends State<RegisterPage>
         const SizedBox(height: 10),
         const Text(
           "By accessing STARBOOKS WHIZ CHALLENGE, you agree to these terms and conditions. "
-          "We collect personal information and usage data to improve our services and efficiency. "
-          "We prioritize data security and do not share personal information with third parties without consent, "
-          "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
-          "For questions, contact us at support@starbookswhizbee.com",
-          style: TextStyle(fontSize: 14),
-          textAlign: TextAlign.justify,
+              "We collect personal information and usage data to improve our services and efficiency. "
+              "We prioritize data security and do not share personal information with third parties without consent, "
+              "except as required by law. Users must provide accurate information and comply with all laws while using our site. "
+              "For questions, contact us at support@starbookswhizbee.com",
+          style: TextStyle(fontSize: 14),  textAlign: TextAlign.justify,
         ),
       ],
     );
   }
 
-  Widget _buildAccountSetupStepContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
+    Widget _buildAccountSetupStepContent() {
+      return FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
         const Text(
           "Register",
           style: TextStyle(
@@ -709,164 +875,32 @@ class _RegisterPageState extends State<RegisterPage>
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Left Column - Avatar Circle + Avatar/Region dropdowns
-            SizedBox(
-              width: 200,
-              child: Column(
-                children: [
-                  const SizedBox(height: 23),
-                  AnimatedBuilder(
-                    animation: _avatarController,
-                    builder: (context, child) {
-                      final dy = 3 * sin(_avatarController.value * 2 * pi);
-                      final dx = 3 * cos(_avatarController.value * 2 * pi);
-                      return Transform.translate(
-                        offset: Offset(dx, dy),
-                        child: child,
-                      );
-                    },
-                    child: CircleAvatar(
-                      radius: 80,
-                      backgroundColor: const Color(0xFFFDD000),
-                      child: CircleAvatar(
-                        radius: 75,
-                        backgroundColor: Colors.white,
-                        backgroundImage: selectedAvatar != null
-                            ? AssetImage(selectedAvatar!)
-                            : null,
-                        child: selectedAvatar == null
-                            ? const Icon(
-                                Icons.person,
-                                size: 40,
-                                color: Colors.grey,
-                              )
-                            : null,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  _buildAvatarDropdown(
-                    "Avatar",
-                    icon: Icons.camera_alt,
-                    onChanged: (value) {
-                      setState(() {
-                        switch (value) {
-                          case "Adventurer":
-                            selectedAvatar =
-                                "assets/images-avatars/Adventurer.png";
-                            break;
-                          case "Astronaut":
-                            selectedAvatar =
-                                "assets/images-avatars/Astronaut.png";
-                            break;
-                          case "Boy":
-                            selectedAvatar = "assets/images-avatars/Boy.png";
-                            break;
-                          case "Brainy":
-                            selectedAvatar = "assets/images-avatars/Brainy.png";
-                            break;
-                          case "Cool-Monkey":
-                            selectedAvatar =
-                                "assets/images-avatars/Cool-Monkey.png";
-                            break;
-                          case "Cute-Elephant":
-                            selectedAvatar =
-                                "assets/images-avatars/Cute-Elephant.png";
-                            break;
-                          case "Doctor-Boy":
-                            selectedAvatar =
-                                "assets/images-avatars/Doctor-Boy.png";
-                            break;
-                          case "Doctor-Girl":
-                            selectedAvatar =
-                                "assets/images-avatars/Doctor-Girl.png";
-                            break;
-                          case "Engineer-Boy":
-                            selectedAvatar =
-                                "assets/images-avatars/Engineer-Boy.png";
-                            break;
-                          case "Engineer-Girl":
-                            selectedAvatar =
-                                "assets/images-avatars/Engineer-Girl.png";
-                            break;
-                          case "Girl":
-                            selectedAvatar = "assets/images-avatars/Girl.png";
-                            break;
-                          case "Hacker":
-                            selectedAvatar = "assets/images-avatars/Hacker.png";
-                            break;
-                          case "Leonel":
-                            selectedAvatar = "assets/images-avatars/Leonel.png";
-                            break;
-                          case "Scientist-Boy":
-                            selectedAvatar =
-                                "assets/images-avatars/Scientist-Boy.png";
-                            break;
-                          case "Scientist-Girl":
-                            selectedAvatar =
-                                "assets/images-avatars/Scientist-Girl.png";
-                            break;
-                          case "Sly-Fox":
-                            selectedAvatar =
-                                "assets/images-avatars/Sly-Fox.png";
-                            break;
-                          case "Sneaky-Snake":
-                            selectedAvatar =
-                                "assets/images-avatars/Sneaky-Snake.png";
-                            break;
-                          case "Teacher-Boy":
-                            selectedAvatar =
-                                "assets/images-avatars/Teacher-Boy.png";
-                            break;
-                          case "Teacher-Girl":
-                            selectedAvatar =
-                                "assets/images-avatars/Teacher-Girl.png";
-                            break;
-                          case "Twirky":
-                            selectedAvatar = "assets/images-avatars/Twirky.png";
-                            break;
-                          case "Whiz-Achiever":
-                            selectedAvatar =
-                                "assets/images-avatars/Whiz-Achiever.png";
-                            break;
-                          case "Whiz-Busy":
-                            selectedAvatar =
-                                "assets/images-avatars/Whiz-Busy.png";
-                            break;
-                          case "Whiz-Happy":
-                            selectedAvatar =
-                                "assets/images-avatars/Whiz-Happy.png";
-                            break;
-                          case "Whiz-Ready":
-                            selectedAvatar =
-                                "assets/images-avatars/Whiz-Ready.png";
-                            break;
-                          case "Wise-Turtle":
-                            selectedAvatar =
-                                "assets/images-avatars/Wise-Turtle.png";
-                            break;
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _regionDropdown(),
-                ],
+            Padding(
+              padding: const EdgeInsets.only(right: 20, top: 10),
+              child: CircleAvatar(
+                radius: 80,
+                backgroundColor: const Color(0xFFFDD000),
+                child: CircleAvatar(
+                  radius: 75,
+                  backgroundColor: Colors.white,
+                  backgroundImage: selectedAvatar != null
+                      ? AssetImage(selectedAvatar!)
+                      : null,
+                  child: selectedAvatar == null
+                      ? const Icon(Icons.person, size: 40, color: Colors.grey)
+                      : null,
+                ),
               ),
             ),
-            const SizedBox(width: 15),
-            // Right side - all other fields in proper layout
             Expanded(
               child: Column(
                 children: [
-                  // Username - full width at top
                   _buildTextField(
                     Icons.person,
                     "Username",
                     controller: usernameController,
                   ),
                   const SizedBox(height: 10),
-                  // Password and Confirm Password row
                   Row(
                     children: [
                       Expanded(
@@ -874,7 +908,7 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Password",
                           hidePassword,
-                          (val) => setState(() => hidePassword = !hidePassword),
+                              (val) => setState(() => hidePassword = !hidePassword),
                           passwordController,
                         ),
                       ),
@@ -884,8 +918,8 @@ class _RegisterPageState extends State<RegisterPage>
                           Icons.lock,
                           "Confirm Password",
                           hideConfirmPassword,
-                          (val) => setState(
-                            () => hideConfirmPassword = !hideConfirmPassword,
+                              (val) => setState(
+                                () => hideConfirmPassword = !hideConfirmPassword,
                           ),
                           confirmPasswordController,
                         ),
@@ -893,7 +927,6 @@ class _RegisterPageState extends State<RegisterPage>
                     ],
                   ),
                   const SizedBox(height: 10),
-                  // School and Age row
                   Row(
                     children: [
                       Expanded(
@@ -913,41 +946,52 @@ class _RegisterPageState extends State<RegisterPage>
                     ],
                   ),
                   const SizedBox(height: 10),
-                  // Category and Sex row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildCategoryDropdown(
-                          "Category",
-                          onChanged: (v) =>
-                              setState(() => selectedCategory = v),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildSexDropdown(
-                          "Sex",
-                          onChanged: (v) => setState(() => selectedSex = v),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Province and City row
-                  Row(
-                    children: [
-                      Expanded(child: _provinceDropdown()),
-                      const SizedBox(width: 10),
-                      Expanded(child: _cityDropdown()),
-                    ],
-                  ),
                 ],
               ),
             ),
           ],
         ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildAvatarDropdown(
+                "Avatar",
+                icon: Icons.camera_alt,
+                onChanged: (value) {
+                  setState(() {
+                    selectedAvatar = "$value";
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildCategoryDropdown(
+                "Category",
+                onChanged: (v) => setState(() => selectedCategory = v),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildSexDropdown(
+                "Sex",
+                onChanged: (v) => setState(() => selectedSex = v),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(child: _regionDropdown()),
+            const SizedBox(width: 10),
+            Expanded(child: _provinceDropdown()),
+            const SizedBox(width: 10),
+            Expanded(child: _cityDropdown()),
+          ],
+        ),
       ],
-    );
+    ));
   }
 
   InputDecoration _inputDecoration(String hint, {IconData? icon}) {
@@ -968,11 +1012,11 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildTextField(
-    IconData icon,
-    String hint, {
-    bool isPassword = false,
-    TextEditingController? controller,
-  }) {
+      IconData icon,
+      String hint, {
+        bool isPassword = false,
+        TextEditingController? controller,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -985,12 +1029,12 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildPasswordField(
-    IconData icon,
-    String hint,
-    bool hide,
-    void Function(bool) toggle,
-    TextEditingController controller,
-  ) {
+      IconData icon,
+      String hint,
+      bool hide,
+      void Function(bool) toggle,
+      TextEditingController controller,
+      ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
@@ -1011,10 +1055,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAvatarDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1154,10 +1198,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildAgeDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1200,10 +1244,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildCategoryDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1246,10 +1290,10 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Widget _buildSexDropdown(
-    String label, {
-    IconData? icon,
-    void Function(String?)? onChanged,
-  }) {
+      String label, {
+        IconData? icon,
+        void Function(String?)? onChanged,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: DropdownButtonFormField<String>(
@@ -1289,3 +1333,5 @@ class AdminPage extends StatelessWidget {
     );
   }
 }
+
+
