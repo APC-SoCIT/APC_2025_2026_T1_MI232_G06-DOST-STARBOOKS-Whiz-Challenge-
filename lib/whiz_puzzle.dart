@@ -3,6 +3,9 @@ import 'dart:async';
 import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:confetti/confetti.dart';
+import 'global_music_manager.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 class WhizPuzzle extends StatefulWidget {
   final String userAvatar;
@@ -26,10 +29,15 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
   int _timer = 0;
   bool _isPaused = false;
   bool _isCompleted = false;
+  bool _isNewPersonalRecord = false;
+  bool _isNewBestTime = false;
+  int _starsEarned = 0;
+  int _totalStars = 0;
+  Map<String, dynamic>? _newMilestone;
+  late final ConfettiController _confettiController;
 
   int? _globalFastestTime;
-  int? _globalFastestMoves;
-  final String baseUrl = "http://127.0.0.1:8000";
+  final String baseUrl = "http://localhost:8000";
   int? _fastestTime;
   Timer? _gameTimer;
 
@@ -61,12 +69,20 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
+  }
+
+  @override
   void dispose() {
     _gameTimer?.cancel();
+    _confettiController.dispose();
     super.dispose();
   }
 
   void _startGame() {
+    GlobalMusicManager().stopMusic();
     if (_category == null) {
       _showWarningDialog();
       return;
@@ -78,10 +94,14 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
       _timer = 0;
       _isPaused = false;
       _isCompleted = false;
+      _isNewPersonalRecord = false;  // ADD THIS
+      _isNewBestTime = false;        // ADD THIS
+      _starsEarned = 0;              // ADD THIS
+      _totalStars = 0;               // ADD THIS
+      _newMilestone = null;          // ADD THIS
       _initializePuzzle();
     });
 
-    // Add this line:
     _loadFastestTime();
 
     _gameTimer?.cancel();
@@ -188,32 +208,44 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
     return "${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
   }
 
-  // Update _checkCompletion to also load global fastest time
   Future<void> _checkCompletion() async {
     if (_pieces.every((piece) => piece.isLocked)) {
       setState(() {
         _isCompleted = true;
         _gameTimer?.cancel();
-        if (_fastestTime == null || _timer < _fastestTime!) {
-          _fastestTime = _timer;
-        }
       });
+
+      // Store OLD global best time BEFORE saving (this is the record to beat)
+      final oldGlobalBest = _globalFastestTime;
 
       // Save the time first
       await _saveFastestTime();
 
-      // Load global time
-      await _loadGlobalFastestTime();
+      // Award stars
+      await _awardStars();
 
-      // Then show dialog
+      // Check if player beat the old global record
+      if (oldGlobalBest != null && _timer < oldGlobalBest) {
+        setState(() {
+          _isNewBestTime = true;
+        });
+      } else {
+        setState(() {
+          _isNewBestTime = false;
+        });
+      }
+
+      // Show combined win dialog
       if (mounted) {
-        _showCompletionDialog();
+        _showCombinedWinDialog();
       }
     }
   }
 
   Future<void> _saveFastestTime() async {
     try {
+      debugPrint('Saving fastest time: $_timer seconds for difficulty: $_difficulty, category: $_category');
+
       final response = await http.post(
         Uri.parse('$baseUrl/api/game/fastest-time'),
         headers: {'Content-Type': 'application/json'},
@@ -227,11 +259,24 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
         }),
       );
 
+      debugPrint('Save fastest time response: ${response.statusCode}');
+      debugPrint('Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['is_new_record']) {
-          await _loadGlobalFastestTime();
-        }
+
+        // Determine if it's a new personal record
+        bool isNewRecord = data['is_new_record'] ?? false;
+
+        setState(() {
+          _isNewPersonalRecord = isNewRecord;
+        });
+
+        debugPrint('Is new personal record: $isNewRecord');
+
+        // Reload to get updated times
+        await _loadFastestTime();
+        await _loadGlobalFastestTime();
       }
     } catch (e) {
       debugPrint('Error saving fastest time: $e');
@@ -285,86 +330,329 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        child: Container(
-          width: 300,
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (_) {
+        return Center(
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            child: Container(
+              width: 280,
+              padding: const EdgeInsets.all(26),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(width: 24),
-                  const Text(
-                    "PAUSED!",
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFE6833A),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const SizedBox(width: 24),
+                      const Text(
+                        "PAUSED!",
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFE6833A),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 22, color: Colors.black54),
+                        onPressed: () async {
+                          try {
+                            await FlameAudio.play('click1.wav');
+                          } catch (e) {
+                            debugPrint('Click sound not found: $e');
+                          }
+                          Navigator.pop(context);
+                          setState(() => _isPaused = false);
+                          _resumeGame();
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+
+                  // RESUME BUTTON
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            await FlameAudio.play('click1.wav');
+                          } catch (e) {
+                            debugPrint('Click sound not found: $e');
+                          }
+                          Navigator.pop(context);
+                          setState(() => _isPaused = false);
+                          _resumeGame();
+                      },
+                      icon: const Icon(Icons.play_arrow, size: 20),
+                      label: const Text(
+                        "RESUME",
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE6833A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 0,
+                      ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 24, color: Colors.black54),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      setState(() => _isPaused = false);
-                      _resumeGame();
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                  const SizedBox(height: 14),
+
+                  // RESTART BUTTON
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        try {
+                          await FlameAudio.play('click1.wav');
+                        } catch (e) {
+                          debugPrint('Click sound not found: $e');
+                        }
+                        Navigator.pop(context);
+
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => Dialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            child: Container(
+                              width: 400,
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.refresh, color: Color(0xFFFDD000), size: 60),
+                                  const SizedBox(height: 15),
+                                  const Text(
+                                    "Restart Game",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    "Do you really want to restart? Your current progress will be lost.",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 25),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextButton(
+                                          onPressed: () async {
+                                            try {
+                                              await FlameAudio.play('click1.wav');
+                                            } catch (e) {
+                                              debugPrint('Click sound not found: $e');
+                                            }
+                                            Navigator.pop(context, false);
+                                          },
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            side: const BorderSide(color: Color(0xFFE6833A), width: 1),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                          ),
+                                          child: const Text(
+                                            "No",
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Color(0xFFE6833A),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 15),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () async {
+                                            try {
+                                              await FlameAudio.play('click1.wav');
+                                            } catch (e) {
+                                              debugPrint('Click sound not found: $e');
+                                            }
+                                            Navigator.pop(context, true);
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFFFDD000),
+                                            foregroundColor: const Color(0xFF816A03),
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                          ),
+                                          child: const Text(
+                                            "Yes",
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+
+                        if (confirmed == true && mounted) {
+                          setState(() => _isPaused = false);
+                          _startGame();
+                        } else if (mounted) {
+                          setState(() => _isPaused = false);
+                          _resumeGame();
+                        }
+                      },
+                      icon: const Icon(Icons.refresh, size: 20),
+                      label: const Text(
+                        "RESTART",
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFDD000),
+                        foregroundColor: const Color(0xFF816A03),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // EXIT BUTTON
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        try {
+                          await FlameAudio.play('click1.wav');
+                        } catch (e) {
+                          debugPrint('Click sound not found: $e');
+                        }
+                        Navigator.pop(context);
+
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => Dialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            child: Container(
+                              width: 400,
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.exit_to_app, color: Colors.red, size: 60),
+                                  const SizedBox(height: 15),
+                                  const Text(
+                                    "Exit Game",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    "Do you want to exit? Your current progress will be lost.",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 25),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextButton(
+                                          onPressed: () async {
+                                            try {
+                                              await FlameAudio.play('click1.wav');
+                                            } catch (e) {
+                                              debugPrint('Click sound not found: $e');
+                                            }
+                                            Navigator.pop(context, false);
+                                          },
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            side: const BorderSide(color: Color(0xFFE6833A), width: 1),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                          ),
+                                          child: const Text(
+                                            "No",
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Color(0xFFE6833A),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 15),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () async {
+                                            try {
+                                              await FlameAudio.play('click1.wav');
+                                            } catch (e) {
+                                              debugPrint('Click sound not found: $e');
+                                            }
+                                            Navigator.pop(context, true);
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                          ),
+                                          child: const Text(
+                                            "Yes",
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+
+                        if (confirmed == true && mounted) {
+                          Navigator.pop(context);
+                        } else if (mounted) {
+                          setState(() => _isPaused = false);
+                          _resumeGame();
+                        }
+                      },
+                      icon: const Icon(Icons.home, size: 20),
+                      label: const Text(
+                        "EXIT",
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.black54,
+                        side: const BorderSide(color: Colors.black26, width: 2),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    setState(() => _isPaused = false);
-                    _resumeGame();
-                  },
-                  icon: const Icon(Icons.play_arrow, size: 22),
-                  label: const Text(
-                    "RESUME",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE6833A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    elevation: 0,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                  },
-                  icon: const Icon(Icons.home, size: 22),
-                  label: const Text(
-                    "EXIT",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.black54,
-                    side: const BorderSide(color: Colors.black26, width: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -375,98 +663,6 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
         setState(() => _timer++);
       }
     });
-  }
-
-  void _showCompletionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          width: 420,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE6833A).withValues(alpha:0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.emoji_events,
-                  size: 60,
-                  color: Color(0xFFE6833A),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                "FANTASTIC!",
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFE6833A),
-                ),
-              ),
-              const SizedBox(height: 20),
-              _PuzzleWinStatsAnimation(
-                timeSeconds: _timer,
-                moves: _moves,
-                fastestTime: _fastestTime,
-                globalFastestTime: _globalFastestTime,
-                globalFastestMoves: _globalFastestMoves,
-              ),
-              const SizedBox(height: 26),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.pop(context);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFE6833A),
-                        side: const BorderSide(color: Color(0xFFE6833A), width: 2),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      ),
-                      child: const Text(
-                        "EXIT",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _startGame();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE6833A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        "PLAY AGAIN",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _loadGlobalFastestTime() async {
@@ -489,13 +685,71 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
           if (times.isNotEmpty) {
             setState(() {
               _globalFastestTime = times[0]['time_seconds'];
-              _globalFastestMoves = times[0]['moves'];
             });
           }
         }
       }
     } catch (e) {
       debugPrint('Error loading global fastest time: $e');
+    }
+  }
+
+  Future<void> _awardStars() async {
+    try {
+      int starsEarned = _calculateStars();
+      debugPrint('Awarding $starsEarned stars for difficulty: $_difficulty, category: $_category');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/players/${widget.playerId}/stars'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'stars': starsEarned,
+          'game_type': 'puzzle',
+          'difficulty': _difficulty,
+          'category': _category,
+        }),
+      );
+
+      debugPrint('Stars API response: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _starsEarned = starsEarned;
+          _totalStars = data['total_stars'];
+          _newMilestone = data['new_milestone'];
+        });
+      } else {
+        debugPrint('Failed to award stars: ${response.statusCode}');
+        setState(() {
+          _starsEarned = starsEarned;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error awarding stars: $e');
+      setState(() {
+        _starsEarned = _calculateStars();
+      });
+    }
+  }
+
+  int _calculateStars() {
+    final baseStars = _difficulty == "EASY" ? 1 : (_difficulty == "AVERAGE" ? 2 : 3);
+
+    if (_globalFastestTime == null) {
+      return baseStars * 5;
+    }
+
+    final performanceRatio = _globalFastestTime! / _timer;
+
+    if (performanceRatio >= 1.0) {
+      return baseStars * 5;
+    } else if (performanceRatio >= 0.8) {
+      return baseStars * 3;
+    } else if (performanceRatio >= 0.6) {
+      return baseStars * 2;
+    } else {
+      return baseStars;
     }
   }
 
@@ -522,7 +776,14 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
                 children: [
                   Expanded(
                     child: TextButton(
-                      onPressed: () => Navigator.pop(context, false),
+                      onPressed: () async {
+                        try {
+                          await FlameAudio.play('click1.wav');
+                        } catch (e) {
+                          debugPrint('Click sound not found: $e');
+                        }
+                        Navigator.pop(context, false);
+                      },
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         side: const BorderSide(color: Color(0xFF046EB8), width: 1),
@@ -535,7 +796,14 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
                   const SizedBox(width: 15),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () async {
+                        try {
+                          await FlameAudio.play('click1.wav');
+                        } catch (e) {
+                          debugPrint('Click sound not found: $e');
+                        }
+                        Navigator.pop(context, true);
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFDD000),
                         foregroundColor: const Color(0xFF816A03),
@@ -557,6 +825,402 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
     if (confirmed == true && mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  void _showCombinedWinDialog() {
+    _confettiController.play();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // Confetti animation
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                ignoring: true,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(10, (index) {
+                    return ConfettiWidget(
+                      confettiController: _confettiController,
+                      blastDirection: pi / 2,
+                      emissionFrequency: 0.05,
+                      numberOfParticles: 10,
+                      maxBlastForce: 15,
+                      minBlastForce: 8,
+                      gravity: 0.3,
+                      colors: const [
+                        Color(0xFFFDD000),
+                        Color(0xFFE6833A),
+                        Color(0xFF046EB8),
+                        Colors.red,
+                        Colors.green,
+                        Colors.orange,
+                        Colors.pink,
+                        Colors.purple,
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            ),
+            Center(
+              child: Dialog(
+                insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                child: Container(
+                  width: 420,
+                  padding: const EdgeInsets.all(30),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Title
+                      Text(
+                        _isNewBestTime ? 'CONGRATULATIONS!' : 'GAME COMPLETED!',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: _isNewBestTime ? const Color(0xFFFDD000) : const Color(0xFFE6833A),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Category
+                      Text(
+                        _category ?? '',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Moves
+                      Text(
+                        'Moves: $_moves',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Star icon and stats
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          // Stars Earned
+                          Column(
+                            children: [
+                              Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFFFDD000).withValues(alpha: 0.2),
+                                ),
+                                child: const Icon(
+                                  Icons.star,
+                                  size: 35,
+                                  color: Color(0xFFFDD000),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Stars Earned',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              TweenAnimationBuilder<int>(
+                                duration: const Duration(milliseconds: 1000),
+                                tween: IntTween(begin: 0, end: _starsEarned),
+                                builder: (context, value, child) {
+                                  return Text(
+                                    '+$value',
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFFDD000),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+
+                          // Current Time
+                          Column(
+                            children: [
+                              Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFFE6833A).withValues(alpha: 0.2),
+                                ),
+                                child: const Icon(
+                                  Icons.timer,
+                                  size: 35,
+                                  color: Color(0xFFE6833A),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Your Time',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              TweenAnimationBuilder<int>(
+                                duration: const Duration(milliseconds: 1500),
+                                tween: IntTween(begin: 0, end: _timer),
+                                builder: (context, value, child) {
+                                  return Text(
+                                    _formatTime(value),
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFE6833A),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Total Stars
+                      if (_totalStars > 0) ...[
+                        Text(
+                          'Total Stars: $_totalStars',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Milestone
+                      if (_newMilestone != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDD000).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFDD000), width: 2),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                '${_newMilestone!['icon']} MILESTONE REACHED!',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFFDD000),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _newMilestone!['prize'],
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Your Previous Best (if exists and not a new record)
+                      if (_fastestTime != null && _timer > _fastestTime!) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Your Previous Best:',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                _formatTime(_fastestTime!),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Best Time Display - Always show if available
+                      if (_globalFastestTime != null || _isNewBestTime) ...[
+                        Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: _isNewBestTime
+                                ? const Color(0xFFFDD000).withValues(alpha: 0.1)
+                                : Colors.grey.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: _isNewBestTime
+                                ? Border.all(color: const Color(0xFFFDD000), width: 2)
+                                : null,
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                _isNewBestTime ? '🏆 YOU BEAT THE RECORD!' : 'Best Time',
+                                style: TextStyle(
+                                  fontSize: _isNewBestTime ? 18 : 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: _isNewBestTime ? const Color(0xFFFDD000) : Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _formatTime(_isNewBestTime ? _timer : (_globalFastestTime ?? _timer)),
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: _isNewBestTime ? const Color(0xFFFDD000) : Colors.black87,
+                                ),
+                              ),
+                              if (_isNewBestTime) ...[
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'New best record!',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // New Personal Record Badge
+                      if (_isNewPersonalRecord) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE6833A),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            '🎉 NEW PERSONAL RECORD!',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      const SizedBox(height: 10),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                try {
+                                  await FlameAudio.play('click1.wav');
+                                } catch (e) {
+                                  debugPrint('Click sound not found: $e');
+                                }
+                                Navigator.pop(context);
+                                Navigator.pop(context);
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFE6833A),
+                                side: const BorderSide(color: Color(0xFFE6833A), width: 2),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                              ),
+                              child: const Text(
+                                "EXIT",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                try {
+                                  await FlameAudio.play('click1.wav');
+                                } catch (e) {
+                                  debugPrint('Click sound not found: $e');
+                                }
+                                Navigator.pop(context);
+                                _startGame();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE6833A),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                elevation: 0,
+                              ),
+                              child: const Text(
+                                "PLAY AGAIN",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      if (_confettiController.state == ConfettiControllerState.playing) {
+        _confettiController.stop();
+      }
+    });
   }
 
   @override
@@ -583,31 +1247,13 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
           child: Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 28),
-                onPressed: () => Navigator.pop(context),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+              Image.asset(
+                "assets/images-logo/starbooksmainlogo.png",
+                width: 150,
+                height: 50,
+                fit: BoxFit.contain,
               ),
-              const SizedBox(width: 12),
-              Image.asset("assets/images-logo/mainlogo.png",
-                  width: 150, height: 50, fit: BoxFit.contain),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildTopNavButton("Home", Icons.home, () {
-                        Navigator.pop(context);
-                      }),
-                      const SizedBox(width: 40),
-                      _buildTopNavButton("Leaderboard", Icons.leaderboard, () {}),
-                    ],
-                  ),
-                ),
-              ),
-              // User avatar with logout functionality
+              const Spacer(),
               MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: GestureDetector(
@@ -630,52 +1276,42 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
         ),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: const BoxDecoration(
             color: Color(0xFFE6833A),
-            boxShadow: [
-              BoxShadow(color: Colors.black12, blurRadius: 3, offset: Offset(0, 2))
-            ],
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3, offset: Offset(0, 2))],
           ),
-          child: const Text(
-            "Whiz Puzzle",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                onPressed: () async {
+                  try {
+                    await FlameAudio.play('click1.wav');
+                  } catch (e) {
+                    debugPrint('Click sound not found: $e');
+                  }
+                  Navigator.pop(context);
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              Expanded(
+                child: Text(
+                  "Whiz Puzzle",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 28),
+            ],
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTopNavButton(String label, IconData icon, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.grey[700], size: 20),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.grey[700],
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Container(height: 3, width: 0, color: Colors.transparent),
-        ],
-      ),
     );
   }
 
@@ -751,7 +1387,14 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
                               }
 
                               return GestureDetector(
-                                onTap: () => setState(() => _category = category),
+                                onTap: () async {
+                                  try {
+                                    await FlameAudio.play('click1.wav');
+                                  } catch (e) {
+                                    debugPrint('Click sound not found: $e');
+                                  }
+                                  setState(() => _category = category);
+                                },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 18),
                                   decoration: BoxDecoration(
@@ -811,7 +1454,14 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
   Widget _buildDifficultyButton(String level, String gridInfo, Color color) {
     bool isSelected = _difficulty == level;
     return GestureDetector(
-      onTap: () => setState(() => _difficulty = level),
+      onTap: () async {
+        try {
+          await FlameAudio.play('click1.wav');
+        } catch (e) {
+          debugPrint('Click sound not found: $e');
+        }
+        setState(() => _difficulty = level);
+      },
       child: Container(
         width: 240,
         padding: const EdgeInsets.symmetric(vertical: 22),
@@ -1082,7 +1732,14 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
                 alignment: Alignment.centerRight,
                 child: IconButton(
                   icon: const Icon(Icons.pause_circle, size: 44, color: Color(0xFFE6833A)),
-                  onPressed: _showPauseDialog,
+                  onPressed: () async {
+                    try {
+                      await FlameAudio.play('click1.wav');
+                    } catch (e) {
+                      debugPrint('Click sound not found: $e');
+                    }
+                    _showPauseDialog();
+                  },
                 ),
               ),
             ],
@@ -1141,376 +1798,3 @@ class PuzzlePiece {
   });
 }
 
-// Animation widget for completion stats
-class _PuzzleWinStatsAnimation extends StatefulWidget {
-  final int timeSeconds;
-  final int moves;
-  final int? fastestTime;
-  final int? globalFastestTime;
-  final int? globalFastestMoves;
-
-  const _PuzzleWinStatsAnimation({
-    required this.timeSeconds,
-    required this.moves,
-    this.fastestTime,
-    this.globalFastestTime,
-    this.globalFastestMoves,
-  });
-
-  @override
-  State<_PuzzleWinStatsAnimation> createState() => _PuzzleWinStatsAnimationState();
-}
-
-class _PuzzleWinStatsAnimationState extends State<_PuzzleWinStatsAnimation>
-    with TickerProviderStateMixin {
-  late final AnimationController _timeController;
-  late final AnimationController _fastestTimeController;
-  late final AnimationController _globalFastestTimeController;
-  late final AnimationController _timePopController;
-  late final AnimationController _fastestTimePopController;
-  late final AnimationController _globalFastestTimePopController;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _timeController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _fastestTimeController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _globalFastestTimeController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _timePopController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-
-    _fastestTimePopController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-
-    _globalFastestTimePopController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-
-    _startSequence();
-  }
-
-  Future<void> _startSequence() async {
-    // Check if player just set a new personal record
-    final bool isNewPersonalRecord = widget.fastestTime == null ||
-        widget.timeSeconds <= widget.fastestTime!;
-
-    // Check if player just set a new global record
-    final bool isNewGlobalRecord = widget.globalFastestTime == null ||
-        widget.timeSeconds < widget.globalFastestTime!;
-
-    // 1. Count up time
-    await _timeController.forward();
-    await _timePopController.forward();
-    await Future.delayed(const Duration(milliseconds: 200));
-    _timePopController.reverse();
-
-    // 2. Show personal fastest time (only if NOT a new record)
-    if (!isNewPersonalRecord && widget.fastestTime != null) {
-      await _fastestTimeController.forward();
-      await _fastestTimePopController.forward();
-      await Future.delayed(const Duration(milliseconds: 200));
-      _fastestTimePopController.reverse();
-    }
-
-    // 3. Count up global fastest time (only if player beat it)
-    if (isNewGlobalRecord && widget.globalFastestTime != null) {
-      await _globalFastestTimeController.forward();
-      await _globalFastestTimePopController.forward();
-      await Future.delayed(const Duration(milliseconds: 200));
-      _globalFastestTimePopController.reverse();
-    }
-  }
-
-  @override
-  void dispose() {
-    _timeController.dispose();
-    _fastestTimeController.dispose();
-    _globalFastestTimeController.dispose();
-    _timePopController.dispose();
-    _fastestTimePopController.dispose();
-    _globalFastestTimePopController.dispose();
-    super.dispose();
-  }
-
-  String _formatTime(int seconds) {
-    int mins = seconds ~/ 60;
-    int secs = seconds % 60;
-    return "${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
-  }
-
-  List<Widget> _buildRainbowGlow(double glowIntensity) {
-    return [
-      Positioned.fill(
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.red.withValues(alpha: glowIntensity * 0.4),
-                blurRadius: 30 * glowIntensity,
-                spreadRadius: 8 * glowIntensity,
-              ),
-            ],
-          ),
-        ),
-      ),
-      Positioned.fill(
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.orange.withValues(alpha: glowIntensity * 0.4),
-                blurRadius: 26 * glowIntensity,
-                spreadRadius: 6 * glowIntensity,
-              ),
-            ],
-          ),
-        ),
-      ),
-      Positioned.fill(
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.yellow.withValues(alpha: glowIntensity * 0.4),
-                blurRadius: 22 * glowIntensity,
-                spreadRadius: 5 * glowIntensity,
-              ),
-            ],
-          ),
-        ),
-      ),
-      Positioned.fill(
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.green.withValues(alpha: glowIntensity * 0.4),
-                blurRadius: 18 * glowIntensity,
-                spreadRadius: 4 * glowIntensity,
-              ),
-            ],
-          ),
-        ),
-      ),
-      Positioned.fill(
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blue.withValues(alpha: glowIntensity * 0.4),
-                blurRadius: 14 * glowIntensity,
-                spreadRadius: 3 * glowIntensity,
-              ),
-            ],
-          ),
-        ),
-      ),
-      Positioned.fill(
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.purple.withValues(alpha: glowIntensity * 0.4),
-                blurRadius: 10 * glowIntensity,
-                spreadRadius: 2 * glowIntensity,
-              ),
-            ],
-          ),
-        ),
-      ),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Check if player just set a new personal record
-    final bool isNewPersonalRecord = widget.fastestTime == null ||
-        widget.timeSeconds <= widget.fastestTime!;
-
-    // Check if player just set a new global record
-    final bool isNewGlobalRecord = widget.globalFastestTime == null ||
-        widget.timeSeconds < widget.globalFastestTime!;
-
-    return Column(
-      children: [
-        // Time Played Row
-        AnimatedBuilder(
-          animation: Listenable.merge([_timeController, _timePopController]),
-          builder: (context, child) {
-            final currentSeconds = (_timeController.value * widget.timeSeconds).round();
-            final scale = 1.0 + (_timePopController.value * 0.2);
-            final glowIntensity = _timePopController.value;
-
-            return Transform.scale(
-              scale: scale,
-              child: Column(
-                children: [
-                  Text(
-                    isNewPersonalRecord ? "🎉 NEW PERSONAL RECORD!" : "Your Time:",
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: isNewPersonalRecord ? const Color(0xFFE6833A) : Colors.black54,
-                      fontWeight: isNewPersonalRecord ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Stack(
-                    children: [
-                      if (glowIntensity > 0) ..._buildRainbowGlow(glowIntensity),
-                      Text(
-                        _formatTime(currentSeconds),
-                        style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-
-        // Personal Fastest Time Row (only show if NOT a new record)
-        if (!isNewPersonalRecord && widget.fastestTime != null)
-          AnimatedBuilder(
-            animation: Listenable.merge([_fastestTimeController, _fastestTimePopController]),
-            builder: (context, child) {
-              final currentSeconds = (_fastestTimeController.value * widget.fastestTime!).round();
-              final scale = 1.0 + (_fastestTimePopController.value * 0.2);
-              final glowIntensity = _fastestTimePopController.value;
-
-              return Transform.scale(
-                scale: scale,
-                child: Column(
-                  children: [
-                    const Text(
-                      "Your Previous Best:",
-                      style: TextStyle(fontSize: 16, color: Colors.black54),
-                    ),
-                    const SizedBox(height: 6),
-                    Stack(
-                      children: [
-                        if (glowIntensity > 0) ..._buildRainbowGlow(glowIntensity),
-                        Text(
-                          _formatTime(currentSeconds),
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-
-        // Global Fastest Time Row (only show with animation if player beat it)
-        if (isNewGlobalRecord && widget.globalFastestTime != null) ...[
-          const SizedBox(height: 12),
-          AnimatedBuilder(
-            animation: Listenable.merge([_globalFastestTimeController, _globalFastestTimePopController]),
-            builder: (context, child) {
-              final currentSeconds = (_globalFastestTimeController.value * widget.globalFastestTime!).round();
-              final scale = 1.0 + (_globalFastestTimePopController.value * 0.2);
-              final glowIntensity = _globalFastestTimePopController.value;
-
-              return Transform.scale(
-                scale: scale,
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.emoji_events, color: Color(0xFFFDD000), size: 20),
-                        const SizedBox(width: 6),
-                        const Text(
-                          "Previous Global Record:",
-                          style: TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Stack(
-                      children: [
-                        if (glowIntensity > 0) ..._buildRainbowGlow(glowIntensity),
-                        Text(
-                          _formatTime(currentSeconds),
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFDD000),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "🏆 YOU BEAT THE GLOBAL RECORD! 🏆",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFFFDD000),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ] else if (!isNewGlobalRecord && widget.globalFastestTime != null) ...[
-          // Show global record without animation if player didn't beat it
-          const SizedBox(height: 12),
-          Column(
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.emoji_events, color: Color(0xFFFDD000), size: 20),
-                  const SizedBox(width: 6),
-                  const Text(
-                    "Global Record:",
-                    style: TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _formatTime(widget.globalFastestTime!),
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFFDD000),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
