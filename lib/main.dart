@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
-import 'login.dart';
+import 'splash_screen.dart';
+import 'audio_service.dart'; // Import audio service
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize audio service
+  await AudioService().initialize();
+
   runApp(const MyApp());
 }
 
@@ -12,11 +18,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Starbooks Whiz Challenge',
       theme: ThemeData(
-        fontFamily: "Poppins",
+        fontFamily: 'Poppins',
       ),
-      home: const LogInPage(),
+      home: const SplashScreen(),
     );
   }
 }
