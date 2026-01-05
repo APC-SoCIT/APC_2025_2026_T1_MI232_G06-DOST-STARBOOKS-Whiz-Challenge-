@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_projects/change_password.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'homepage.dart';
+import 'audio_service.dart';
+import 'homepage.dart'; // contains UserProfile class
 
 class EditProfileDialog extends StatefulWidget {
   final UserProfile profile;
@@ -14,7 +15,7 @@ class EditProfileDialog extends StatefulWidget {
 }
 
 class _EditProfileDialogState extends State<EditProfileDialog> {
-  final String baseUrl = "http://127.0.0.1:8000";
+  final String baseUrl = "http://localhost:8000";
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController usernameController;
@@ -28,6 +29,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   String? selectedProvinceId;
   String? selectedCityId;
 
+
   List<Map<String, String>> regions = [];
   List<Map<String, String>> provinces = [];
   List<Map<String, String>> cities = [];
@@ -35,6 +37,36 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   bool saving = false;
   bool showSuccess = false;
   double successOpacity = 1.0;
+
+  String? _validateUsername(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Username is required';
+    }
+    // Check for spaces
+    if (value.contains(' ')) {
+      return 'Username cannot contain spaces';
+    }
+    if (value.trim().length < 3) {
+      return 'Username must be at least 3 characters';
+    }
+    if (value.trim().length > 20) {
+      return 'Username must not exceed 20 characters';
+    }
+    if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value.trim())) {
+      return 'Username can only contain letters, numbers, and underscores';
+    }
+    return null;
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 
   final List<String> avatarPaths = [
     "assets/images-avatars/Adventurer.png",
@@ -67,8 +99,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   late final List<String> avatarNames = avatarPaths
       .map(
         (path) =>
-            path.split('/').last.replaceAll('.png', '').replaceAll('-', ' '),
-      )
+        path.split('/').last.replaceAll('.png', '').replaceAll('-', ' '),
+  )
       .toList();
 
   @override
@@ -85,21 +117,21 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
     fetchRegions().then((_) {
       selectedRegionId = regions.firstWhere(
-        (r) => r['name'] == widget.profile.region,
+            (r) => r['name'] == widget.profile.region,
         orElse: () => {'id': ''},
       )['id'];
 
       if (selectedRegionId != '') {
         fetchProvinces(selectedRegionId!).then((_) {
           selectedProvinceId = provinces.firstWhere(
-            (p) => p['name'] == widget.profile.province,
+                (p) => p['name'] == widget.profile.province,
             orElse: () => {'id': ''},
           )['id'];
 
           if (selectedProvinceId != '') {
             fetchCities(selectedProvinceId!).then((_) {
               selectedCityId = cities.firstWhere(
-                (c) => c['name'] == widget.profile.city,
+                    (c) => c['name'] == widget.profile.city,
                 orElse: () => {'id': ''},
               )['id'];
               setState(() {});
@@ -141,10 +173,10 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         regions = data
             .map<Map<String, String>>(
               (e) => {
-                'id': e['id'].toString(),
-                'name': (e['region_name'] ?? e['name']).toString(),
-              },
-            )
+            'id': e['id'].toString(),
+            'name': (e['region_name'] ?? e['name']).toString(),
+          },
+        )
             .toList();
         setState(() {});
       }
@@ -159,10 +191,10 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         provinces = data
             .map<Map<String, String>>(
               (e) => {
-                'id': e['id'].toString(),
-                'name': (e['province_name'] ?? e['name']).toString(),
-              },
-            )
+            'id': e['id'].toString(),
+            'name': (e['province_name'] ?? e['name']).toString(),
+          },
+        )
             .toList();
         setState(() {});
       }
@@ -177,10 +209,10 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         cities = data
             .map<Map<String, String>>(
               (e) => {
-                'id': e['id'].toString(),
-                'name': (e['city_name'] ?? e['name']).toString(),
-              },
-            )
+            'id': e['id'].toString(),
+            'name': (e['city_name'] ?? e['name']).toString(),
+          },
+        )
             .toList();
         setState(() {});
       }
@@ -188,7 +220,50 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   }
 
   Future<void> saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Validate username
+    String? usernameError = _validateUsername(usernameController.text);
+    if (usernameError != null) {
+      _showError(usernameError);
+      return;
+    }
+
+    // Validate school
+    if (schoolController.text.trim().isEmpty) {
+      _showError('School is required');
+      return;
+    }
+    if (schoolController.text.trim().length < 2) {
+      _showError('School name must be at least 2 characters');
+      return;
+    }
+
+    // Validate required selections
+    if (selectedAge == null) {
+      _showError('Please select an age range');
+      return;
+    }
+
+    if (selectedCategory == null) {
+      _showError('Please select a category');
+      return;
+    }
+
+    if (selectedSex == null) {
+      _showError('Please select your sex');
+      return;
+    }
+
+    if (selectedAvatar == null) {
+      _showError('Please select an avatar');
+      return;
+    }
+
+    // Validate location
+    if (selectedRegionId == null || selectedProvinceId == null || selectedCityId == null) {
+      _showError('Please select Region, Province, and City');
+      return;
+    }
+
     setState(() => saving = true);
 
     try {
@@ -196,8 +271,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         Uri.parse('$baseUrl/api/user/update/${widget.profile.id}'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'username': usernameController.text,
-          'school': schoolController.text,
+          'username': usernameController.text.trim(),
+          'school': schoolController.text.trim(),
           'age': selectedAge,
           'category': selectedCategory,
           'sex': selectedSex,
@@ -208,27 +283,44 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         }),
       );
 
-      if (resp.statusCode == 200) {
+      final data = jsonDecode(resp.body);
+
+      if (resp.statusCode == 200 && data['success'] == true) {
+        // Check if no changes were made
+        if (data['no_changes'] == true) {
+          setState(() => saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No changes were made'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+
         final updatedProfile = widget.profile.copyWith(
-          username: usernameController.text,
-          school: schoolController.text,
+          username: usernameController.text.trim(),
+          school: schoolController.text.trim(),
           age: selectedAge,
           category: selectedCategory,
           sex: selectedSex,
           avatar: selectedAvatar,
           region: regions.firstWhere(
-            (r) => r['id'] == selectedRegionId,
+                (r) => r['id'] == selectedRegionId,
             orElse: () => {'name': ''},
           )['name'],
           province: provinces.firstWhere(
-            (p) => p['id'] == selectedProvinceId,
+                (p) => p['id'] == selectedProvinceId,
             orElse: () => {'name': ''},
           )['name'],
           city: cities.firstWhere(
-            (c) => c['id'] == selectedCityId,
+                (c) => c['id'] == selectedCityId,
             orElse: () => {'name': ''},
           )['name'],
         );
+
+        AudioService().playDialogueSound();
 
         setState(() {
           showSuccess = true;
@@ -240,9 +332,28 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         await Future.delayed(const Duration(seconds: 1));
 
         if (mounted) Navigator.pop(context, updatedProfile);
+      } else {
+        // Handle validation errors
+        setState(() => saving = false);
+
+        // Check if it's a validation error
+        if (resp.statusCode == 422) {
+          final errors = data['errors'] as Map<String, dynamic>?;
+          if (errors != null && errors.isNotEmpty) {
+            final firstError = errors.values.first;
+            final errorMessage = firstError is List ? firstError.first : firstError.toString();
+            _showError(errorMessage);
+          } else {
+            _showError(data['message'] ?? 'Validation failed');
+          }
+        } else {
+          _showError(data['message'] ?? 'Failed to update profile');
+        }
       }
-    } catch (_) {
+    } catch (e) {
       setState(() => saving = false);
+      _showError('Network error. Please check your connection.');
+      print('Error updating profile: $e'); // Debug log
     }
   }
 
@@ -256,439 +367,452 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
         width: showSuccess ? 420 : 850,
-        height: showSuccess ? 320 : 430,
+        height: showSuccess ? 320 : 370,
         padding: const EdgeInsets.all(30),
         child: showSuccess
             ? AnimatedOpacity(
-                opacity: successOpacity,
-                duration: const Duration(seconds: 1),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Image.asset(
-                        "assets/images-logo/bird1.png",
-                        width: 160,
-                        height: 160,
-                        fit: BoxFit.contain,
-                      ),
-                      const Text(
-                        "Profile Updated!",
+          opacity: successOpacity,
+          duration: const Duration(seconds: 1),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  "assets/images-logo/bird1.png",
+                  width: 160,
+                  height: 160,
+                  fit: BoxFit.contain,
+                ),
+                const Text(
+                  "Profile Updated!",
+                  style: TextStyle(
+                    fontFamily: "Poppins",
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Your profile has been saved successfully.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: "Poppins",
+                    fontSize: 14,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        )
+            : Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.edit, color: Colors.black, size: 26),
+                      SizedBox(width: 8),
+                      Text(
+                        'Edit Profile',
                         style: TextStyle(
-                          fontFamily: "Poppins",
+                          fontFamily: 'Poppins',
                           fontWeight: FontWeight.bold,
                           fontSize: 22,
                           color: Colors.black,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        "Your profile has been saved successfully.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: "Poppins",
-                          fontSize: 14,
-                          color: Colors.black54,
+                    ],
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      AudioService().playClickSound();
+                      AudioService().playDialogueSound();
+                      showDialog(
+                        context: context,
+                        builder: (_) => ChangePasswordDialog(
+                          userId: widget.profile.id,
                         ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.vpn_key,
+                      color: Color(0xFF046EB8),
+                    ),
+                    label: const Text(
+                      'Change Password',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        color: Color(0xFF046EB8),
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      side: const BorderSide(
+                        color: Color(0xFF046EB8),
+                        width: 1,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 15),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 75,
+                            backgroundColor: const Color(0xFFFDD000),
+                            child: CircleAvatar(
+                              radius: 70,
+                              backgroundColor: Colors.white,
+                              backgroundImage: selectedAvatar != null
+                                  ? AssetImage(selectedAvatar!)
+                                  : null,
+                              child: selectedAvatar == null
+                                  ? const Icon(
+                                Icons.person,
+                                size: 25,
+                                color: Colors.grey,
+                              )
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 30),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                TextFormField(
+                                  controller: usernameController,
+                                  decoration: _inputDecoration(
+                                    'Username',
+                                  ),
+                                  validator: _validateUsername,
+                                ),
+                                const SizedBox(height: 15),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                      controller: schoolController,
+                                        decoration: _inputDecoration('School'),
+                                        validator: (value) {
+                                          if (value == null || value.trim().isEmpty) {
+                                            return 'School is required';
+                                          }
+                                          if (value.trim().length < 2) {
+                                            return 'School name must be at least 2 characters';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue: selectedAge,
+                                        decoration: _inputDecoration(
+                                          'Age',
+                                        ),
+                                        isExpanded: true,
+                                        items:
+                                        const [
+                                          "0-12",
+                                          "13-17",
+                                          "18-22",
+                                          "23-29",
+                                          "30-39",
+                                          "40+",
+                                        ]
+                                            .map(
+                                              (
+                                              age,
+                                              ) => DropdownMenuItem(
+                                            value: age,
+                                            child: Text(
+                                              age,
+                                              overflow:
+                                              TextOverflow
+                                                  .ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                            .toList(),
+                                        onChanged: (val) => setState(
+                                              () => selectedAge = val,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 15),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child:
+                                      DropdownButtonFormField<String>(
+                                        initialValue: selectedAvatar,
+                                        decoration: _inputDecoration(
+                                          'Avatar',
+                                        ),
+                                        isExpanded: true,
+                                        items: List.generate(
+                                          avatarPaths.length,
+                                              (index) => DropdownMenuItem(
+                                            value: avatarPaths[index],
+                                            child: Text(
+                                              avatarNames[index],
+                                              overflow: TextOverflow
+                                                  .ellipsis,
+                                            ),
+                                          ),
+                                        ),
+                                        onChanged: (val) => setState(
+                                              () => selectedAvatar = val,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue: selectedCategory,
+                                        decoration: _inputDecoration(
+                                          'Category',
+                                        ),
+                                        isExpanded: true,
+                                        items:
+                                        const [
+                                          "Student",
+                                          "Government Employee",
+                                          "Private Employee",
+                                          "Self-Employed",
+                                          "Not Employed",
+                                          "Others",
+                                        ]
+                                            .map(
+                                              (
+                                              cat,
+                                              ) => DropdownMenuItem(
+                                            value: cat,
+                                            child: Text(
+                                              cat,
+                                              overflow:
+                                              TextOverflow
+                                                  .ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                            .toList(),
+                                        onChanged: (val) => setState(
+                                              () => selectedCategory = val,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    Expanded(
+                                      child:
+                                      DropdownButtonFormField<String>(
+                                        initialValue: selectedSex,
+                                        decoration: _inputDecoration(
+                                          'Sex',
+                                        ),
+                                        isExpanded: true,
+                                        items: const ["Male", "Female"]
+                                            .map(
+                                              (
+                                              sex,
+                                              ) => DropdownMenuItem(
+                                            value: sex,
+                                            child: Text(
+                                              sex,
+                                              overflow:
+                                              TextOverflow
+                                                  .ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                            .toList(),
+                                        onChanged: (val) => setState(
+                                              () => selectedSex = val,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              initialValue: selectedRegionId,
+                              decoration: _inputDecoration('Region'),
+                              items: regions
+                                  .map(
+                                    (r) => DropdownMenuItem(
+                                  value: r['id'],
+                                  child: Text(
+                                    r['name'] ?? '',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val == null) return;
+                                setState(() {
+                                  selectedRegionId = val;
+                                  selectedProvinceId = null;
+                                  selectedCityId = null;
+                                  provinces = [];
+                                  cities = [];
+                                });
+                                fetchProvinces(val);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              initialValue: selectedProvinceId,
+                              decoration: _inputDecoration('Province'),
+                              items: provinces
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                  value: p['id'],
+                                  child: Text(
+                                    p['name'] ?? '',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val == null) return;
+                                setState(() {
+                                  selectedProvinceId = val;
+                                  selectedCityId = null;
+                                  cities = [];
+                                });
+                                fetchCities(val);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              initialValue: selectedCityId,
+                              decoration: _inputDecoration('City'),
+                              items: cities
+                                  .map(
+                                    (c) => DropdownMenuItem(
+                                  value: c['id'],
+                                  child: Text(
+                                    c['name'] ?? '',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                                  .toList(),
+                              onChanged: (val) =>
+                                  setState(() => selectedCityId = val),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              )
-            : Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: const [
-                            Icon(Icons.edit, color: Colors.black, size: 26),
-                            SizedBox(width: 8),
-                            Text(
-                              'Edit Profile',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.bold,
-                                fontSize: 22,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                        TextButton.icon(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (_) => ChangePasswordDialog(
-                                userId: widget.profile.id,
-                              ),
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.vpn_key,
-                            color: Color(0xFF046EB8),
-                          ),
-                          label: const Text(
-                            'Change Password',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              color: Color(0xFF046EB8),
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            side: const BorderSide(
-                              color: Color(0xFF046EB8),
-                              width: 1,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // LEFT COLUMN: Avatar Circle + Avatar + Region
-                            SizedBox(
-                              width: 180,
-                              child: Column(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 75,
-                                    backgroundColor: const Color(0xFFFDD000),
-                                    child: CircleAvatar(
-                                      radius: 70,
-                                      backgroundColor: Colors.white,
-                                      backgroundImage: selectedAvatar != null
-                                          ? AssetImage(selectedAvatar!)
-                                          : null,
-                                      child: selectedAvatar == null
-                                          ? const Icon(
-                                              Icons.person,
-                                              size: 25,
-                                              color: Colors.grey,
-                                            )
-                                          : null,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 15),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: selectedAvatar,
-                                    decoration: _inputDecoration('Avatar'),
-                                    isExpanded: true,
-                                    items: List.generate(
-                                      avatarPaths.length,
-                                      (index) => DropdownMenuItem(
-                                        value: avatarPaths[index],
-                                        child: Text(
-                                          avatarNames[index],
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ),
-                                    onChanged: (val) =>
-                                        setState(() => selectedAvatar = val),
-                                  ),
-                                  const SizedBox(height: 15),
-                                  DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    initialValue: selectedRegionId,
-                                    decoration: _inputDecoration('Region'),
-                                    items: regions
-                                        .map(
-                                          (r) => DropdownMenuItem(
-                                            value: r['id'],
-                                            child: Text(
-                                              r['name'] ?? '',
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (val) {
-                                      if (val == null) return;
-                                      setState(() {
-                                        selectedRegionId = val;
-                                        selectedProvinceId = null;
-                                        selectedCityId = null;
-                                        provinces = [];
-                                        cities = [];
-                                      });
-                                      fetchProvinces(val);
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 15),
-
-                            // RIGHT SIDE: Username + 2 columns (Middle + Right)
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  const SizedBox(height: 30),
-                                  // Username - Full width
-                                  TextFormField(
-                                    controller: usernameController,
-                                    decoration: _inputDecoration('Username'),
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Row with Middle and Right columns
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // MIDDLE COLUMN: School, Category, Province
-                                      Expanded(
-                                        child: Column(
-                                          children: [
-                                            TextFormField(
-                                              controller: schoolController,
-                                              decoration: _inputDecoration(
-                                                'School',
-                                              ),
-                                            ),
-                                            const SizedBox(height: 40),
-                                            DropdownButtonFormField<String>(
-                                              initialValue: selectedCategory,
-                                              decoration: _inputDecoration(
-                                                'Category',
-                                              ),
-                                              isExpanded: true,
-                                              items:
-                                                  const [
-                                                        "Student",
-                                                        "Government Employee",
-                                                        "Private Employee",
-                                                        "Self-Employed",
-                                                        "Not Employed",
-                                                        "Others",
-                                                      ]
-                                                      .map(
-                                                        (
-                                                          cat,
-                                                        ) => DropdownMenuItem(
-                                                          value: cat,
-                                                          child: Text(
-                                                            cat,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                      )
-                                                      .toList(),
-                                              onChanged: (val) => setState(
-                                                () => selectedCategory = val,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 15),
-                                            DropdownButtonFormField<String>(
-                                              isExpanded: true,
-                                              initialValue: selectedProvinceId,
-                                              decoration: _inputDecoration(
-                                                'Province',
-                                              ),
-                                              items: provinces
-                                                  .map(
-                                                    (p) => DropdownMenuItem(
-                                                      value: p['id'],
-                                                      child: Text(
-                                                        p['name'] ?? '',
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style:
-                                                            const TextStyle(),
-                                                      ),
-                                                    ),
-                                                  )
-                                                  .toList(),
-                                              onChanged: (val) {
-                                                if (val == null) return;
-                                                setState(() {
-                                                  selectedProvinceId = val;
-                                                  selectedCityId = null;
-                                                  cities = [];
-                                                });
-                                                fetchCities(val);
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 15),
-
-                                      // RIGHT COLUMN: Age, Sex, City
-                                      Expanded(
-                                        child: Column(
-                                          children: [
-                                            DropdownButtonFormField<String>(
-                                              initialValue: selectedAge,
-                                              decoration: _inputDecoration(
-                                                'Age',
-                                              ),
-                                              isExpanded: true,
-                                              items:
-                                                  const [
-                                                        "0-12",
-                                                        "13-17",
-                                                        "18-22",
-                                                        "23-29",
-                                                        "30-39",
-                                                        "40+",
-                                                      ]
-                                                      .map(
-                                                        (
-                                                          age,
-                                                        ) => DropdownMenuItem(
-                                                          value: age,
-                                                          child: Text(
-                                                            age,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                      )
-                                                      .toList(),
-                                              onChanged: (val) => setState(
-                                                () => selectedAge = val,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 40),
-
-                                            DropdownButtonFormField<String>(
-                                              initialValue: selectedSex,
-                                              decoration: _inputDecoration(
-                                                'Sex',
-                                              ),
-                                              isExpanded: true,
-                                              items: const ["Male", "Female"]
-                                                  .map(
-                                                    (sex) => DropdownMenuItem(
-                                                      value: sex,
-                                                      child: Text(
-                                                        sex,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  )
-                                                  .toList(),
-                                              onChanged: (val) => setState(
-                                                () => selectedSex = val,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 15),
-                                            DropdownButtonFormField<String>(
-                                              isExpanded: true,
-                                              initialValue: selectedCityId,
-                                              decoration: _inputDecoration(
-                                                'City',
-                                              ),
-                                              items: cities
-                                                  .map(
-                                                    (c) => DropdownMenuItem(
-                                                      value: c['id'],
-                                                      child: Text(
-                                                        c['name'] ?? '',
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  )
-                                                  .toList(),
-                                              onChanged: (val) => setState(
-                                                () => selectedCityId = val,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      AudioService().playClickSound();
+                      Navigator.pop(context);
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF046EB8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      textStyle: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                      ),
+                      side: const BorderSide(
+                        color: Color(0xFF046EB8),
+                        width: 1,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF046EB8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            textStyle: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                            ),
-                            side: const BorderSide(
-                              color: Color(0xFF046EB8),
-                              width: 1,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFDD000),
-                            foregroundColor: const Color(0xFF816A03),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 14,
-                            ),
-                            textStyle: const TextStyle(
-                              fontFamily: "Poppins",
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          onPressed: saving ? null : saveProfile,
-                          child: saving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('SAVE CHANGES'),
-                        ),
-                      ],
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFDD000),
+                      foregroundColor: const Color(0xFF816A03),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 14,
+                      ),
+                      textStyle: const TextStyle(
+                        fontFamily: "Poppins",
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
-                  ],
-                ),
+                    onPressed: saving ? null : () {
+                      AudioService().playClickSound();
+                      saveProfile();
+                    },
+                    child: saving
+                        ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                        : const Text('SAVE CHANGES'),
+                  ),
+                ],
               ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+
