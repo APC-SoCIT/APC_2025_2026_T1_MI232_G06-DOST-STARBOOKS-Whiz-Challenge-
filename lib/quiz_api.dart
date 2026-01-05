@@ -75,7 +75,7 @@ class GameResultResponse {
 }
 
 class QuizApiService {
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  static const String baseUrl = 'http://localhost:8000/api';
 
   static Future<List<QuizQuestion>> fetchQuestions(
       String category,
@@ -128,37 +128,31 @@ class QuizApiService {
     }
   }
 
-  static Future<GameResultResponse> saveGameResult({
+  static Future<GameResultResponse> saveChallengeResult({
     required String playerId,
-    required String participationType,
     required String category,
     required String difficultyLevel,
     required int score,
-    required int questionsAnswered,
+    required int totalQuestions,
     required int correctAnswers,
-    required int gameDurationSeconds,
-    required String result,
-    int rewardsEarned = 0,
+    required int timeTaken,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/game/save-result');
+      final url = Uri.parse('$baseUrl/game/save-challenge-result');
 
       final body = {
         'player_id': playerId,
-        'participation_type': participationType,
         'category': category,
         'difficulty_level': difficultyLevel,
         'score': score,
-        'questions_answered': questionsAnswered,
+        'total_questions': totalQuestions,
         'correct_answers': correctAnswers,
-        'game_duration_seconds': gameDurationSeconds,
-        'result': result,
-        'rewards_earned': rewardsEarned,
+        'time_taken': timeTaken,
       };
 
       if (kDebugMode) {
-        debugPrint('Saving game result to: $url');
-        debugPrint('Request body: ${json.encode(body)}');
+        debugPrint('🎯 Saving challenge result to: $url');
+        debugPrint('📦 Request body: ${json.encode(body)}');
       }
 
       final response = await http.post(
@@ -176,8 +170,8 @@ class QuizApiService {
       );
 
       if (kDebugMode) {
-        debugPrint('Save result response status: ${response.statusCode}');
-        debugPrint('Save result response body: ${response.body}');
+        debugPrint('✅ Response status: ${response.statusCode}');
+        debugPrint('📄 Response body: ${response.body}');
       }
 
       if (response.statusCode == 201 || response.statusCode == 200) {
@@ -189,9 +183,56 @@ class QuizApiService {
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('Error saving game result: $e');
+        debugPrint('❌ Error saving game result: $e');
       }
       rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> saveBattleResult({
+    required String playerId,
+    required String category,
+    required String difficulty,
+    required int score,
+    required String result,
+    required int questionsAnswered,
+    required int correctAnswers,
+    required String battleId,
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl/game/save-battle-result');
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'player_id': playerId,
+          'category': category,
+          'difficulty_level': difficulty,
+          'player_score': score,  // ✅ Changed from 'score'
+          'result': result,
+          'battle_id': battleId,
+          'questions_answered': questionsAnswered,
+          'correct_answers': correctAnswers,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        debugPrint('✅ Battle result saved successfully');
+
+        if (data['badge_awarded'] != null) {
+          debugPrint('🎯 Badge info: ${data['badge_awarded']}');
+        }
+
+        return data; // ✅ NOW RETURNS DATA
+      } else {
+        debugPrint('⚠️ Failed to save battle result: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('❌ Error saving battle result: $e');
+      return null;
     }
   }
 
@@ -221,12 +262,21 @@ class QuizApiService {
 
   static Future<Map<String, dynamic>> getPlayerBadges(String playerId) async {
     try {
-      final url = Uri.parse('$baseUrl/player-badge/$playerId/badges');
+      final url = Uri.parse('$baseUrl/badges/player/$playerId/summary');
+
+      if (kDebugMode) {
+        debugPrint('🏆 Fetching badges from: $url');
+      }
 
       final response = await http.get(
         url,
         headers: {'Accept': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 10));
+
+      if (kDebugMode) {
+        debugPrint('Response status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -237,7 +287,7 @@ class QuizApiService {
       throw Exception('Failed to load badges');
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('Error fetching badges: $e');
+        debugPrint('❌ Error fetching badges: $e');
       }
       rethrow;
     }
@@ -245,7 +295,7 @@ class QuizApiService {
 
   static Future<Map<String, dynamic>> getBadgeStatistics(String playerId) async {
     try {
-      final url = Uri.parse('$baseUrl/player-badge/$playerId/statistics');
+      final url = Uri.parse('$baseUrl/badges/player/$playerId/statistics');
 
       final response = await http.get(
         url,

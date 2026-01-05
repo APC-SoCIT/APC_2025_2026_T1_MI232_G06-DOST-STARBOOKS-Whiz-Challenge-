@@ -4,6 +4,7 @@ import 'quiz_questions.dart';
 import 'quiz_results.dart';
 import 'quiz_api.dart';
 import 'package:flame_audio/flame_audio.dart';
+import 'global_music_manager.dart';
 
 class QuizScreen extends StatefulWidget {
   final String category;
@@ -62,6 +63,9 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   void initState() {
     super.initState();
+
+    GlobalMusicManager().stopMusic();
+
     _gameStartTime = DateTime.now();
     _loadQuestions();
     _initializeAudio();
@@ -149,6 +153,7 @@ class _QuizScreenState extends State<QuizScreen> {
         });
         return;
       }
+
 
       setState(() {
         _isLoading = false;
@@ -277,9 +282,6 @@ class _QuizScreenState extends State<QuizScreen> {
         ? questionTimes.reduce((a, b) => a + b) / questionTimes.length
         : 0.0;
 
-    final isPerfect = correctAnswers == questions.length;
-    final result = isPerfect ? 'won' : 'lost';
-
     final rewards = correctAnswers * 10;
 
     if (!mounted) return;
@@ -291,25 +293,23 @@ class _QuizScreenState extends State<QuizScreen> {
       ),
     );
 
+    // Around line 175, update _saveResultAndNavigate:
     try {
-      final response = await QuizApiService.saveGameResult(
+      final response = await QuizApiService.saveChallengeResult(
         playerId: widget.userId,
-        participationType: widget.participationType,
         category: widget.category,
         difficultyLevel: _normalizeDifficulty(widget.difficulty),
         score: score,
-        questionsAnswered: questions.length,
+        totalQuestions: questions.length,
         correctAnswers: correctAnswers,
-        gameDurationSeconds: _totalGameDuration,
-        result: result,
-        rewardsEarned: rewards,
+        timeTaken: _totalGameDuration,
       );
 
       if (!mounted) return;
       Navigator.pop(context);
 
       if (response.success) {
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => QuizResultScreen(
@@ -374,109 +374,364 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
-  Future<void> _showExitDialog() async {
+  Future<void> _showPauseDialog() async {
     _timer?.cancel();
     final wasMusicEnabled = _isMusicEnabled;
-    if (wasMusicEnabled && !_showFeedback && !_isAnswerLocked) {
+    if (wasMusicEnabled) {
       _pauseBackgroundMusic();
     }
 
-    final confirmed = await showDialog<bool>(
+    showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: 280,
+          padding: const EdgeInsets.all(26),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: Color(0xFFF39C12),
-                size: 60,
-              ),
-              const SizedBox(height: 15),
-              const Text(
-                "Exit Game?",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                "Are you sure you want to exit? Your progress will be lost.",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
-              ),
-              const SizedBox(height: 25),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(
-                          color: Color(0xFF046EB8),
-                          width: 1,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: const Text(
-                        "Cancel",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          color: Color(0xFF046EB8),
-                        ),
-                      ),
+                  const SizedBox(width: 24),
+                  Text(
+                    "PAUSED!",
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: _getDifficultyColor(),
+                      fontFamily: 'Poppins',
                     ),
                   ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE74C3C),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: const Text(
-                        "Exit",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 22, color: Colors.black54),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _resumeTimer();
+                      if (wasMusicEnabled && _isMusicEnabled) {
+                        _resumeBackgroundMusic();
+                      }
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
+              ),
+              const SizedBox(height: 28),
+
+              // RESUME BUTTON
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _resumeTimer();
+                    if (wasMusicEnabled && _isMusicEnabled) {
+                      _resumeBackgroundMusic();
+                    }
+                  },
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text(
+                    "RESUME",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _getDifficultyColor(),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Replace the RESTART BUTTON section in _showPauseDialog() (around line 419)
+// RESTART BUTTON (with confirmation)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    // Keep pause dialog open, show confirmation
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => Dialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Container(
+                          width: 400,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.refresh,
+                                color: Color(0xFFF39C12),
+                                size: 60,
+                              ),
+                              const SizedBox(height: 15),
+                              const Text(
+                                "Restart Game",
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                "Do you really want to restart? Your progress will be lost.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 25),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        side: const BorderSide(
+                                          color: Color(0xFF046EB8),
+                                          width: 1,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "No",
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 14,
+                                          color: Color(0xFF046EB8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 15),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFFF39C12),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Yes",
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+
+                    if (confirmed == true && mounted) {
+                      // Close pause dialog first
+                      Navigator.pop(context);
+                      // Stop music and restart game
+                      _stopBackgroundMusic();
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => QuizScreen(
+                            category: widget.category,
+                            difficulty: widget.difficulty,
+                            userId: widget.userId,
+                            participationType: widget.participationType,
+                          ),
+                        ),
+                      );
+                    }
+                    // If cancelled, confirmation dialog closes automatically, pause dialog remains open
+                  },
+                  icon: const Icon(Icons.refresh, size: 20),
+                  label: const Text(
+                    "RESTART",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF39C12),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+// EXIT BUTTON
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    // Keep pause dialog open, show confirmation
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => Dialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Container(
+                          width: 400,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.exit_to_app,
+                                color: Color(0xFFE74C3C),
+                                size: 60,
+                              ),
+                              const SizedBox(height: 15),
+                              const Text(
+                                "Exit Game",
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                "Do you want to exit? Your progress will be lost.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 25),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        side: const BorderSide(
+                                          color: Color(0xFF046EB8),
+                                          width: 1,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Cancel",
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 14,
+                                          color: Color(0xFF046EB8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 15),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFFE74C3C),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Exit",
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+
+                    if (confirmed == true && mounted) {
+                      // Close pause dialog first
+                      Navigator.pop(context);
+                      // Stop music
+                      _stopBackgroundMusic();
+                      // Pop twice to exit quiz screen
+                      Navigator.of(context).pop();
+                      Navigator.of(context).pop();
+                    }
+                    // If cancelled, confirmation dialog closes automatically, pause dialog remains open
+                  },
+                  icon: const Icon(Icons.home, size: 20),
+                  label: const Text(
+                    "EXIT",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black54,
+                    side: const BorderSide(color: Colors.black26, width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
         ),
       ),
     );
-
-    if (confirmed == true && mounted) {
-      _stopBackgroundMusic();
-      Navigator.pop(context);
-    } else if (mounted && !_showFeedback && !_isAnswerLocked) {
-      _resumeTimer();
-      if (wasMusicEnabled && _isMusicEnabled) {
-        _resumeBackgroundMusic();
-      }
-    }
   }
 
   @override
@@ -507,6 +762,19 @@ class _QuizScreenState extends State<QuizScreen> {
       const Color(0xFF9B59B6),
     ];
     return colors[index % colors.length];
+  }
+
+  String _getDifficultyBackground() {
+    switch (widget.difficulty.toUpperCase()) {
+      case "EASY":
+        return "assets/backgrounds/easybg.png";
+      case "AVERAGE":
+        return "assets/backgrounds/averagebg.png";
+      case "DIFFICULT":
+        return "assets/backgrounds/difficultbg.png";
+      default:
+        return "assets/backgrounds/easybg.png";
+    }
   }
 
   @override
@@ -655,16 +923,24 @@ class _QuizScreenState extends State<QuizScreen> {
     final question = questions[currentQuestionIndex];
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          _buildHeader(difficultyColor),
-          Expanded(
-            child: _showFeedback
-                ? _buildFeedbackView(difficultyColor)
-                : _buildQuestionView(question, difficultyColor),
+      body: Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(_getDifficultyBackground()),
+            fit: BoxFit.cover,
+            opacity: 0.3,
           ),
-        ],
+        ),
+        child: Column(
+          children: [
+            _buildHeader(difficultyColor),
+            Expanded(
+              child: _showFeedback
+                  ? _buildFeedbackView(difficultyColor)
+                  : _buildQuestionView(question, difficultyColor),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -705,49 +981,37 @@ class _QuizScreenState extends State<QuizScreen> {
     return Center(
       child: SingleChildScrollView(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
+          constraints: const BoxConstraints(maxWidth: 700),
+          margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Top row with pause and music controls
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  TextButton.icon(
-                    onPressed: _showExitDialog,
+                  IconButton(
+                    onPressed: _showPauseDialog,
                     icon: const Icon(
-                      Icons.arrow_back,
+                      Icons.pause_circle,
                       color: Colors.black87,
-                      size: 18,
+                      size: 32,
                     ),
-                    label: const Text(
-                      'Exit Game',
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 0,
-                        vertical: 4,
-                      ),
-                    ),
+                    tooltip: 'Pause Game',
                   ),
                   IconButton(
                     onPressed: _toggleMusic,
                     icon: Icon(
                       _isMusicEnabled ? Icons.volume_up : Icons.volume_off,
                       color: Colors.black87,
-                      size: 28,
+                      size: 24,
                     ),
                     tooltip: _isMusicEnabled ? 'Mute Music' : 'Unmute Music',
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+              // Timer circle
               TweenAnimationBuilder<double>(
                 duration: const Duration(milliseconds: 300),
                 tween: Tween<double>(
@@ -756,14 +1020,14 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
                 builder: (context, value, child) {
                   return SizedBox(
-                    width: 120,
-                    height: 120,
+                    width: 90,
+                    height: 90,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
                         Container(
-                          width: 120,
-                          height: 120,
+                          width: 90,
+                          height: 90,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.white,
@@ -777,11 +1041,11 @@ class _QuizScreenState extends State<QuizScreen> {
                           ),
                         ),
                         SizedBox(
-                          width: 120,
-                          height: 120,
+                          width: 90,
+                          height: 90,
                           child: CircularProgressIndicator(
                             value: value,
-                            strokeWidth: 8,
+                            strokeWidth: 6,
                             backgroundColor: const Color(0xFFE0E0E0),
                             valueColor: AlwaysStoppedAnimation<Color>(
                               difficultyColor,
@@ -792,7 +1056,7 @@ class _QuizScreenState extends State<QuizScreen> {
                         Text(
                           "$_secondsRemaining",
                           style: TextStyle(
-                            fontSize: 48,
+                            fontSize: 36,
                             fontWeight: FontWeight.bold,
                             color: difficultyColor,
                             fontFamily: 'Poppins',
@@ -803,14 +1067,14 @@ class _QuizScreenState extends State<QuizScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     "Question: ${currentQuestionIndex + 1} of ${questions.length}",
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Poppins',
                     ),
@@ -818,19 +1082,19 @@ class _QuizScreenState extends State<QuizScreen> {
                   Text(
                     "Score: $score",
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Poppins',
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 15),
+              const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: difficultyColor.withValues(alpha: 0.15),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: difficultyColor, width: 2),
                 ),
@@ -844,15 +1108,15 @@ class _QuizScreenState extends State<QuizScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 18,
-                  childAspectRatio: 2.8,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 2.5,
                 ),
                 itemCount: question.options.length,
                 itemBuilder: (context, index) {
@@ -876,11 +1140,11 @@ class _QuizScreenState extends State<QuizScreen> {
         onTap: () => _handleAnswer(answer),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: isSelected ? buttonColor : Colors.white,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: buttonColor, width: isSelected ? 4 : 3),
+            border: Border.all(color: buttonColor, width: isSelected ? 3 : 2),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.08),
@@ -893,7 +1157,7 @@ class _QuizScreenState extends State<QuizScreen> {
             child: Text(
               answer,
               style: TextStyle(
-                fontSize: 15, // Increased from 13 to 15
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: isSelected ? Colors.white : Colors.black87,
                 fontFamily: 'Poppins',
@@ -911,15 +1175,15 @@ class _QuizScreenState extends State<QuizScreen> {
     return Center(
       child: SingleChildScrollView(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 900),
-          margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+          constraints: const BoxConstraints(maxWidth: 700),
+          margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 _isCorrect ? "CORRECT ANSWER!" : "WRONG ANSWER!",
                 style: TextStyle(
-                  fontSize: 50,
+                  fontSize: 38,
                   fontWeight: FontWeight.bold,
                   color: _isCorrect
                       ? const Color(0xFF1D9358)
@@ -929,15 +1193,15 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 25),
               ElevatedButton(
                 onPressed: _nextQuestion,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF046EB8),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 30,
-                    vertical: 20,
+                    horizontal: 25,
+                    vertical: 16,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
@@ -949,7 +1213,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     Text(
                       "Next Question",
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         fontFamily: 'Poppins',
                       ),
@@ -959,12 +1223,12 @@ class _QuizScreenState extends State<QuizScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 25),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: difficultyColor.withValues(alpha: 0.15),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: difficultyColor, width: 2),
                 ),
@@ -975,8 +1239,8 @@ class _QuizScreenState extends State<QuizScreen> {
                       padding: const EdgeInsets.only(right: 12),
                       child: Image.asset(
                         "assets/images-icons/lightbulb.png",
-                        width: 40,
-                        height: 40,
+                        width: 35,
+                        height: 35,
                         errorBuilder: (context, error, stackTrace) {
                           return const Icon(
                             Icons.lightbulb,
@@ -993,7 +1257,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           Text(
                             questions[currentQuestionIndex].question,
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                               fontFamily: 'Poppins',
                             ),
@@ -1002,7 +1266,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           RichText(
                             text: TextSpan(
                               style: const TextStyle(
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontFamily: 'Poppins',
                                 color: Colors.black87,
                               ),

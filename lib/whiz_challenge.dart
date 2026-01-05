@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'quiz_game.dart';
+import 'global_music_manager.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 class WhizChallenge extends StatefulWidget {
   final String userId;
@@ -23,6 +25,12 @@ class _WhizChallengeState extends State<WhizChallenge> {
   String? _hoveredCategory;
 
   Future<void> _logoutDialog() async {
+    try {
+      await FlameAudio.play('click1.wav');
+    } catch (e) {
+      debugPrint('Click sound not found: $e');
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => Dialog(
@@ -54,7 +62,14 @@ class _WhizChallengeState extends State<WhizChallenge> {
                 children: [
                   Expanded(
                     child: TextButton(
-                      onPressed: () => Navigator.pop(context, false),
+                      onPressed: () {
+                        try {
+                          FlameAudio.play('click1.wav');
+                        } catch (e) {
+                          debugPrint('Click sound not found: $e');
+                        }
+                        Navigator.pop(context, false);
+                      },
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         side: const BorderSide(color: Color(0xFF046EB8), width: 1),
@@ -73,7 +88,14 @@ class _WhizChallengeState extends State<WhizChallenge> {
                   const SizedBox(width: 15),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () {
+                        try {
+                          FlameAudio.play('click1.wav');
+                        } catch (e) {
+                          debugPrint('Click sound not found: $e');
+                        }
+                        Navigator.pop(context, true);
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFDD000),
                         foregroundColor: const Color(0xFF816A03),
@@ -110,7 +132,6 @@ class _WhizChallengeState extends State<WhizChallenge> {
       body: Column(
         children: [
           _buildTopBar(),
-          _buildHeaderBar(),
           Expanded(
             child: _buildSelectionScreen(),
           ),
@@ -120,136 +141,96 @@ class _WhizChallengeState extends State<WhizChallenge> {
   }
 
   Widget _buildTopBar() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 28),
-            onPressed: () => Navigator.pop(context),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-          const SizedBox(width: 12),
-          Image.asset(
-            "assets/images-logo/mainlogo.png",
-            width: 150,
-            height: 50,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // White top section with logo and avatar
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          child: Row(
+            children: [
+              Image.asset(
+                "assets/images-logo/starbooksmainlogo.png",
                 width: 150,
                 height: 50,
-                color: Colors.grey[300],
-                child: const Center(child: Text('Logo')),
-              );
-            },
-          ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildTopNavButton("Home", Icons.home, () {
-                    Navigator.pop(context);
-                  }),
-                  const SizedBox(width: 40),
-                  _buildTopNavButton("Leaderboard", Icons.leaderboard, () {
-                    // Navigate to leaderboard
-                  }),
-                ],
+                fit: BoxFit.contain,
               ),
-            ),
-          ),
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: _logoutDialog,
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF046EB8), width: 3),
-                ),
-                child: ClipOval(
-                  child: Image.asset(
-                    widget.userAvatar,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: const Color(0xFF046EB8),
-                        child: const Icon(Icons.person, color: Colors.white),
-                      );
-                    },
+              const Spacer(),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: _logoutDialog,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF046EB8), width: 3),
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        widget.userAvatar,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopNavButton(String label, IconData icon, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.grey[700]),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.normal,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 3),
-          Container(height: 3, width: 0, color: Colors.transparent),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderBar() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFDD000),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 3,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: const Text(
-        "Whiz Challenge",
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Color(0xFF915701),
-          fontSize: 17,
-          fontWeight: FontWeight.bold,
         ),
-      ),
+        // Colored header bar with back button and game name
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFDD000),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 3,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF915701), size: 28),
+                onPressed: () async {
+                  try {
+                    await FlameAudio.play('click1.wav');
+                  } catch (e) {
+                    debugPrint('Click sound not found: $e');
+                  }
+                  Navigator.pop(context);
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              Expanded(
+                child: Text(
+                  "Starbooks Whiz Challenge",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF915701),
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 28), // Balance the back button space
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildSelectionScreen() {
     return Container(
-      color: const Color(0xFFF5F5F5),
+      color: Colors.white,
       child: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -305,7 +286,13 @@ class _WhizChallengeState extends State<WhizChallenge> {
                 const SizedBox(height: 50),
                 // PLAY Button
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    try {
+                      await FlameAudio.play('click1.wav');
+                    } catch (e) {
+                      debugPrint('Click sound not found: $e');
+                    }
+                    GlobalMusicManager().stopMusic();
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -353,7 +340,14 @@ class _WhizChallengeState extends State<WhizChallenge> {
       onEnter: (_) => setState(() => _hoveredCategory = category),
       onExit: (_) => setState(() => _hoveredCategory = null),
       child: GestureDetector(
-        onTap: () => setState(() => selectedCategory = category),
+        onTap: () async {
+          try {
+            await FlameAudio.play('click1.wav');
+          } catch (e) {
+            debugPrint('Click sound not found: $e');
+          }
+          setState(() => selectedCategory = category);
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           width: 220,
@@ -377,14 +371,10 @@ class _WhizChallengeState extends State<WhizChallenge> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              // Image section - fills available space
-              // Image section - fills available space
-              // Image section - fills available space
-              // Image section - fills available space
               Expanded(
                 child: ClipRect(
                   child: Transform.scale(
-                    scale: 1.35, // Adjust this value to make image bigger (1.3 = 30% bigger)
+                    scale: 1.35,
                     child: Container(
                       width: double.infinity,
                       padding: EdgeInsets.zero,
@@ -415,13 +405,11 @@ class _WhizChallengeState extends State<WhizChallenge> {
                   ),
                 ),
               ),
-              // Divider line
               Container(
                 height: 2,
                 width: double.infinity,
                 color: Colors.grey[300],
               ),
-              // Text section
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 18),
@@ -445,7 +433,14 @@ class _WhizChallengeState extends State<WhizChallenge> {
   Widget _buildDifficultyButton(String difficulty, Color color) {
     final isSelected = selectedDifficulty == difficulty;
     return GestureDetector(
-      onTap: () => setState(() => selectedDifficulty = difficulty),
+      onTap: () async {
+        try {
+          await FlameAudio.play('click1.wav');
+        } catch (e) {
+          debugPrint('Click sound not found: $e');
+        }
+        setState(() => selectedDifficulty = difficulty);
+      },
       child: Container(
         width: 280,
         padding: const EdgeInsets.symmetric(vertical: 16),

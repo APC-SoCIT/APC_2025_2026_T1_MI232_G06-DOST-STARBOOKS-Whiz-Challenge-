@@ -303,7 +303,8 @@ class QuizResultScreen extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () {
-                                Navigator.of(context).pop(_isPerfectScore());
+                                Navigator.of(context).pop(); // Pop results screen
+                                Navigator.of(context).pop(); // Pop WhizChallenge screen
                               },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF1D9358),
@@ -334,7 +335,7 @@ class QuizResultScreen extends StatelessWidget {
                             child: ElevatedButton(
                               onPressed: () {
                                 if (_isPerfectScore()) {
-                                  Navigator.of(context).pop(true);
+                                  Navigator.of(context).pop();
                                 } else {
                                   if (userId != null) {
                                     Navigator.of(context).pushReplacement(
