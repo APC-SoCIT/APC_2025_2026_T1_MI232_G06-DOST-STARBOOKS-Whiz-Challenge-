@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'audio_service.dart';
 
 class ChangePasswordDialog extends StatefulWidget {
   final String userId;
@@ -22,7 +23,30 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   bool showConfirm = false;
   bool saving = false;
 
-  final String baseUrl = "http://127.0.0.1:8000";
+  final String baseUrl = "http://localhost:8000";
+
+// ADD THIS NEW METHOD HERE
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
+    }
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters';
+    }
+    if (!value.contains(RegExp(r'[A-Z]'))) {
+      return 'Password must contain at least one uppercase letter';
+    }
+    if (!value.contains(RegExp(r'[a-z]'))) {
+      return 'Password must contain at least one lowercase letter';
+    }
+    if (!value.contains(RegExp(r'[0-9]'))) {
+      return 'Password must contain at least one number';
+    }
+    if (!value.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
+      return 'Password must contain at least one special character';
+    }
+    return null;
+  }
 
   @override
   void dispose() {
@@ -159,10 +183,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       return;
     }
 
-    if (newPassword.length < 6) {
+    String? passwordError = _validatePassword(newPassword);
+    if (passwordError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("New password must be at least 6 characters."),
+        SnackBar(
+          content: Text(passwordError),
           backgroundColor: Colors.orange,
         ),
       );
@@ -188,11 +213,14 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         final data = jsonDecode(response.body);
         if (data['success'] == true ||
             data['message'] == 'Password updated successfully') {
+          AudioService().playDialogueSound();
+
           // Close the change password dialog
           Navigator.pop(context);
           // Show success dialog
           await _showSuccessDialog();
-        } else {
+        }
+        else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(data['message'] ?? "Failed to update password."),
@@ -202,12 +230,13 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         }
       } else {
         final data = jsonDecode(response.body);
+        String errorMessage = data['message'] ?? "Error updating password. Please try again.";
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              data['message'] ?? "Error updating password. Please try again.",
-            ),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -310,8 +339,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Cancel
+                // Cancel
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    AudioService().playClickSound();
+                    Navigator.pop(context);
+                  },
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF046EB8),
                     padding: const EdgeInsets.symmetric(
@@ -348,9 +381,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  onPressed: saving ? null : updatePassword,
-                  child: saving
-                      ? const SizedBox(
+                  onPressed: saving ? null : () {
+                    AudioService().playClickSound();
+                    updatePassword();
+                  },
+                  child: saving ?
+                      const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
@@ -370,3 +406,5 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     );
   }
 }
+
+
