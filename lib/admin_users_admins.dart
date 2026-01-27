@@ -958,57 +958,56 @@ class _AdminUsersAdminsPageState extends State<AdminUsersAdminsPage> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 400,
-            padding: const EdgeInsets.all(24),
+            width: 450,
+            padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Are you sure you want to\ndelete your account?',
+                  'Are you sure you want to\ndelete this account?',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Poppins',
                     color: Colors.black,
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'By deleting your account, you will lose your data.',
+                const SizedBox(height: 16),
+                Text(
+                  'By deleting this account, admin will lose their data.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.black54,
+                    fontSize: 14,
                     fontFamily: 'Poppins',
+                    color: Colors.grey.shade700,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     OutlinedButton(
                       onPressed: () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
+                          horizontal: 32,
+                          vertical: 16,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(25),
                         ),
-                        side: const BorderSide(color: Colors.black54),
+                        side: BorderSide(color: Colors.grey.shade400),
                       ),
                       child: const Text(
                         'Cancel',
                         style: TextStyle(
                           color: Colors.black,
                           fontFamily: 'Poppins',
-                          fontSize: 13,
+                          fontSize: 14,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: () {
                         setState(() {
@@ -1017,35 +1016,33 @@ class _AdminUsersAdminsPageState extends State<AdminUsersAdminsPage> {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(
-                              'Admin "${admin['username']}" deleted successfully!',
-                            ),
+                            content: Text('Admin "${admin['username']}" deleted successfully'),
                             backgroundColor: Colors.red,
                             behavior: SnackBarBehavior.floating,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
-                            )
+                            ),
                           ),
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFF44336),
+                        backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
+                          horizontal: 32,
+                          vertical: 16,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(25),
                         ),
                         elevation: 0,
                       ),
                       child: const Text(
-                        'Delete my account',
+                        'Delete this account',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontFamily: 'Poppins',
-                          fontSize: 13,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -1058,7 +1055,6 @@ class _AdminUsersAdminsPageState extends State<AdminUsersAdminsPage> {
       },
     );
   }
-
   void _refreshAdminsList() {
     setState(() {
       searchController.clear();
