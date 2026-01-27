@@ -366,46 +366,49 @@ class _AdminQuizQuestionsPageState extends State<AdminQuizQuestionsPage> {
                     ),
                     Row(
                       children: [
-                        OutlinedButton.icon(
-                          onPressed: _handleImport,
-                          icon: const Icon(Icons.file_upload_outlined, size: 18),
-                          label: const Text('Import'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black87,
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 14,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
                         ElevatedButton.icon(
                           onPressed: () => _openQuestionDialog(),
-                          icon: const Icon(Icons.add, size: 20),
-                          label: const Text('ADD QUESTION'),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text(
+                            'ADD QUESTION',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF046EB8),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 20,
                               vertical: 14,
                             ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            elevation: 2,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         IconButton(
-                          onPressed: _handleRefresh,
-                          icon: const Icon(Icons.refresh),
+                          onPressed: _handleImport,
+                          icon: const Icon(Icons.file_upload_outlined, size: 20),
                           style: IconButton.styleFrom(
                             side: BorderSide(color: Colors.grey.shade300),
+                            shape: const CircleBorder(),
                           ),
+                          tooltip: 'Import',
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: _handleRefresh,
+                          icon: const Icon(Icons.refresh, size: 20),
+                          style: IconButton.styleFrom(
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: const CircleBorder(),
+                          ),
+                          tooltip: 'Refresh',
                         ),
                       ],
                     ),
@@ -449,25 +452,20 @@ class _AdminQuizQuestionsPageState extends State<AdminQuizQuestionsPage> {
                     const SizedBox(width: 16),
                     OutlinedButton.icon(
                       onPressed: _openSortDialog,
-                      icon: Icon(
-                        sortAscending
-                            ? Icons.arrow_upward
-                            : Icons.arrow_downward,
-                        size: 18,
-                      ),
-                      label: Text(
-                        'Sort by ${sortColumn.toUpperCase()}',
-                        style: const TextStyle(fontFamily: 'Poppins'),
+                      icon: const Icon(Icons.sort, size: 18),
+                      label: const Text(
+                        'Sort',
+                        style: TextStyle(fontFamily: 'Poppins'),
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.black87,
-                        side: BorderSide(color: Colors.grey.shade300),
+                        side: BorderSide(color: Colors.grey.shade400),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(25),
                         ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 14,
+                          horizontal: 16,
+                          vertical: 10,
                         ),
                       ),
                     ),
@@ -489,14 +487,14 @@ class _AdminQuizQuestionsPageState extends State<AdminQuizQuestionsPage> {
                         side: BorderSide(
                           color: isFilterActive
                               ? Colors.orange
-                              : Colors.grey.shade300,
+                              : Colors.grey.shade400,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(25),
                         ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 14,
+                          horizontal: 16,
+                          vertical: 10,
                         ),
                       ),
                     ),
@@ -742,6 +740,7 @@ class _AdminQuizQuestionsPageState extends State<AdminQuizQuestionsPage> {
                         ),
                         const SizedBox(width: 8),
                         Container(
+                          width: 80,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 8,
@@ -750,25 +749,76 @@ class _AdminQuizQuestionsPageState extends State<AdminQuizQuestionsPage> {
                             border: Border.all(color: Colors.grey.shade300),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: DropdownButton<int>(
-                            value: itemsPerPage,
-                            underline: const SizedBox(),
-                            items: [4, 8, 12, 20].map((value) {
-                              return DropdownMenuItem<int>(
-                                value: value,
-                                child: Text(
-                                  '$value',
-                                  style: const TextStyle(fontFamily: 'Poppins'),
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                itemsPerPage = value!;
-                                currentPageIndex = 0;
-                              });
+                          child: TextField(
+                            controller: TextEditingController(text: itemsPerPage.toString()),
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onSubmitted: (value) {
+                              final newValue = int.tryParse(value);
+                              if (newValue != null && newValue > 0) {
+                                setState(() {
+                                  itemsPerPage = newValue;
+                                  currentPageIndex = 0;
+                                });
+                              }
                             },
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.remove,
+                                size: 16,
+                                color: itemsPerPage > 1 ? Colors.black87 : Colors.grey.shade400,
+                              ),
+                              onPressed: itemsPerPage > 1
+                                  ? () {
+                                setState(() {
+                                  itemsPerPage -= 1;
+                                  currentPageIndex = 0;
+                                });
+                              }
+                                  : null,
+                              style: IconButton.styleFrom(
+                                side: BorderSide(color: Colors.grey.shade300),
+                                shape: const CircleBorder(),
+                              ),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Decrease by 1',
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: Icon(
+                                Icons.add,
+                                size: 16,
+                                color: itemsPerPage >= displayedQuestions.length ? Colors.grey.shade400 : Colors.black87,
+                              ),
+                              onPressed: itemsPerPage >= displayedQuestions.length
+                                  ? null
+                                  : () {
+                                setState(() {
+                                  itemsPerPage += 1;
+                                  currentPageIndex = 0;
+                                });
+                              },
+                              style: IconButton.styleFrom(
+                                side: BorderSide(color: Colors.grey.shade300),
+                                shape: const CircleBorder(),
+                              ),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Increase by 1',
+                            ),
+                          ],
                         ),
                       ],
                     ),
