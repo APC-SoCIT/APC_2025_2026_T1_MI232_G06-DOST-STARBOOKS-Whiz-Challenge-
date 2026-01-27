@@ -238,27 +238,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text(
-                      'Select All',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    value: selectAll,
-                    onChanged: (value) {
-                      setDialogState(() {
-                        selectAll = value ?? false;
-                        selectedLeaderboards['challenge'] = selectAll;
-                        selectedLeaderboards['battle'] = selectAll;
-                      });
-                    },
-                    activeColor: const Color(0xFF046EB8),
-                  ),
-                  const Divider(),
-                  CheckboxListTile(
-                    title: const Text(
-                      'Whiz Challenge',
+                      'Badges',
                       style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
                     ),
                     secondary: const Icon(
@@ -277,7 +257,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   ),
                   CheckboxListTile(
                     title: const Text(
-                      'Whiz Battle',
+                      'Stars',
                       style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
                     ),
                     secondary: const Icon(
@@ -294,6 +274,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                     },
                     activeColor: const Color(0xFF046EB8),
                   ),
+
                   const SizedBox(height: 20),
                   const Text(
                     'Export Format',
@@ -539,9 +520,9 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
   String _getLeaderboardLabel(String type) {
     switch (type) {
       case 'challenge':
-        return 'Whiz Challenge';
+        return 'Badges';
       case 'battle':
-        return 'Whiz Battle';
+        return 'Stars';
       case 'both':
         return 'Both Leaderboards';
       default:
@@ -574,7 +555,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
       StringBuffer csv = StringBuffer();
 
       if (leaderboardType == 'challenge' || leaderboardType == 'both') {
-        csv.writeln('=== WHIZ CHALLENGE LEADERBOARD ===');
+        csv.writeln('=== BADGES LEADERBOARD ===');
         csv.writeln('Rank,Username,Total Rewards,Easy,Average,Difficult,Last Claim,Status');
         for (int i = 0; i < challengeData.length; i++) {
           var player = challengeData[i];
@@ -589,7 +570,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
       }
 
       if (leaderboardType == 'battle' || leaderboardType == 'both') {
-        csv.writeln('=== WHIZ BATTLE LEADERBOARD ===');
+        csv.writeln('=== STARS LEADERBOARD ===');
         csv.writeln('Rank,Username,Total Stars,Last Battle,Status');
         for (int i = 0; i < battleData.length; i++) {
           var player = battleData[i];
@@ -703,34 +684,32 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                 // Left side - Mode buttons
                 Row(
                   children: [
-                    _buildModeButton("Whiz Challenge", "challenge"),
+                    _buildModeButton("Badges", "challenge"),
                     const SizedBox(width: 12),
-                    _buildModeButton("Whiz Battle", "battle"),
+                    _buildModeButton("Stars", "battle"),
                   ],
                 ),
                 // Right side - Action buttons
                 Row(
                   children: [
-                    OutlinedButton(
+                    IconButton(
                       onPressed: _exportData,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF046EB8),
-                        side: const BorderSide(color: Color(0xFF046EB8)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.all(10),
+                      icon: const Icon(Icons.file_upload_outlined, size: 20),
+                      style: IconButton.styleFrom(
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: const CircleBorder(),
                       ),
-                      child: const Icon(Icons.file_upload_outlined, size: 18),
+                      tooltip: 'Export Data',
                     ),
                     const SizedBox(width: 12),
-                    OutlinedButton(
+                    IconButton(
                       onPressed: _refreshData,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black87,
-                        side: BorderSide(color: Colors.grey.shade400),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.all(10),
+                      icon: const Icon(Icons.refresh, size: 20),
+                      style: IconButton.styleFrom(
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: const CircleBorder(),
                       ),
-                      child: const Icon(Icons.refresh, size: 18),
+                      tooltip: 'Refresh',
                     ),
                   ],
                 ),
@@ -870,18 +849,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                         Expanded(
                           flex: 2,
                           child: Text(
-                            "Last Battle",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            "Status",
+                            "Last Updated",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
