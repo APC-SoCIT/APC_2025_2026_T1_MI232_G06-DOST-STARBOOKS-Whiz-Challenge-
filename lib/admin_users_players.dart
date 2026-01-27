@@ -189,14 +189,25 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
     return filtered;
   }
 
-  void _showAddPlayerDialog() {
-    // Reset controllers
-    playerUsernameController.clear();
-    playerPasswordController.clear();
-    playerConfirmPasswordController.clear();
-    selectedPlayerSex = null;
-    showPlayerPassword = false;
-    showPlayerConfirmPassword = false;
+  void _showAddPlayerDialog({Map<String, dynamic>? existingPlayer}) {
+    // Reset/set controllers
+    playerUsernameController.text = existingPlayer?['username'] ?? '';
+    selectedPlayerSex = existingPlayer?['sex'];
+    String? selectedAvatar = existingPlayer?['avatar'];
+    String? selectedCategory = existingPlayer?['category'];
+    String? selectedAge;
+    String? selectedSchool;
+    String? selectedRegion = existingPlayer != null
+        ? existingPlayer['address'].split(',')[0].trim()
+        : null;
+    String? selectedProvince = existingPlayer != null
+        ? existingPlayer['address'].split(',')[1].trim()
+        : null;
+    String? selectedCity = existingPlayer != null
+        ? existingPlayer['address'].split(',')[2].trim()
+        : null;
+
+    final isEditing = existingPlayer != null;
 
     showDialog(
       context: context,
@@ -209,20 +220,705 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Container(
-                width: 500,
-                padding: const EdgeInsets.all(24),
+                width: 600,
+                padding: const EdgeInsets.all(32),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isEditing ? Icons.edit : Icons.person_add,
+                            size: 24,
+                            color: Colors.black,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            isEditing ? 'Edit Profile' : 'Add New Player',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Poppins',
+                              color: Colors.black,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Avatar Circle
+                          GestureDetector(
+                            onTap: () {
+                              // Show avatar picker in dialog
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Select Avatar'),
+                                  content: Wrap(
+                                    spacing: 10,
+                                    children: [
+                                      'assets/images-avatars/Brainy.png',
+                                      'assets/images-avatars/Girl.png',
+                                      'assets/images-avatars/Twirky.png',
+                                      'assets/images-avatars/Sneaky-Snake.png',
+                                      'assets/images-avatars/Astronaut.png',
+                                    ].map((avatar) {
+                                      return GestureDetector(
+                                        onTap: () {
+                                          setDialogState(() => selectedAvatar = avatar);
+                                          Navigator.pop(ctx);
+                                        },
+                                        child: Container(
+                                          width: 60,
+                                          height: 60,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: selectedAvatar == avatar
+                                                  ? const Color(0xFFFDD000)
+                                                  : Colors.grey,
+                                              width: 3,
+                                            ),
+                                          ),
+                                          child: ClipOval(
+                                            child: Image.asset(
+                                              avatar,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFFFDD000),
+                                  width: 4,
+                                ),
+                                color: Colors.grey[100],
+                              ),
+                              child: selectedAvatar != null
+                                  ? ClipOval(
+                                child: Image.asset(
+                                  selectedAvatar!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.camera_alt,
+                                      size: 40,
+                                      color: Colors.grey[500],
+                                    );
+                                  },
+                                ),
+                              )
+                                  : Icon(
+                                Icons.camera_alt,
+                                size: 40,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                // Username Field
+                                TextField(
+                                  controller: playerUsernameController,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontFamily: 'Poppins',
+                                    color: Colors.black,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: 'Username',
+                                    hintStyle: const TextStyle(
+                                      color: Colors.black38,
+                                      fontFamily: 'Poppins',
+                                      fontSize: 14,
+                                    ),
+                                    prefixIcon: const Icon(
+                                      Icons.person,
+                                      color: Colors.black54,
+                                      size: 20,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                      borderSide: const BorderSide(
+                                        color: Colors.black54,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                // School and Age Row
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: TextEditingController(text: selectedSchool ?? ''),
+                                        onChanged: (value) => selectedSchool = value,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontFamily: 'Poppins',
+                                          color: Colors.black,
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: 'School',
+                                          hintStyle: const TextStyle(
+                                            color: Colors.black38,
+                                            fontFamily: 'Poppins',
+                                            fontSize: 14,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: const BorderSide(
+                                              color: Colors.black54,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: selectedAge,
+                                        hint: const Text(
+                                          'Age',
+                                          style: TextStyle(
+                                            color: Colors.black38,
+                                            fontFamily: 'Poppins',
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontFamily: 'Poppins',
+                                          color: Colors.black,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: const BorderSide(
+                                              color: Colors.black54,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
+                                        items: List.generate(100, (index) => (index + 1).toString())
+                                            .map((age) => DropdownMenuItem(
+                                          value: age,
+                                          child: Text(age),
+                                        ))
+                                            .toList(),
+                                        onChanged: (value) => setDialogState(() => selectedAge = value),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                // Avatar, Category, and Sex Row
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: selectedCategory,
+                                        hint: const Text(
+                                          'Category',
+                                          style: TextStyle(
+                                            color: Colors.black38,
+                                            fontFamily: 'Poppins',
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontFamily: 'Poppins',
+                                          color: Colors.black,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: const BorderSide(
+                                              color: Colors.black54,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
+                                        items: ['Student', 'Employee']
+                                            .map((category) => DropdownMenuItem(
+                                          value: category,
+                                          child: Text(category),
+                                        ))
+                                            .toList(),
+                                        onChanged: (value) => setDialogState(() => selectedCategory = value),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: selectedPlayerSex,
+                                        hint: const Text(
+                                          'Sex',
+                                          style: TextStyle(
+                                            color: Colors.black38,
+                                            fontFamily: 'Poppins',
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontFamily: 'Poppins',
+                                          color: Colors.black,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: const BorderSide(
+                                              color: Colors.black54,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
+                                        items: ['Male', 'Female', 'Other']
+                                            .map((sex) => DropdownMenuItem(
+                                          value: sex,
+                                          child: Text(sex),
+                                        ))
+                                            .toList(),
+                                        onChanged: (value) => setDialogState(() => selectedPlayerSex = value),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                // Region, Province, City Row
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: selectedRegion,
+                                        hint: const Text(
+                                          'Region',
+                                          style: TextStyle(
+                                            color: Colors.black38,
+                                            fontFamily: 'Poppins',
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontFamily: 'Poppins',
+                                          color: Colors.black,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: const BorderSide(
+                                              color: Colors.black54,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
+                                        items: ['NCR', 'Region I', 'Region II', 'Region III']
+                                            .map((region) => DropdownMenuItem(
+                                          value: region,
+                                          child: Text(region),
+                                        ))
+                                            .toList(),
+                                        onChanged: (value) => setDialogState(() => selectedRegion = value),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: selectedProvince,
+                                        hint: const Text(
+                                          'Province',
+                                          style: TextStyle(
+                                            color: Colors.black38,
+                                            fontFamily: 'Poppins',
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontFamily: 'Poppins',
+                                          color: Colors.black,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: const BorderSide(
+                                              color: Colors.black54,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
+                                        items: ['Metro Manila', 'Bulacan', 'Cavite', 'Laguna']
+                                            .map((province) => DropdownMenuItem(
+                                          value: province,
+                                          child: Text(province),
+                                        ))
+                                            .toList(),
+                                        onChanged: (value) => setDialogState(() => selectedProvince = value),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: selectedCity,
+                                        hint: const Text(
+                                          'City',
+                                          style: TextStyle(
+                                            color: Colors.black38,
+                                            fontFamily: 'Poppins',
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontFamily: 'Poppins',
+                                          color: Colors.black,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(25),
+                                            borderSide: const BorderSide(
+                                              color: Colors.black54,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
+                                        items: [
+                                          'Quezon City',
+                                          'Manila',
+                                          'Caloocan City',
+                                          'Makati City',
+                                          'Taguig City',
+                                          'Pasay City',
+                                          'Paranaque City',
+                                          'Las Pinas City',
+                                          'San Juan City'
+                                        ]
+                                            .map((city) => DropdownMenuItem(
+                                          value: city,
+                                          child: Text(city),
+                                        ))
+                                            .toList(),
+                                        onChanged: (value) => setDialogState(() => selectedCity = value),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                              side: BorderSide(color: Colors.grey.shade400),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: () {
+                              if (playerUsernameController.text.isNotEmpty) {
+                                String address = '${selectedRegion ?? "NCR"}, ${selectedProvince ?? "Metro Manila"}, ${selectedCity ?? "Quezon City"}';
+
+                                if (isEditing) {
+                                  // Update existing player
+                                  setState(() {
+                                    existingPlayer!['username'] = playerUsernameController.text;
+                                    existingPlayer['avatar'] = selectedAvatar ?? existingPlayer['avatar'];
+                                    existingPlayer['category'] = selectedCategory ?? existingPlayer['category'];
+                                    existingPlayer['address'] = address;
+                                    existingPlayer['sex'] = selectedPlayerSex;
+                                  });
+                                } else {
+                                  // Add new player
+                                  setState(() {
+                                    playersData.add({
+                                      "username": playerUsernameController.text,
+                                      "avatar": selectedAvatar ?? "assets/images-avatars/Brainy.png",
+                                      "category": selectedCategory ?? "Student",
+                                      "address": address,
+                                      "logDate": "05/23/2025 15:45",
+                                      "easy": 0,
+                                      "average": 0,
+                                      "difficult": 0,
+                                      "sex": selectedPlayerSex,
+                                    });
+                                  });
+                                }
+
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      isEditing
+                                          ? 'Profile updated successfully!'
+                                          : 'Player "${playerUsernameController.text}" added successfully!',
+                                    ),
+                                    backgroundColor: const Color(0xFF27AE60),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFDD000),
+                              foregroundColor: const Color(0xFF816A03),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              'SAVE CHANGES',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showChangePasswordDialog(Map<String, dynamic> player) {
+    TextEditingController oldPasswordController = TextEditingController();
+    TextEditingController newPasswordController = TextEditingController();
+    TextEditingController confirmPasswordController = TextEditingController();
+    bool showOldPassword = false;
+    bool showNewPassword = false;
+    bool showConfirmPassword = false;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                width: 450,
+                padding: const EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: const [
-                        Icon(Icons.person_add, size: 20, color: Colors.black),
-                        SizedBox(width: 8),
+                    const Row(
+                      children: [
+                        Icon(Icons.key, size: 24, color: Colors.black),
+                        SizedBox(width: 12),
                         Text(
-                          'Add New Player',
+                          'Change Password',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                             fontFamily: 'Poppins',
                             color: Colors.black,
@@ -230,315 +926,178 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFFFDD000),
-                              width: 3,
-                            ),
-                            color: Colors.grey[200],
-                          ),
-                          child: Icon(
-                            Icons.camera_alt,
-                            size: 40,
-                            color: Colors.grey[500],
-                          ),
+                    const SizedBox(height: 32),
+                    // Old Password
+                    TextField(
+                      controller: oldPasswordController,
+                      obscureText: !showOldPassword,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Poppins',
+                        color: Colors.black,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Old Password',
+                        hintStyle: const TextStyle(
+                          color: Colors.black38,
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    flex: 2,
-                                    child: TextField(
-                                      controller: playerUsernameController,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontFamily: 'Poppins',
-                                        color: Colors.black,
-                                      ),
-                                      decoration: InputDecoration(
-                                        hintText: 'Username',
-                                        hintStyle: const TextStyle(
-                                          color: Colors.black38,
-                                          fontFamily: 'Poppins',
-                                          fontSize: 13,
-                                        ),
-                                        prefixIcon: const Icon(
-                                          Icons.person,
-                                          color: Colors.black54,
-                                          size: 20,
-                                        ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(25),
-                                          borderSide: const BorderSide(
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(25),
-                                          borderSide: const BorderSide(
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(25),
-                                          borderSide: const BorderSide(
-                                            color: Colors.black87,
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 12,
-                                        ),
-                                        isDense: true,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      value: selectedPlayerSex,
-                                      hint: const Text(
-                                        'Sex',
-                                        style: TextStyle(
-                                          color: Colors.black38,
-                                          fontFamily: 'Poppins',
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontFamily: 'Poppins',
-                                        color: Colors.black,
-                                      ),
-                                      decoration: InputDecoration(
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(25),
-                                          borderSide: const BorderSide(
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(25),
-                                          borderSide: const BorderSide(
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(25),
-                                          borderSide: const BorderSide(
-                                            color: Colors.black87,
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 12,
-                                        ),
-                                        isDense: true,
-                                      ),
-                                      items: ['Male', 'Female', 'Other']
-                                          .map(
-                                            (sex) => DropdownMenuItem(
-                                          value: sex,
-                                          child: Text(sex),
-                                        ),
-                                      )
-                                          .toList(),
-                                      onChanged: (value) => setDialogState(
-                                            () => selectedPlayerSex = value,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              TextField(
-                                controller: playerPasswordController,
-                                obscureText: !showPlayerPassword,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontFamily: 'Poppins',
-                                  color: Colors.black,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Password',
-                                  hintStyle: const TextStyle(
-                                    color: Colors.black38,
-                                    fontFamily: 'Poppins',
-                                    fontSize: 13,
-                                  ),
-                                  prefixIcon: const Icon(
-                                    Icons.lock,
-                                    color: Colors.black54,
-                                    size: 20,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      showPlayerPassword
-                                          ? Icons.visibility
-                                          : Icons.visibility_off,
-                                      color: Colors.black54,
-                                      size: 20,
-                                    ),
-                                    onPressed: () => setDialogState(
-                                          () => showPlayerPassword = !showPlayerPassword,
-                                    ),
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                    borderSide: const BorderSide(
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                    borderSide: const BorderSide(
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                    borderSide: const BorderSide(
-                                      color: Colors.black87,
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  isDense: true,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              TextField(
-                                controller: playerConfirmPasswordController,
-                                obscureText: !showPlayerConfirmPassword,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontFamily: 'Poppins',
-                                  color: Colors.black,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Confirm Password',
-                                  hintStyle: const TextStyle(
-                                    color: Colors.black38,
-                                    fontFamily: 'Poppins',
-                                    fontSize: 13,
-                                  ),
-                                  prefixIcon: const Icon(
-                                    Icons.lock,
-                                    color: Colors.black54,
-                                    size: 20,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      showPlayerConfirmPassword
-                                          ? Icons.visibility
-                                          : Icons.visibility_off,
-                                      color: Colors.black54,
-                                      size: 20,
-                                    ),
-                                    onPressed: () => setDialogState(
-                                          () => showPlayerConfirmPassword = !showPlayerConfirmPassword,
-                                    ),
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                    borderSide: const BorderSide(
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                    borderSide: const BorderSide(
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                    borderSide: const BorderSide(
-                                      color: Colors.black87,
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  isDense: true,
-                                ),
-                              ),
-                            ],
-                          ),
+                        prefixIcon: const Icon(
+                          Icons.lock,
+                          color: Colors.black54,
+                          size: 20,
                         ),
-                      ],
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            showOldPassword ? Icons.visibility : Icons.visibility_off,
+                            color: Colors.black54,
+                            size: 20,
+                          ),
+                          onPressed: () => setDialogState(() => showOldPassword = !showOldPassword),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: const BorderSide(color: Colors.black54, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
+                    // New Password
+                    TextField(
+                      controller: newPasswordController,
+                      obscureText: !showNewPassword,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Poppins',
+                        color: Colors.black,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'New Password',
+                        hintStyle: const TextStyle(
+                          color: Colors.black38,
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.lock,
+                          color: Colors.black54,
+                          size: 20,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            showNewPassword ? Icons.visibility : Icons.visibility_off,
+                            color: Colors.black54,
+                            size: 20,
+                          ),
+                          onPressed: () => setDialogState(() => showNewPassword = !showNewPassword),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: const BorderSide(color: Colors.black54, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Confirm Password
+                    TextField(
+                      controller: confirmPasswordController,
+                      obscureText: !showConfirmPassword,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Poppins',
+                        color: Colors.black,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Confirm Password',
+                        hintStyle: const TextStyle(
+                          color: Colors.black38,
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.lock,
+                          color: Colors.black54,
+                          size: 20,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            showConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                            color: Colors.black54,
+                            size: 20,
+                          ),
+                          onPressed: () => setDialogState(() => showConfirmPassword = !showConfirmPassword),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          borderSide: const BorderSide(color: Colors.black54, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         OutlinedButton(
                           onPressed: () => Navigator.pop(context),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            side: const BorderSide(color: Colors.black54),
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                            side: BorderSide(color: Colors.grey.shade400),
                           ),
                           child: const Text(
                             'Cancel',
                             style: TextStyle(
                               color: Colors.black,
                               fontFamily: 'Poppins',
-                              fontSize: 13,
+                              fontSize: 14,
                             ),
                           ),
                         ),
                         ElevatedButton(
                           onPressed: () {
-                            if (playerUsernameController.text.isNotEmpty &&
-                                playerPasswordController.text ==
-                                    playerConfirmPasswordController.text) {
-                              setState(() {
-                                playersData.add({
-                                  "username": playerUsernameController.text,
-                                  "avatar": "assets/images-avatars/Brainy.png",
-                                  "category": "Student",
-                                  "address": "NCR, Metro Manila, Quezon City",
-                                  "logDate": "05/23/2025 15:45",
-                                  "easy": 0,
-                                  "average": 0,
-                                  "difficult": 0,
-                                });
-                              });
+                            if (newPasswordController.text == confirmPasswordController.text &&
+                                newPasswordController.text.isNotEmpty) {
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(
-                                    'Player "${playerUsernameController.text}" added successfully!',
-                                  ),
+                                  content: Text('Password changed successfully for ${player['username']}'),
                                   backgroundColor: const Color(0xFF27AE60),
                                   behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
                               );
                             }
@@ -546,21 +1105,16 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFFDD000),
                             foregroundColor: const Color(0xFF816A03),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                             elevation: 0,
                           ),
                           child: const Text(
-                            'SAVE CHANGES',
+                            'CHANGE PASSWORD',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontFamily: 'Poppins',
-                              fontSize: 13,
+                              fontSize: 14,
                             ),
                           ),
                         ),
@@ -574,6 +1128,106 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
         );
       },
     );
+  }
+
+  void _showDeleteConfirmationDialog(Map<String, dynamic> player) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: 450,
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Are you sure you want to\ndelete this account?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Poppins',
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'By deleting this account, player will lose their data.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontFamily: 'Poppins',
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        side: BorderSide(color: Colors.grey.shade400),
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          playersData.remove(player);
+                        });
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Player "${player['username']}" deleted successfully'),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Delete this account',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAvatarSelectionDialog(BuildContext context, StateSetter setDialogState, Function(String) onAvatarSelected) {
+    // This is a placeholder - implement avatar selection if needed
   }
 
   void _exportData() {
@@ -1340,8 +1994,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                                           color: Colors.amber,
                                           size: 20,
                                         ),
-                                        onPressed: () =>
-                                            _showBadgesDialog(player),
+                                        onPressed: () => _showBadgesDialog(player),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: 'View Badges',
@@ -1353,7 +2006,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                                           color: Colors.blue,
                                           size: 20,
                                         ),
-                                        onPressed: () {},
+                                        onPressed: () => _showAddPlayerDialog(existingPlayer: player),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: 'Edit',
@@ -1365,7 +2018,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                                           color: Colors.green,
                                           size: 20,
                                         ),
-                                        onPressed: () {},
+                                        onPressed: () => _showChangePasswordDialog(player),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: 'Reset Password',
@@ -1377,7 +2030,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                                           color: Colors.red,
                                           size: 20,
                                         ),
-                                        onPressed: () {},
+                                        onPressed: () => _showDeleteConfirmationDialog(player),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         tooltip: 'Delete',
