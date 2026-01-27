@@ -9,7 +9,7 @@ class AdminPlayersPage extends StatefulWidget {
 }
 
 class _AdminPlayersPageState extends State<AdminPlayersPage> {
-  int itemsPerPage = 9;
+  int itemsPerPage = 5;
   int currentPageIndex = 0;
   String sortBy = 'username';
   bool sortAscending = true;
@@ -976,14 +976,14 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(25),
                     ),
                     child: Row(
                       children: [
                         const Icon(Icons.search, color: Colors.grey),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: TextField(
+                          child: TextField(  // <-- DIRECTLY USE TextField HERE
                             controller: searchController,
                             decoration: const InputDecoration(
                               hintText: 'Search',
@@ -1016,8 +1016,15 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
                   onPressed: _showAddPlayerDialog,
-                  icon: const Icon(Icons.add),
-                  label: const Text('ADD NEW PLAYER'),
+                  icon: const Icon(Icons.add, size: 18),  // Changed size from default to 18
+                  label: const Text(
+                    'ADD NEW PLAYER',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,  // Added explicit fontSize
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF046EB8),
                     foregroundColor: Colors.white,
@@ -1026,32 +1033,30 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                       vertical: 14,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(25),  // Changed from 8 to 25 for rounded corners
                     ),
+                    elevation: 2,  // Added elevation
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: _exportData,
-                  icon: const Icon(Icons.download),
+                  icon: const Icon(Icons.file_upload_outlined, size: 20),
                   style: IconButton.styleFrom(
                     side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    shape: const CircleBorder(),
                   ),
                   tooltip: 'Export Data',
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: _refreshPlayersList,
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(Icons.refresh, size: 20),
                   style: IconButton.styleFrom(
                     side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    shape: const CircleBorder(),
                   ),
+                  tooltip: 'Refresh',
                 ),
               ],
             ),
@@ -1067,7 +1072,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     foregroundColor: Colors.black87,
                     side: BorderSide(color: Colors.grey.shade400),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(25),  // Changed from 8 to 25
                     ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -1084,7 +1089,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     foregroundColor: Colors.black87,
                     side: BorderSide(color: Colors.grey.shade400),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(25),  // Changed from 8 to 25
                     ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -1402,6 +1407,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     ),
                     const SizedBox(width: 8),
                     Container(
+                      width: 80,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 8,
@@ -1410,25 +1416,76 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                         border: Border.all(color: Colors.grey.shade300),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: DropdownButton<int>(
-                        value: itemsPerPage,
-                        underline: const SizedBox(),
-                        items: [9, 18, 27].map((value) {
-                          return DropdownMenuItem<int>(
-                            value: value,
-                            child: Text(
-                              '$value',
-                              style: const TextStyle(fontFamily: 'Poppins'),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            itemsPerPage = value!;
-                            currentPageIndex = 0;
-                          });
+                      child: TextField(
+                        controller: TextEditingController(text: itemsPerPage.toString()),
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onSubmitted: (value) {
+                          final newValue = int.tryParse(value);
+                          if (newValue != null && newValue > 0) {
+                            setState(() {
+                              itemsPerPage = newValue;
+                              currentPageIndex = 0;
+                            });
+                          }
                         },
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.remove,
+                            size: 16,
+                            color: itemsPerPage > 1 ? Colors.black87 : Colors.grey.shade400,
+                          ),
+                          onPressed: itemsPerPage > 1
+                              ? () {
+                            setState(() {
+                              itemsPerPage -= 1;
+                              currentPageIndex = 0;
+                            });
+                          }
+                              : null,
+                          style: IconButton.styleFrom(
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: const CircleBorder(),
+                          ),
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Decrease by 1',
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: Icon(
+                            Icons.add,
+                            size: 16,
+                            color: itemsPerPage >= filteredPlayers.length ? Colors.grey.shade400 : Colors.black87,
+                          ),
+                          onPressed: itemsPerPage >= filteredPlayers.length
+                              ? null
+                              : () {
+                            setState(() {
+                              itemsPerPage += 1;
+                              currentPageIndex = 0;
+                            });
+                          },
+                          style: IconButton.styleFrom(
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: const CircleBorder(),
+                          ),
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Increase by 1',
+                        ),
+                      ],
                     ),
                   ],
                 ),
