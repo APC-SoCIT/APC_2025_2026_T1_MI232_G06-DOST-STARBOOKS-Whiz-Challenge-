@@ -182,9 +182,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 () {
               setState(() {
                 _usersExpanded = !_usersExpanded;
-                if (_usersExpanded) {
-                  _selectedIndex = 2;
-                }
               });
             },
           ),
@@ -202,9 +199,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 () {
               setState(() {
                 _quizContentExpanded = !_quizContentExpanded;
-                if (_quizContentExpanded) {
-                  _selectedIndex = 5;
-                }
               });
             },
           ),
@@ -268,7 +262,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.transparent,
+          color: Colors.transparent,  // Keep transparent, don't highlight parent
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
@@ -680,6 +674,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   void _showExportDialog() {
     final List<String> chartTitles = [
+      'Total Registered Players',
+      'Average Feedback',
       'Male vs Female Registered Players',
       'Age Distribution of Players',
       'Registered Players by Region',
