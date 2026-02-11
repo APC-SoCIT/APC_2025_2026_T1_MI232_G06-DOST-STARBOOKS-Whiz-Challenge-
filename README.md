@@ -9,8 +9,9 @@
 ## Environment Setup
 
 Copy/Download all files attached in this branch
-1. For Flutter, place the .dockerignore and Dockerfile in the same path of **pubspec.yaml**
-2. For Laravel, place the .dockerignore and Dockerfile in the same path of **.env**. Update the database.php and .env with the attached files here.
+1. For Flutter, place the .dockerignore and Dockerfile in the same path as **pubspec.yaml**
+2. For Laravel, place the .dockerignore and Dockerfile in the same path as **.env**.
+3. Update the database.php and .env with the attached files in this branch.
 
 ## Compose YML Files Configuration
 The following attached docker compose yml files are separated to allow both dev testing and production (static):
@@ -29,10 +30,10 @@ The following attached docker compose yml files are separated to allow both dev 
 ## 1. Pull/Download Starbooks Images from Dockerhub
 
 **Flutter**
-docker pull dostnexus/flutter-starbooks:latest
+- docker pull dostnexus/flutter-starbooks:latest
 
 **Laravel API**
-docker pull dostnexus/laravel-starbooks-api:latest
+- docker pull dostnexus/laravel-starbooks-api:latest
 
 ## 2. Import CSV data into MongoDB
 
@@ -40,41 +41,41 @@ Copy/Download the CSV files attached inside the mongodb branch of this repositor
 
 ## 3. Starting and Stopping the Application Containers
 
-cd C:\Docker Compose (_Adjust to your Docker Compose file path_)
-docker-compose up -d
-docker-compose down (end container process)
+- cd C:\Docker Compose (_Adjust to your Docker Compose file path_)
+- docker-compose up -d
+- docker-compose down (end container process)
 
 # For Development and Testing
 
 ## 1. Get Dockerhub Username
 
-docker login
-(_Input your username and password_)
+- docker login
+- (_Input your username and password_)
 
 ## 2. Building and Sharing Image to Dockerhub
 
 **Flutter Image**
-cd C:\flutter_projects (_Adjust to your Flutter file path_)
-docker build -t dostnexus/flutter-starbooks:latest .
-docker push dostnexus/flutter-starbooks:latest
+- cd C:\flutter_projects (_Adjust to your Flutter file path_)
+- docker build -t dostnexus/flutter-starbooks:latest .
+- docker push dostnexus/flutter-starbooks:latest
    
 **Laravel Image**
-cd C:\laragon\www\api (_Adjust to your Laravel file path_)
-docker build -t dostnexus/laravel-starbooks-api:latest .
-docker push dostnexus/laravel-starbooks-api:latest
+- cd C:\laragon\www\api (_Adjust to your Laravel file path_)
+- docker build -t dostnexus/laravel-starbooks-api:latest .
+- docker push dostnexus/laravel-starbooks-api:latest
 
 ## 3. Starting and Stopping Docker Compose Containers
 
-cd C:\Docker Compose (_Adjust to your Docker Compose file path_)
-docker-compose -f docker-compose.dev.yml up -d
-docker-compose -f docker-compose.dev.yml down
+- cd C:\Docker Compose (_Adjust to your Docker Compose file path_)
+- docker-compose -f docker-compose.dev.yml up -d
+- docker-compose -f docker-compose.dev.yml down
 
 ## 4. Accessing the application:
 
 - Flutter: http://localhost:8080
 - Laravel API: http://localhost:8000/api/region
-- MongoDB: mongodb://localhost:27017
+- MongoDB: mongodb://localhost:27017 (Connect to MongoDB Compass)
 
 Visit the official Docker documentation for additional tutorials and guidance here:
-https://docs.docker.com/get-started/introduction/
-https://docs.docker.com/build/building/multi-stage/
+- https://docs.docker.com/get-started/introduction/
+- https://docs.docker.com/build/building/multi-stage/
