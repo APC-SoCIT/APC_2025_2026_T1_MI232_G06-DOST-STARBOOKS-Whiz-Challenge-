@@ -1,0 +1,60 @@
+name: starbooks
+
+services:
+  flutter-web:
+    image: flutter-starbooks:latest
+    container_name: flutter-starbooks
+    ports:
+      - "8080:80"
+    networks:
+      - starbooks-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: laravel-nginx
+    ports:
+      - "8000:80"
+    volumes:
+      - C:/laragon/www/api:/var/www
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - laravel-api
+    networks:
+      - starbooks-network
+
+  laravel-api:
+    build:
+      context: C:/laragon/www/api
+      dockerfile: Dockerfile
+    container_name: laravel-starbooks
+    volumes:
+      - C:/laragon/www/api:/var/www
+    environment:
+      - DB_CONNECTION=mongodb
+      - DB_HOST=mongodb
+      - DB_PORT=27017
+      - DB_DATABASE=starbooksWhizbee
+    depends_on:
+      - mongodb
+    networks:
+      - starbooks-network
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb-starbooks
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=starbooksWhizbee
+    networks:
+      - starbooks-network
+
+networks:
+  starbooks-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
