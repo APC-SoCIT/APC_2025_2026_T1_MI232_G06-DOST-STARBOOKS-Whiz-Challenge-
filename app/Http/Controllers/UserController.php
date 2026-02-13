@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use App\Models\User;
 use MongoDB\BSON\ObjectId;
 
@@ -11,37 +12,104 @@ class UserController extends Controller
 {
     public function register(Request $request)
     {
-        $validated = $request->validate([
-            'username' => 'required|unique:player_info,username',
-            'password' => 'required|min:6',
-            'school' => 'required',
-            'age' => 'required',
-            'avatar' => 'nullable',
-            'category' => 'required',
-            'sex' => 'required',
-            'region' => 'required|integer',
-            'province' => 'required|integer',
-            'city' => 'required|integer',
-        ]);
+        try {
+            $validated = $request->validate([
+                'username' => [
+                    'required',
+                    'unique:player_info,username',
+                    'min:3',
+                    'max:20',
+                    'regex:/^[a-zA-Z0-9_]+$/',  // This already prevents spaces, but let's add custom validation
+                    function ($attribute, $value, $fail) {
+                        if (preg_match('/\s/', $value)) {
+                            $fail('Username cannot contain spaces');
+                        }
+                    },
+                ],
+                'password' => [
+                    'required',
+                    'min:8',
+                    'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])[A-Za-z\d!@#$%^&*(),.?":{}|<>]+$/'
+                ],
+                'school' => 'required|min:2',
+                'age' => 'required|string',
+                'avatar' => 'required|string',
+                'category' => 'required|string',
+                'student_category' => 'nullable|string',  // ← ADD THIS LINE
+                'sex' => 'required|in:Male,Female',
+                'region' => 'required|integer',
+                'province' => 'required|integer',
+                'city' => 'required|integer',
+            ], [
+                // Custom error messages matching Flutter app expectations
+                'username.required' => 'Username is required',
+                'username.unique' => 'Username is already taken',
+                'username.min' => 'Username must be at least 3 characters',
+                'username.max' => 'Username must not exceed 20 characters',
+                'username.regex' => 'Username can only contain letters, numbers, and underscores',
 
-        $user = User::create([
-            'username' => $validated['username'],
-            'password' => Hash::make($validated['password']),
-            'school' => $validated['school'],
-            'age' => $validated['age'],
-            'avatar' => $validated['avatar'] ?? null,
-            'category' => $validated['category'],
-            'sex' => $validated['sex'],
-            'region' => (int) $validated['region'],
-            'province' => (int) $validated['province'],
-            'city' => (int) $validated['city'],
-        ]);
+                'password.required' => 'Password is required',
+                'password.min' => 'Password must be at least 8 characters',
+                'password.regex' => 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Registration successful',
-            'user' => $user,
-        ], 201);
+                'school.required' => 'School is required',
+                'school.min' => 'School name must be at least 2 characters',
+
+                'age.required' => 'Please select an age range',
+                'avatar.required' => 'Avatar is required',
+                'category.required' => 'Category is required',
+                'sex.required' => 'Sex is required',
+                'sex.in' => 'Sex must be either Male or Female',
+
+                'region.required' => 'Region is required',
+                'region.integer' => 'Invalid region selected',
+                'province.required' => 'Province is required',
+                'province.integer' => 'Invalid province selected',
+                'city.required' => 'City is required',
+                'city.integer' => 'Invalid city selected',
+            ]);
+
+        } catch (ValidationException $e) {
+            // Return the first validation error message
+            $errors = $e->errors();
+            $firstError = reset($errors);
+            $message = is_array($firstError) ? $firstError[0] : $firstError;
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'errors' => $errors
+            ], 422);
+        }
+
+        try {
+            $user = User::create([
+                'username' => $validated['username'],
+                'password' => Hash::make($validated['password']),
+                'school' => $validated['school'],
+                'age' => $validated['age'],
+                'avatar' => $validated['avatar'],
+                'category' => $validated['category'],
+                'student_category' => $validated['student_category'] ?? null,  // ← ADD THIS LINE
+                'sex' => $validated['sex'],
+                'region' => (int) $validated['region'],
+                'province' => (int) $validated['province'],
+                'city' => (int) $validated['city'],
+                'stars' => 0,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registration successful',
+                'user' => $user,
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function login(Request $request)
@@ -139,6 +207,9 @@ class UserController extends Controller
                     'region' => $regionName,
                     'province' => $provinceName,
                     'city' => $cityName,
+                    'stars' => $user->stars ?? 0,
+                    'category' => $user->category ?? '',                    // ← ADD THIS
+                    'student_category' => $user->student_category ?? null,  // ← ADD THIS
                 ]
             ]);
 
@@ -151,30 +222,131 @@ class UserController extends Controller
         }
     }
 
-    /**
-     * Update user by _id (MongoDB)
-     */
     public function update(Request $request, $id)
     {
         try {
             $user = User::find(new ObjectId($id));
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Invalid ID format'], 400);
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid ID format'
+            ], 400);
         }
 
         if (!$user) {
-            return response()->json(['error' => 'User not found'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found'
+            ], 404);
         }
 
-        $user->update($request->all());
+        try {
+            $validated = $request->validate([
+                'username' => [
+                    'required',
+                    'min:3',
+                    'max:20',
+                    'regex:/^[a-zA-Z0-9_]+$/',
+                    function ($attribute, $value, $fail) use ($user) {
+                        // Check for spaces
+                        if (preg_match('/\s/', $value)) {
+                            $fail('Username cannot contain spaces');
+                            return;
+                        }
+                        // Check if username is taken by another user
+                        $existing = User::where('username', $value)
+                            ->where('_id', '!=', $user->_id)
+                            ->first();
+                        if ($existing) {
+                            $fail('The username is already taken.');
+                        }
+                    },
+                ],
+                'school' => 'required|min:2',
+                'age' => 'required|string',
+                'avatar' => 'required|string',
+                'category' => 'required|string',
+                'student_category' => 'nullable|string',
+                'sex' => 'required|in:Male,Female',
+                'region' => 'required|integer',
+                'province' => 'required|integer',
+                'city' => 'required|integer',
+            ], [
+                'username.required' => 'Username is required',
+                'username.min' => 'Username must be at least 3 characters',
+                'username.max' => 'Username must not exceed 20 characters',
+                'username.regex' => 'Username can only contain letters, numbers, and underscores',
+                'school.required' => 'School is required',
+                'school.min' => 'School name must be at least 2 characters',
+                'age.required' => 'Please select an age range',
+                'avatar.required' => 'Avatar is required',
+                'category.required' => 'Category is required',
+                'sex.required' => 'Sex is required',
+                'sex.in' => 'Sex must be either Male or Female',
+                'region.required' => 'Region is required',
+                'region.integer' => 'Invalid region selected',
+                'province.required' => 'Province is required',
+                'province.integer' => 'Invalid province selected',
+                'city.required' => 'City is required',
+                'city.integer' => 'Invalid city selected',
+            ]);
+
+        } catch (ValidationException $e) {
+            $errors = $e->errors();
+            $firstError = reset($errors);
+            $message = is_array($firstError) ? $firstError[0] : $firstError;
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'errors' => $errors
+            ], 422);
+        }
+
+        // Check if anything actually changed
+        $hasChanges = false;
+
+        if ($user->username !== $validated['username'] ||
+            $user->school !== $validated['school'] ||
+            $user->age !== $validated['age'] ||
+            $user->avatar !== $validated['avatar'] ||
+            $user->category !== $validated['category'] ||
+            ($user->student_category ?? null) !== ($validated['student_category'] ?? null) ||  // ← ADD THIS LINE
+            $user->sex !== $validated['sex'] ||
+            (int)$user->region !== (int)$validated['region'] ||
+            (int)$user->province !== (int)$validated['province'] ||
+            (int)$user->city !== (int)$validated['city']) {
+            $hasChanges = true;
+        }
+
+        if (!$hasChanges) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No changes were made',
+                'user' => $user,
+                'no_changes' => true
+            ], 200);
+        }
+
+        $user->update([
+            'username' => $validated['username'],
+            'school' => $validated['school'],
+            'age' => $validated['age'],
+            'avatar' => $validated['avatar'],
+            'category' => $validated['category'],
+            'student_category' => $validated['student_category'] ?? null,  // ← ADD THIS LINE
+            'sex' => $validated['sex'],
+            'region' => (int) $validated['region'],
+            'province' => (int) $validated['province'],
+            'city' => (int) $validated['city'],
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'User updated successfully',
+            'message' => 'Profile updated successfully',
             'user' => $user
-        ]);
+        ], 200);
     }
-
 
     public function fixUserLocationIds()
     {
@@ -227,11 +399,34 @@ class UserController extends Controller
 
     public function changePassword(Request $request, $id)
     {
-        $request->validate([
-            'old_password' => 'required',
-            'new_password' => 'required|min:6',
-            'new_password_confirmation' => 'required|same:new_password',
-        ]);
+        try {
+            $request->validate([
+                'old_password' => 'required',
+                'new_password' => [
+                    'required',
+                    'min:8',
+                    'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])[A-Za-z\d!@#$%^&*(),.?":{}|<>]+$/'
+                ],
+                'new_password_confirmation' => 'required|same:new_password',
+            ], [
+                'old_password.required' => 'Please enter your current password.',
+                'new_password.required' => 'Please enter a new password.',
+                'new_password.min' => 'New password must be at least 8 characters.',
+                'new_password.regex' => 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
+                'new_password_confirmation.required' => 'Please confirm your new password.',
+                'new_password_confirmation.same' => 'Password confirmation does not match.',
+            ]);
+
+        } catch (ValidationException $e) {
+            $errors = $e->errors();
+            $firstError = reset($errors);
+            $message = is_array($firstError) ? $firstError[0] : $firstError;
+
+            return response()->json([
+                'success' => false,
+                'message' => $message
+            ], 422);
+        }
 
         try {
             $user = User::find(new \MongoDB\BSON\ObjectId($id));
@@ -250,6 +445,13 @@ class UserController extends Controller
                 ], 400);
             }
 
+            if (Hash::check($request->new_password, $user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'New password must be different from the old password'
+                ], 400);
+            }
+
             $user->password = Hash::make($request->new_password);
             $user->save();
 
@@ -262,6 +464,133 @@ class UserController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error updating password'
+            ], 500);
+        }
+    }
+
+    public function getTutorialStatus($id)
+    {
+        try {
+            $user = User::find(new ObjectId($id));
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'has_seen_tutorial' => $user->has_seen_tutorial ?? false
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching tutorial status'
+            ], 500);
+        }
+    }
+
+    public function getGameTutorialStatus(Request $request, $id)
+    {
+        try {
+            $gameType = $request->query('game_type');
+
+            if (!$gameType) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Game type is required'
+                ], 400);
+            }
+
+            $user = User::find(new ObjectId($id));
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            $gameTutorials = $user->game_tutorials_seen ?? [];
+
+            return response()->json([
+                'success' => true,
+                'has_seen_tutorial' => in_array($gameType, $gameTutorials)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching game tutorial status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function markGameTutorialComplete(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'user_id' => 'required|string',
+                'game_type' => 'required|string|in:memory_match,challenge,battle,puzzle'
+            ]);
+
+            $user = User::find(new ObjectId($validated['user_id']));
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            // Get current game tutorials seen array or create empty array
+            $gameTutorials = $user->game_tutorials_seen ?? [];
+
+            // Add game type if not already in array
+            if (!in_array($validated['game_type'], $gameTutorials)) {
+                $gameTutorials[] = $validated['game_type'];
+                $user->game_tutorials_seen = $gameTutorials;
+                $user->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Game tutorial marked as complete'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error marking game tutorial complete: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function logout(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|string',
+        ]);
+
+        try {
+            $user = User::find(new \MongoDB\BSON\ObjectId($request->user_id));
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'You have been logged out successfully.'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error during logout'
             ], 500);
         }
     }

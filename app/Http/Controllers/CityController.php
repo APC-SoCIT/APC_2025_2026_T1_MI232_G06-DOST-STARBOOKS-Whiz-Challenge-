@@ -13,8 +13,7 @@ class CityController extends Controller
             ->map(function ($city) {
                 return [
                     'id' => (int) $city->id,
-                    'city_name' => $city->city_name,
-                    'province_id' => (int) $city->province_id,
+                    'name' => $city->city_name,  // Changed from 'city_name' to 'name'
                 ];
             });
 

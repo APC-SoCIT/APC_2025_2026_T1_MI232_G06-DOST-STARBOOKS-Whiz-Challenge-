@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FastestTime;
 use App\Models\User;
+use App\Models\PlayerStats;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use MongoDB\BSON\ObjectId;
@@ -90,6 +91,16 @@ class FastestTimeController extends Controller
                 ]);
                 $isNewRecord = true;
             }
+
+            // Update Player Stats
+            PlayerStats::updateStats(
+                (string)$playerObjectId,
+                $data['game_type'],
+                $data['category'] ?? null,
+                $data['difficulty'],
+                'won', // Assuming completion is a win
+                0
+            );
 
             return response()->json([
                 'success' => true,

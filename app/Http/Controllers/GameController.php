@@ -2,386 +2,310 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\GameResult;
-use App\Models\GameHistory;
-use App\Models\PlayerProfile;
-use App\Models\PlayerProgress;
 use App\Models\PlayerBadge;
-use App\Models\Badge;
+use App\Models\PlayerReward;
+use App\Models\PlayerStats;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use MongoDB\BSON\ObjectId;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class GameController extends Controller
 {
-    // Save game result after quiz completion
-    public function saveGameResult(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'player_id' => 'required|string',
-            'participation_type' => 'required|string|in:Whiz Challenge,Whiz Battle',
-            'category' => 'required|string',
-            'difficulty_level' => 'required|string|in:Easy,Average,Difficult',
-            'score' => 'required|integer|min:0',
-            'questions_answered' => 'required|integer|min:0',
-            'correct_answers' => 'required|integer|min:0',
-            'game_duration_seconds' => 'required|integer|min:0',
-            'result' => 'required|in:won,lost,draw',
-            'rewards_earned' => 'integer|min:0',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $data = $validator->validated();
-        $incorrect = $data['questions_answered'] - $data['correct_answers'];
-        $playerId = new ObjectId($data['player_id']);
-
-        // 1. Save game result
-        $gameResult = GameResult::create([
-            'player_id' => $playerId,
-            'participation_type' => $data['participation_type'],
-            'difficulty_level' => $data['difficulty_level'],
-            'score' => $data['score'],
-            'questions_answered' => $data['questions_answered'],
-            'correct_answers' => $data['correct_answers'],
-            'incorrect_answers' => $incorrect,
-            'game_duration_seconds' => $data['game_duration_seconds'],
-            'result' => $data['result'],
-            'rewards_earned' => $data['rewards_earned'] ?? 0,
-            'date_completed' => now(),
-        ]);
-
-        // 2. Update player profile stats
-        $profile = PlayerProfile::firstOrCreate(
-            ['user_id' => $playerId],
-            [
-                'total_score' => 0,
-                'games_played' => 0,
-                'games_won' => 0,
-                'games_lost' => 0,
-                'current_streak' => 0,
-                'highest_streak' => 0,
-                'total_playtime_minutes' => 0,
-                'level' => 1,
-                'experience_points' => 0,
-                'accuracy_percentage' => 0.0,
-            ]
-        );
-
-        $profile->increment('games_played');
-        $profile->increment('total_score', $data['score']);
-        $profile->increment('total_playtime_minutes', ceil($data['game_duration_seconds'] / 60));
-
-        if ($data['result'] === 'won') {
-            $profile->increment('games_won');
-            $profile->increment('current_streak');
-
-            if ($profile->current_streak > $profile->highest_streak) {
-                $profile->highest_streak = $profile->current_streak;
-            }
-        } else {
-            $profile->increment('games_lost');
-            $profile->current_streak = 0;
-        }
-
-        // Calculate accuracy
-        $totalCorrect = GameResult::where('player_id', $playerId)->sum('correct_answers');
-        $totalQuestions = GameResult::where('player_id', $playerId)->sum('questions_answered');
-        $profile->accuracy_percentage = $totalQuestions > 0 ? round(($totalCorrect / $totalQuestions) * 100, 2) : 0;
-        $profile->save();
-
-        // 3. Update category progress
-        $progress = PlayerProgress::firstOrCreate(
-            [
-                'user_id' => $playerId,
-                'category' => $data['category'],
-                'difficulty' => $data['difficulty_level'],
-            ],
-            [
-                'questions_answered' => 0,
-                'correct_answers' => 0,
-                'incorrect_answers' => 0,
-                'category_score' => 0,
-            ]
-        );
-
-        $progress->increment('questions_answered', $data['questions_answered']);
-        $progress->increment('correct_answers', $data['correct_answers']);
-        $progress->increment('incorrect_answers', $incorrect);
-        $progress->increment('category_score', $data['score']);
-        $progress->last_played = now();
-        $progress->save();
-
-        // 4. Award badge if player won
-        $badgeAwarded = null;
-        if ($data['result'] === 'won') {
-            $badgeAwarded = $this->awardBadge(
-                (string)$playerId,
-                $data['participation_type'],
-                $data['difficulty_level']
-            );
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Game result saved successfully',
-            'data' => [
-                'game_result' => $gameResult,
-                'updated_profile' => $profile,
-                'category_progress' => $progress,
-                'badge_awarded' => $badgeAwarded,
-            ]
-        ], 201);
-    }
-
-    private function awardBadge($playerId, $participationType, $difficulty)
+    /**
+     * Record badge progress for a player
+     * Awards official badge every 3 wins/perfect scores
+     * Creates claimable reward in player_rewards collection
+     *
+     * @param string $playerId
+     * @param string $difficulty (Easy, Average, Difficult)
+     * @param string $source ('challenge' or 'battle')
+     * @return array|null
+     */
+    private function recordBadgeProgress($playerId, $difficulty, $source = 'challenge')
     {
         try {
             $playerObjectId = new ObjectId($playerId);
+            $difficultyLower = strtolower($difficulty);
 
-            // Get player info for username
-            $player = \DB::connection('mongodb')
-                ->table('player_info')
-                ->where('_id', $playerObjectId)
-                ->first();
+            Log::info("🎯 Recording badge progress from {$source}", [
+                'player_id' => $playerId,
+                'difficulty' => $difficultyLower
+            ]);
 
-            if (!$player) {
-                return null;
-            }
-
-            // Get or create player badge record
+            // Get or create player badge record in player_badges collection
             $playerBadge = PlayerBadge::firstOrCreate(
                 ['player_info_id' => $playerObjectId],
                 [
                     'easy_badge_count' => 0,
                     'average_badge_count' => 0,
                     'difficult_badge_count' => 0,
+                    'easy_official_badge' => 0,
+                    'average_official_badge' => 0,
+                    'difficult_official_badge' => 0,
                 ]
             );
 
-            // Create individual badge record
-            $badge = Badge::create([
-                'player_badge_id' => $playerBadge->_id,
-                'badge_username' => $player->username,
-                'participates_in' => $participationType,
-                'earned_date' => now(),
+            // Increment the badge count for this difficulty
+            $badgeCountField = $difficultyLower . '_badge_count';
+            $playerBadge->increment($badgeCountField);
+            $playerBadge->refresh();
+
+            $currentCount = $playerBadge->$badgeCountField;
+            $currentInSet = $currentCount % 3;
+
+            Log::info('📊 Badge progress updated', [
+                'total_count' => $currentCount,
+                'current_in_set' => $currentInSet,
+                'milestone_reached' => ($currentInSet === 0)
             ]);
 
-            // Increment appropriate badge count
-            $difficultyLower = strtolower($difficulty);
-            if ($difficultyLower === 'easy') {
-                $playerBadge->increment('easy_badge_count');
-            } elseif (in_array($difficultyLower, ['average', 'medium'])) {
-                $playerBadge->increment('average_badge_count');
-            } elseif (in_array($difficultyLower, ['difficult', 'hard'])) {
-                $playerBadge->increment('difficult_badge_count');
+            // Check if milestone reached (every 3rd win)
+            if ($currentInSet === 0 && $currentCount > 0) {
+                // Calculate which badge number this is (1st, 2nd, 3rd, etc.)
+                $badgeNumber = intdiv($currentCount, 3);
+
+                Log::info('🎊 MILESTONE REACHED!', [
+                    'difficulty' => $difficultyLower,
+                    'badge_number' => $badgeNumber,
+                    'total_badges_earned' => $currentCount
+                ]);
+
+                // ✅ CHECK: Don't create duplicate rewards
+                $existingReward = DB::connection('mongodb')
+                    ->table('player_rewards')
+                    ->where('player_id', $playerObjectId)
+                    ->where('difficulty', $difficultyLower)
+                    ->where('badge_number', $badgeNumber)
+                    ->first();
+
+                if ($existingReward) {
+                    Log::warning('⚠️ Reward already exists, skipping creation', [
+                        'difficulty' => $difficultyLower,
+                        'badge_number' => $badgeNumber,
+                    ]);
+                } else {
+                    // Create claimable reward in player_rewards collection
+                    DB::connection('mongodb')->table('player_rewards')->insert([
+                        'player_id' => $playerObjectId,
+                        'difficulty' => $difficultyLower,
+                        'badge_number' => $badgeNumber,
+                        'earned_date' => now(),
+                        'claimed' => false,
+                        'claimed_date' => null,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+
+                    Log::info('✅ Claimable reward created in player_rewards', [
+                        'difficulty' => $difficultyLower,
+                        'badge_number' => $badgeNumber,
+                        'must_claim' => true
+                    ]);
+                }
+
+                return [
+                    'difficulty' => $difficulty,
+                    'badge_unlocked' => true,
+                    'badge_number' => $badgeNumber,
+                    'can_claim' => true,
+                    'message' => "Congratulations! You've earned badge #{$badgeNumber} for {$difficulty} difficulty! Visit the badge screen to claim it.",
+                ];
             }
 
+            // No milestone reached yet
+            $remaining = 3 - $currentInSet;
+            $progressMessage = $source === 'battle'
+                ? sprintf('%d more battle win%s needed for next badge', $remaining, $remaining === 1 ? '' : 's')
+                : sprintf('%d more perfect score%s needed for next badge', $remaining, $remaining === 1 ? '' : 's');
+
             return [
-                'badge_id' => (string)$badge->_id,
                 'difficulty' => $difficulty,
-                'participation_type' => $participationType,
+                'progress' => $currentInSet,
+                'remaining' => $remaining,
+                'badge_unlocked' => false,
+                'message' => $progressMessage,
             ];
 
         } catch (\Exception $e) {
-            \Log::error('Error awarding badge: ' . $e->getMessage());
+            Log::error('❌ Error recording badge progress', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return null;
         }
     }
 
-    public function getGameHistory($userId)
-    {
-        try {
-            $history = GameResult::where('player_id', new ObjectId($userId))
-                ->orderBy('date_completed', 'desc')
-                ->get();
-
-            return response()->json([
-                'success' => true,
-                'data' => $history
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching game history',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function getPlayerStats($userId)
-    {
-        try {
-            $playerObjectId = new ObjectId($userId);
-
-            $profile = PlayerProfile::where('user_id', $playerObjectId)->first();
-            $progress = PlayerProgress::where('user_id', $playerObjectId)->get();
-            $recentGames = GameHistory::where('player_id', $playerObjectId)
-                ->orderBy('date_completed', 'desc')
-                ->limit(10)
-                ->get();
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'profile' => $profile,
-                    'category_progress' => $progress,
-                    'recent_games' => $recentGames
-                ]
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching player stats',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    // Add these methods to your GameController.php
-
     /**
-     * Save or update fastest time for Memory Match or Puzzle
+     * Save challenge result (for Challenge mode)
+     * Awards badge progress ONLY on perfect scores
      */
-    public function saveFastestTime(Request $request)
+    public function saveChallengeResult(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $validated = $request->validate([
             'player_id' => 'required|string',
-            'game_type' => 'required|string|in:memory_match,puzzle',
-            'difficulty' => 'required|string|in:Easy,Average,Difficult',
-            'time_seconds' => 'required|integer|min:0',
-            'moves' => 'required|integer|min:0',
-            'category' => 'nullable|string', // For puzzle only
+            'category' => 'required|string',
+            'difficulty_level' => 'required|string',
+            'score' => 'required|integer',
+            'total_questions' => 'required|integer',
+            'correct_answers' => 'required|integer',
+            'time_taken' => 'required|integer',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
+        $playerObjectId = new ObjectId($validated['player_id']);
+
+        $badgeAwarded = null;
+
+        // Check if perfect score
+        if ($validated['correct_answers'] === $validated['total_questions']) {
+            Log::info('🎯 Perfect score detected!', [
+                'player_id' => $validated['player_id'],
+                'difficulty' => $validated['difficulty_level'],
+                'correct' => $validated['correct_answers'],
+                'total' => $validated['total_questions'],
+            ]);
+
+            // ✅ UPDATE PLAYER_STATS - THIS WAS MISSING!
+            PlayerStats::updateStats(
+                $validated['player_id'],
+                'challenge',
+                $validated['category'],
+                $validated['difficulty_level'],
+                'won',  // Perfect score = won
+                $validated['score']
+            );
+
+            Log::info('✅ Player stats updated in player_stats collection');
+
+            // Record badge progress (creates claimable reward if milestone reached)
+            $badgeAwarded = $this->recordBadgeProgress(
+                $validated['player_id'],
+                $validated['difficulty_level'],
+                'challenge'
+            );
+
+            Log::info('✅ Badge progress recorded', [
+                'badge_awarded' => $badgeAwarded
+            ]);
+        } else {
+            Log::info('ℹ️ Not a perfect score - no stats or badges awarded', [
+                'correct' => $validated['correct_answers'],
+                'total' => $validated['total_questions'],
+            ]);
         }
 
+        return response()->json([
+            'success' => true,
+            'message' => 'Game result saved successfully',
+            'data' => [
+                'badge_awarded' => $badgeAwarded,
+            ]
+        ], 201);
+    }
+
+    /**
+     * Save battle result (for Battle mode)
+     * Records to battle collection AND awards badge progress on wins
+     */
+    public function saveBattleResult(Request $request)
+    {
+        Log::info('=== BATTLE RESULT REQUEST RECEIVED ===');
+        Log::info('Request Data:', $request->all());
+
         try {
-            $data = $validator->validated();
-            $playerObjectId = new ObjectId($data['player_id']);
+            $validated = $request->validate([
+                'player_id' => 'required|string',
+                'opponent_id' => 'nullable|string',
+                'opponent_username' => 'nullable|string',
+                'opponent_score' => 'nullable|integer|min:0',
+                'category' => 'required|string',
+                'difficulty_level' => 'required|string',
+                'player_score' => 'required|integer|min:0',
+                'result' => 'required|in:won,lost',
+                'battle_id' => 'required|string',
+                'questions_answered' => 'required|integer|min:0',
+                'correct_answers' => 'required|integer|min:0',
+            ]);
 
-            // Find existing record
-            $record = \DB::connection('mongodb')
-                ->collection('fastest_times')
-                ->where('player_id', $playerObjectId)
-                ->where('game_type', $data['game_type'])
-                ->where('difficulty', $data['difficulty'])
-                ->where('category', $data['category'] ?? null)
-                ->first();
+            Log::info('✅ Validation passed', $validated);
 
-            $isNewRecord = false;
+            $playerId = new ObjectId($validated['player_id']);
+            $opponentId = isset($validated['opponent_id']) ? new ObjectId($validated['opponent_id']) : null;
 
-            if ($record) {
-                // Update only if new time is faster
-                if ($data['time_seconds'] < $record['time_seconds']) {
-                    \DB::connection('mongodb')
-                        ->collection('fastest_times')
-                        ->where('_id', $record['_id'])
-                        ->update([
-                            'time_seconds' => $data['time_seconds'],
-                            'moves' => $data['moves'],
-                            'achieved_at' => now(),
-                        ]);
-                    $isNewRecord = true;
-                }
+            // 1. Save to battle collection (for history)
+            DB::connection('mongodb')->table('battle')->insert([
+                'player_id' => $playerId,
+                'battle_id' => $validated['battle_id'],
+                'opponent_id' => $opponentId,
+                'opponent_username' => $validated['opponent_username'] ?? null,
+                'opponent_score' => $validated['opponent_score'] ?? 0,
+                'category' => $validated['category'],
+                'difficulty_level' => $validated['difficulty_level'],
+                'player_score' => $validated['player_score'],
+                'result' => $validated['result'],
+                'questions_answered' => $validated['questions_answered'],
+                'correct_answers' => $validated['correct_answers'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            Log::info('✅ Battle result saved to battle collection');
+
+            // 2. Update player_stats collection
+            PlayerStats::updateStats(
+                (string)$playerId,
+                'battle',
+                $validated['category'],
+                $validated['difficulty_level'],
+                $validated['result'],
+                $validated['player_score']
+            );
+
+            // 3. ONLY IF WON - Award badge progress and create claimable reward
+            $badgeAwarded = null;
+
+            if ($validated['result'] === 'won') {
+                Log::info('🏆 Player WON - awarding badge progress');
+
+                $badgeAwarded = $this->recordBadgeProgress(
+                    (string)$playerId,
+                    $validated['difficulty_level'],
+                    'battle'
+                );
+
+                Log::info('Badge awarded result', ['badge_awarded' => $badgeAwarded]);
             } else {
-                // Create new record
-                \DB::connection('mongodb')
-                    ->collection('fastest_times')
-                    ->insert([
-                        'player_id' => $playerObjectId,
-                        'game_type' => $data['game_type'],
-                        'difficulty' => $data['difficulty'],
-                        'category' => $data['category'] ?? null,
-                        'time_seconds' => $data['time_seconds'],
-                        'moves' => $data['moves'],
-                        'achieved_at' => now(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                $isNewRecord = true;
+                Log::info('ℹ️ Player LOST - no badges awarded');
             }
 
-            return response()->json([
-                'success' => true,
-                'message' => $isNewRecord ? 'New record set!' : 'Time saved',
-                'is_new_record' => $isNewRecord,
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error saving fastest time',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get fastest times for a player
-     */
-    public function getFastestTimes($playerId, $gameType)
-    {
-        try {
-            $playerObjectId = new ObjectId($playerId);
-
-            $records = \DB::connection('mongodb')
-                ->collection('fastest_times')
-                ->where('player_id', $playerObjectId)
-                ->where('game_type', $gameType)
-                ->get();
+            Log::info('=== BATTLE RESULT SAVED SUCCESSFULLY ===');
 
             return response()->json([
                 'success' => true,
-                'data' => $records
-            ], 200);
-        } catch (\Exception $e) {
+                'message' => 'Battle result saved successfully',
+                'data' => $validated,
+                'badge_awarded' => $badgeAwarded,
+            ], 201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('=== VALIDATION ERROR ===');
+            Log::error('Validation errors:', $e->errors());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching fastest times',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
 
-    /**
-     * Get fastest time for specific difficulty/category
-     */
-    public function getFastestTime($playerId, $gameType, $difficulty, $category = null)
-    {
-        try {
-            $playerObjectId = new ObjectId($playerId);
-
-            $query = \DB::connection('mongodb')
-                ->collection('fastest_times')
-                ->where('player_id', $playerObjectId)
-                ->where('game_type', $gameType)
-                ->where('difficulty', $difficulty);
-
-            if ($category) {
-                $query->where('category', $category);
-            }
-
-            $record = $query->first();
-
-            return response()->json([
-                'success' => true,
-                'data' => $record
-            ], 200);
         } catch (\Exception $e) {
+            Log::error('=== EXCEPTION IN saveBattleResult ===');
+            Log::error('Error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching fastest time',
-                'error' => $e->getMessage()
+                'message' => 'Database error: ' . $e->getMessage(),
             ], 500);
         }
     }

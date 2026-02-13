@@ -14,7 +14,7 @@ class RegionController extends Controller
         ->map(function ($region) {
             return [
                 'id' => (int) $region->id,
-                'region_name' => $region->region_name,
+                'name' => $region->region_name,  // Changed from 'region_name' to 'name'
             ];
         });
 

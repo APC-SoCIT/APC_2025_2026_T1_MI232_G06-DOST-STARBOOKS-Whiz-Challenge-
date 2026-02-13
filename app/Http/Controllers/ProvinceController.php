@@ -13,8 +13,7 @@ class ProvinceController extends Controller
             ->map(function ($province) {
                 return [
                     'id' => (int) $province->id,
-                    'province_name' => $province->province_name,
-                    'region_id' => (int) $province->region_id,
+                    'name' => $province->province_name,  // Changed from 'province_name' to 'name'
                 ];
             });
 
