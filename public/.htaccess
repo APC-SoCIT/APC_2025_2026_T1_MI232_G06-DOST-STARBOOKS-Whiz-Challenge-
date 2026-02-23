@@ -3,6 +3,10 @@
         Options -MultiViews -Indexes
     </IfModule>
 
+    <FilesMatch "\.(jpg|jpeg|png|gif|webp)$">
+        Header set Access-Control-Allow-Origin "*"
+    </FilesMatch>
+
     RewriteEngine On
 
     # Handle Authorization Header
