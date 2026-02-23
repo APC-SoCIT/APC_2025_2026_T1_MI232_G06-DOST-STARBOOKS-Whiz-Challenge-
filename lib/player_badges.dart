@@ -1,8 +1,9 @@
+import 'audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:confetti/confetti.dart';
-import 'package:flame_audio/flame_audio.dart';
+
 
 class PlayerBadgesDialog extends StatefulWidget {
   final String playerId;
@@ -136,6 +137,295 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
         isLoading = false;
       });
     }
+  }
+
+
+
+  void _showHowToEarnDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Close button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.black54),
+                    onPressed: () async {
+                      try {
+                        await AudioService().playClickSound();
+                      } catch (e) {
+                        debugPrint('Click sound not found: $e');
+                      }
+                      Navigator.pop(context);
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+
+              // Title
+              const Text(
+                'Earn Epic Badges!',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF046EB8),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Master challenges and unlock exclusive rewards',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: Colors.black54,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Badge Preview
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildBadgePreview(
+                    'Easy',
+                    'assets/images-badges/whiz-ready.png',
+                    const Color(0xFF1D9358),
+                  ),
+                  const SizedBox(width: 16),
+                  _buildBadgePreview(
+                    'Average',
+                    'assets/images-badges/whiz-happy.png',
+                    const Color(0xFF046EB8),
+                  ),
+                  const SizedBox(width: 16),
+                  _buildBadgePreview(
+                    'Difficult',
+                    'assets/images-badges/whiz-achiever.png',
+                    const Color(0xFFBD442E),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // How to unlock section
+              Column(
+                children: [
+                  Text(
+                    'Unlock badges by:',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Whiz Challenge Box
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: _buildUnlockMethod(
+                      icon: Icons.flash_on,
+                      iconColor: const Color(0xFFFDD000),
+                      title: 'Getting perfect scores in ',
+                      highlight: 'Whiz Challenges',
+                      highlightColor: const Color(0xFFFDD000),
+                      description: '100% correct answers with no mistakes',
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Whiz Battles Box
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: _buildUnlockMethod(
+                      icon: Icons.emoji_events,
+                      iconColor: const Color(0xFFC571E2),
+                      title: 'Winning ',
+                      highlight: 'Whiz Battles',
+                      highlightColor: const Color(0xFFC571E2),
+                      description: 'Compete and win against opponents',
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Completion requirement text
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  'Complete all 3 difficulty levels (Easy, Average, Difficult) to claim the ultimate rewards!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // CTA Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    try {
+                      await AudioService().playClickSound();
+                    } catch (e) {
+                      debugPrint('Click sound not found: $e');
+                    }
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFDD000),
+                    foregroundColor: const Color(0xFF816A03),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    elevation: 2,
+                  ),
+                  child: const Text(
+                    'GOT IT!',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadgePreview(String label, String imagePath, Color color) {
+    return Column(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 3),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: Image.asset(imagePath, fit: BoxFit.contain),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUnlockMethod({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String highlight,
+    required Color highlightColor,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: iconColor,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.white, size: 16),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  children: [
+                    TextSpan(text: title),
+                    TextSpan(
+                      text: highlight,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: highlightColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _claimBadge(String difficulty) async {
@@ -307,7 +597,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
         clipBehavior: Clip.none,
         children: [
           Container(
-            constraints: const BoxConstraints(maxWidth: 410, maxHeight: 750),
+            constraints: const BoxConstraints(maxWidth: 410, minHeight: 450, maxHeight: 750),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
@@ -365,6 +655,23 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
               ),
             ),
           ),
+          // Help button (?)
+          Positioned(
+            top: 8,
+            left: 8,
+            child: IconButton(
+              icon: const Icon(Icons.help_outline, color: Colors.black),
+              onPressed: () async {
+                try {
+                  await AudioService().playClickSound();
+                } catch (e) {
+                  debugPrint('Click sound not found: $e');
+                }
+                _showHowToEarnDialog();
+              },
+            ),
+          ),
+// Close button (X)
           Positioned(
             top: 8,
             right: 8,
@@ -372,7 +679,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
               icon: const Icon(Icons.close, color: Colors.black),
               onPressed: () async {
                 try {
-                  await FlameAudio.play('click1.wav');
+                  await AudioService().playClickSound();
                 } catch (e) {
                   debugPrint('Click sound not found: $e');
                 }
@@ -505,7 +812,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
             ElevatedButton(
               onPressed: hasUnclaimed ? () async {
                 try {
-                  await FlameAudio.play('click1.wav');
+                  await AudioService().playClickSound();
                 } catch (e) {
                   debugPrint('Click sound not found: $e');
                 }
@@ -750,7 +1057,7 @@ class _ClaimSuccessDialogState extends State<_ClaimSuccessDialog>
                       child: ElevatedButton.icon(
                         onPressed: () async {
                           try {
-                            await FlameAudio.play('click1.wav');
+                            await AudioService().playClickSound();
                           } catch (e) {
                             debugPrint('Click sound not found: $e');
                           }
