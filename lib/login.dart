@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flame_audio/flame_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'register.dart';
 import 'homepage.dart';
+import 'admin_login.dart';
+import 'loading_page.dart';
+import 'audio_service.dart';  // ✅ Use AudioService instead of FlameAudio directly
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,11 +18,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   bool _obscurePassword = true;
+  bool usernameError = false;
+  bool passwordError = false;
 
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   final String baseUrl = 'http://localhost:8000';
+  final AudioService _audioService = AudioService();  // ✅ Use AudioService
 
   late AnimationController _buttonScaleController;
   late Animation<double> _buttonScale;
@@ -27,6 +33,9 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
+
+    // ✅ Ensure homepage music continues playing
+    _audioService.playHomepageMusic();
 
     // Button scale animation for press effect
     _buttonScaleController = AnimationController(
@@ -51,26 +60,71 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _playClickSound() async {
-    try {
-      await FlameAudio.play('click1.wav');
-    } catch (e) {
-      debugPrint('Button click sound not found: $e');
-    }
+    await _audioService.playClickSound();
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon, {bool hasError = false}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(
+        fontFamily: 'Poppins',
+        fontSize: 12,
+        color: hasError ? Colors.red : null,
+      ),
+      prefixIcon: Icon(icon, color: hasError ? Colors.red : null),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(
+          color: hasError ? Colors.red : const Color(0xFF046EB8),
+          width: 2,
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(
+          color: hasError ? Colors.red : Colors.grey,
+          width: hasError ? 2 : 1,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(
+          color: hasError ? Colors.red : const Color(0xFF046EB8),
+          width: 2,
+        ),
+      ),
+    );
+  }
+
+  void _goToRegister() {
+    _playClickSound();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RegisterPage(),
+      ),
+    );
   }
 
   Future<void> _login() async {
-    _playClickSound(); // Play sound when login button is pressed
+    _playClickSound();
 
-    // Animate button press
     await _buttonScaleController.forward();
     await _buttonScaleController.reverse();
+
+    // Clear previous errors
+    setState(() {
+      usernameError = false;
+      passwordError = false;
+    });
 
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    // TC_005: Empty username validation
+    // Validation
     if (username.isEmpty && password.isNotEmpty) {
       if (!mounted) return;
+      setState(() => usernameError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Username is required'),
@@ -80,9 +134,9 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    // TC_006: Empty password validation
     if (password.isEmpty && username.isNotEmpty) {
       if (!mounted) return;
+      setState(() => passwordError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Password is required'),
@@ -92,9 +146,12 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    // TC_007: Both fields empty
     if (username.isEmpty && password.isEmpty) {
       if (!mounted) return;
+      setState(() {
+        usernameError = true;
+        passwordError = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please complete all required fields'),
@@ -104,9 +161,9 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    // TC_008: Username too short
     if (username.length < 3) {
       if (!mounted) return;
+      setState(() => usernameError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Username must be at least 3 characters'),
@@ -116,9 +173,9 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    // TC_009: Username too long
     if (username.length > 20) {
       if (!mounted) return;
+      setState(() => usernameError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Username exceeds maximum length'),
@@ -127,6 +184,10 @@ class _LoginScreenState extends State<LoginScreen>
       );
       return;
     }
+
+    // ✅ SHOW FULL PAGE LOADING - User passed all validations, now logging in
+    if (!mounted) return;
+    LoadingHelper.showLoadingPage(context, message: 'Logging in...');
 
     try {
       final response = await http.post(
@@ -143,17 +204,31 @@ class _LoginScreenState extends State<LoginScreen>
 
       final data = jsonDecode(response.body);
 
+      // ✅ HIDE LOADING before showing any dialogs or navigating
+      if (mounted) LoadingHelper.hideLoading(context);
+
       if (!mounted) return;
 
       if (response.statusCode == 200 && data['success'] == true) {
+        final userId = data['user']['id']?.toString() ??
+            data['user']['_id']?.toString() ?? '';
+
+        // Check if this is the user's first login - use tutorial completion key
+        // so it survives logout (prefs.clear() wipes first_login but we check tutorial separately)
+        final prefs = await SharedPreferences.getInstance();
+        final tutorialCompletedKey = 'main_tutorial_completed_$userId';
+        final bool tutorialAlreadyCompleted = prefs.getBool(tutorialCompletedKey) ?? false;
+        final bool isFirstLogin = !tutorialAlreadyCompleted;
+
+        // Check if widget is still mounted before navigation
+        if (!mounted) return;
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (context) => HomePage(
               profile: UserProfile(
-                id: data['user']['id']?.toString() ??
-                    data['user']['_id']?.toString() ??
-                    '',
+                id: userId,
                 username: data['user']['username'],
                 school: data['user']['school'] ?? 'Unknown School',
                 age: data['user']['age']?.toString() ?? 'N/A',
@@ -164,10 +239,16 @@ class _LoginScreenState extends State<LoginScreen>
                 city: data['user']['city']?.toString() ?? '',
                 avatar: data['user']['avatar'] ?? 'default',
               ),
+              isNewUser: isFirstLogin,
             ),
           ),
         );
       } else {
+        if (!mounted) return;
+        setState(() {
+          usernameError = true;
+          passwordError = true;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(data['message'] ?? 'Invalid username or password. Please try again.'),
@@ -176,7 +257,14 @@ class _LoginScreenState extends State<LoginScreen>
         );
       }
     } catch (e) {
+      // ✅ HIDE LOADING on error
+      if (mounted) LoadingHelper.hideLoading(context);
+
       if (!mounted) return;
+      setState(() {
+        usernameError = true;
+        passwordError = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error connecting to server: $e'),
@@ -184,16 +272,6 @@ class _LoginScreenState extends State<LoginScreen>
         ),
       );
     }
-  }
-
-  void _goToRegister() {
-    _playClickSound(); // Play sound when register link is clicked
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const RegisterPage(),
-      ),
-    );
   }
 
   @override
@@ -213,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Image.asset(
-                  "assets/images-logo/starbooksnewlogo.png",
+                  "assets/images-logo/newhomepagelogo.png",
                   height: 50,
                   filterQuality: FilterQuality.high,
                   isAntiAlias: true,
@@ -223,7 +301,7 @@ class _LoginScreenState extends State<LoginScreen>
                     _playClickSound();
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const AdminPage()),
+                      MaterialPageRoute(builder: (context) => const AdminLoginPage()),
                     );
                   },
                   child: Row(
@@ -261,7 +339,7 @@ class _LoginScreenState extends State<LoginScreen>
                     child: Column(
                       children: [
                         Image.asset(
-                          "assets/images-logo/starbookslogin.png",
+                          "assets/images-logo/newloginlogo.png",
                           height: 170,
                           filterQuality: FilterQuality.high,
                           isAntiAlias: true,
@@ -292,21 +370,7 @@ class _LoginScreenState extends State<LoginScreen>
                               TextField(
                                 controller: _usernameController,
                                 onSubmitted: (_) => _login(),
-                                decoration: InputDecoration(
-                                  labelText: "Username",
-                                  labelStyle: const TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 12,
-                                  ),
-                                  prefixIcon: const Icon(Icons.person),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF046EB8),
-                                      width: 2,
-                                    ),
-                                  ),
-                                ),
+                                decoration: _inputDecoration("Username", Icons.person, hasError: usernameError),
                               ),
                               const SizedBox(height: 15),
 
@@ -314,31 +378,17 @@ class _LoginScreenState extends State<LoginScreen>
                                 controller: _passwordController,
                                 onSubmitted: (_) => _login(),
                                 obscureText: _obscurePassword,
-                                decoration: InputDecoration(
-                                  labelText: "Password",
-                                  labelStyle: const TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 12,
-                                  ),
-                                  prefixIcon: const Icon(Icons.lock),
+                                decoration: _inputDecoration("Password", Icons.lock, hasError: passwordError).copyWith(
                                   suffixIcon: IconButton(
                                     icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_off
-                                          : Icons.visibility,
+                                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                      color: passwordError ? Colors.red : null,
                                     ),
                                     onPressed: () {
                                       setState(() {
                                         _obscurePassword = !_obscurePassword;
                                       });
                                     },
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF046EB8),
-                                      width: 2,
-                                    ),
                                   ),
                                 ),
                               ),
@@ -401,20 +451,6 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         );
       },
-    );
-  }
-}
-
-class AdminPage extends StatelessWidget {
-  const AdminPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Admin Panel")),
-      body: const Center(
-        child: Text("This is the Admin Page (to be implemented)."),
-      ),
     );
   }
 }

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'splash_screen.dart';
-import 'audio_service.dart'; // Import audio service
+import 'audio_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize audio service
+  // Initialize audio service before app starts
   await AudioService().initialize();
 
   runApp(const MyApp());
