@@ -44,6 +44,11 @@ docker pull dostnexus/flutter-starbooks:latest
 docker pull dostnexus/laravel-starbooks-api:latest
 ```
 
+**Whiz Battle Server**
+```
+docker pull dostnexus/
+```
+
 ## 2. Import CSV data into MongoDB
 
 Copy/Download the CSV files attached inside the mongodb branch of this repository:
@@ -91,7 +96,45 @@ docker-compose -f docker-compose.dev.yml up -d
 docker-compose -f docker-compose.dev.yml down
 ```
 
-## 4. Accessing the application:
+# Configuring Whiz Battle Server
+Choose 1 PC/Device to act as HOST
+
+On the host computer (Windows):
+
+1. Press Windows key, search "Windows Defender Firewall"
+2. Click "Advanced settings"
+3. Click "Inbound Rules" (left side)
+4. Click "New Rule" (right side)
+5. Select "Port" → Next
+6. Select "TCP" → Specific ports: 8080, 8000 → Next
+7. Select "Allow the connection" → Next
+8. Check all boxes (Domain, Private, Public) → Next
+9. Name: Starbooks Docker → Finish
+
+- Type this in terminal (CMD):
+```
+ipconfig
+```
+- Search for your IP address (Ex: IPv4 Address. . . . . . : 192.168.1.100)
+
+cd C:\starbooks
+docker-compose up -d
+```
+
+## Access the App
+
+**Host (plays locally):**
+```
+Opens browser → http://localhost:8080
+```
+
+**Guest (connects to host):**
+```
+Opens browser → http://192.168.1.100:8080
+(Replace with actual host IP)
+
+
+## Accessing the application:
 
 - Flutter: http://localhost:8080
 - Laravel API: http://localhost:8000/api/region

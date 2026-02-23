@@ -69,5 +69,9 @@ RUN chown -R www-data:www-data /var/www \
 # Expose PHP-FPM port
 EXPOSE 9000
 
+# Clear any cached config
+RUN php artisan config:clear || true
+RUN php artisan cache:clear || true
+
 # Start PHP-FPM
 CMD ["php-fpm"]

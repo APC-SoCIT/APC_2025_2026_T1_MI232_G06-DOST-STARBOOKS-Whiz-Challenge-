@@ -45,6 +45,20 @@ services:
       - MONGO_INITDB_DATABASE=starbooksWhizbee
     networks:
       - starbooks-network
+  
+  battle-server:
+    image: dostnexus/whiz-battle-server:latest
+    container_name: battle-server
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/
+      - LARAVEL_API_URL=http://nginx:80/api
+    depends_on:
+      - mongodb
+      - nginx
+    networks:
+      - starbooks-network
 
 networks:
   starbooks-network:
