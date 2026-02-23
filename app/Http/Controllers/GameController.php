@@ -87,15 +87,18 @@ class GameController extends Controller
                     ]);
                 } else {
                     // Create claimable reward in player_rewards collection
+                    // requested=true immediately so admin can see and award it
                     DB::connection('mongodb')->table('player_rewards')->insert([
-                        'player_id' => $playerObjectId,
-                        'difficulty' => $difficultyLower,
-                        'badge_number' => $badgeNumber,
-                        'earned_date' => now(),
-                        'claimed' => false,
-                        'claimed_date' => null,
-                        'created_at' => now(),
-                        'updated_at' => now()
+                        'player_id'      => $playerObjectId,
+                        'difficulty'     => $difficultyLower,
+                        'badge_number'   => $badgeNumber,
+                        'earned_date'    => now(),
+                        'claimed'        => false,
+                        'claimed_date'   => null,
+                        'requested'      => true,
+                        'requested_date' => now(),
+                        'created_at'     => now(),
+                        'updated_at'     => now(),
                     ]);
 
                     Log::info('✅ Claimable reward created in player_rewards', [

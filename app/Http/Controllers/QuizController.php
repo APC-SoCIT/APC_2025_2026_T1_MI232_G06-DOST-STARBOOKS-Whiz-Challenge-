@@ -82,15 +82,27 @@ class QuizController extends Controller
                 ];
             })
             ->shuffle()
-            ->take(10) // Take up to 10 (or fewer if not enough available)
             ->values();
+
+            // Look up num_questions from difficulty settings (admin-configurable)
+            $diffSetting = \DB::table('quiz_difficulty_settings')
+                ->where('difficulty_level', $normalizedDifficulty)
+                ->first();
+            $numQuestions = $diffSetting ? (int) $diffSetting->num_questions : 10;
+
+            \Log::info("Difficulty setting applied", [
+                'difficulty' => $normalizedDifficulty,
+                'num_questions' => $numQuestions,
+            ]);
+
+            $formattedQuestions = $formattedQuestions->take($numQuestions);
 
             $finalCount = $formattedQuestions->count();
 
-            // Warn if fewer than 10 questions
+            // Warn if fewer questions available than configured
             $warning = null;
-            if ($finalCount < 10) {
-                $warning = "Only {$finalCount} questions available for this combination.";
+            if ($finalCount < $numQuestions) {
+                $warning = "Only {$finalCount} questions available for this combination (configured: {$numQuestions}).";
                 \Log::warning($warning);
             }
 
@@ -197,15 +209,27 @@ class QuizController extends Controller
                 ];
             })
             ->shuffle()
-            ->take(10) // Take up to 10 (or fewer if not enough available)
             ->values();
+
+            // Look up num_questions from difficulty settings (admin-configurable)
+            $diffSetting = \DB::table('quiz_difficulty_settings')
+                ->where('difficulty_level', $normalizedDifficulty)
+                ->first();
+            $numQuestions = $diffSetting ? (int) $diffSetting->num_questions : 10;
+
+            \Log::info("Difficulty setting applied", [
+                'difficulty' => $normalizedDifficulty,
+                'num_questions' => $numQuestions,
+            ]);
+
+            $formattedQuestions = $formattedQuestions->take($numQuestions);
 
             $finalCount = $formattedQuestions->count();
 
-            // Warn if fewer than 10 questions
+            // Warn if fewer questions available than configured
             $warning = null;
-            if ($finalCount < 10) {
-                $warning = "Only {$finalCount} questions available for this combination.";
+            if ($finalCount < $numQuestions) {
+                $warning = "Only {$finalCount} questions available for this combination (configured: {$numQuestions}).";
                 \Log::warning($warning);
             }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 use App\Models\User;
 use MongoDB\BSON\ObjectId;
@@ -36,10 +37,10 @@ class UserController extends Controller
                 'avatar' => 'required|string',
                 'category' => 'required|string',
                 'student_category' => 'nullable|string',  // ← ADD THIS LINE
-                'sex' => 'required|in:Male,Female',
-                'region' => 'required|integer',
-                'province' => 'required|integer',
-                'city' => 'required|integer',
+                'sex' => 'required|in:Male,Female,Prefer not to say',
+                'region' => 'required|numeric',
+                'province' => 'required|numeric',
+                'city' => 'required|numeric',
             ], [
                 // Custom error messages matching Flutter app expectations
                 'username.required' => 'Username is required',
@@ -59,14 +60,14 @@ class UserController extends Controller
                 'avatar.required' => 'Avatar is required',
                 'category.required' => 'Category is required',
                 'sex.required' => 'Sex is required',
-                'sex.in' => 'Sex must be either Male or Female',
+                'sex.in' => 'Sex must be Male, Female, or Prefer not to say',
 
                 'region.required' => 'Region is required',
-                'region.integer' => 'Invalid region selected',
+                'region.numeric' => 'Invalid region selected',
                 'province.required' => 'Province is required',
-                'province.integer' => 'Invalid province selected',
+                'province.numeric' => 'Invalid province selected',
                 'city.required' => 'City is required',
-                'city.integer' => 'Invalid city selected',
+                'city.numeric' => 'Invalid city selected',
             ]);
 
         } catch (ValidationException $e) {
@@ -119,7 +120,29 @@ class UserController extends Controller
             'password' => 'required|string',
         ]);
 
-        $user = User::where('username', $request->username)->first();
+        $username    = $request->username;
+        $attemptKey  = 'login_attempts:' . strtolower($username);
+        $lockoutKey  = 'login_lockout:'  . strtolower($username);
+
+        $maxAttempts   = 5;
+        $lockoutMinutes = 5;
+
+        // ── Check if currently locked out ──────────────────────────────────
+        if (Cache::has($lockoutKey)) {
+            $secondsLeft = Cache::get($lockoutKey) - now()->timestamp;
+            $minutesLeft = (int) ceil($secondsLeft / 60);
+            $minutesLeft = max(1, $minutesLeft);
+
+            return response()->json([
+                'success'      => false,
+                'message'      => "Account temporarily locked due to too many failed attempts. Please try again in {$minutesLeft} minute(s).",
+                'locked_out'   => true,
+                'minutes_left' => $minutesLeft,
+            ], 429);
+        }
+
+        // ── Find user ──────────────────────────────────────────────────────
+        $user = User::where('username', $username)->first();
 
         if (!$user) {
             return response()->json([
@@ -128,17 +151,43 @@ class UserController extends Controller
             ], 404);
         }
 
+        // ── Wrong password ─────────────────────────────────────────────────
         if (!Hash::check($request->password, $user->password)) {
+            $attempts = Cache::get($attemptKey, 0) + 1;
+            $remaining = $maxAttempts - $attempts;
+
+            if ($attempts >= $maxAttempts) {
+                // Lock the account for 30 minutes
+                $unlockAt = now()->addMinutes($lockoutMinutes)->timestamp;
+                Cache::put($lockoutKey, $unlockAt, now()->addMinutes($lockoutMinutes));
+                Cache::forget($attemptKey);
+
+                return response()->json([
+                    'success'      => false,
+                    'message'      => 'Too many failed attempts. Your account has been locked for 5 minutes.',
+                    'locked_out'   => true,
+                    'minutes_left' => $lockoutMinutes,
+                ], 429);
+            }
+
+            // Store attempt count — expires after lockout window so it self-cleans
+            Cache::put($attemptKey, $attempts, now()->addMinutes($lockoutMinutes));
+
             return response()->json([
-                'success' => false,
-                'message' => 'Invalid password',
+                'success'           => false,
+                'message'           => "Invalid password. {$remaining} attempt(s) remaining before lockout.",
+                'attempts_remaining'=> $remaining,
             ], 401);
         }
+
+        // ── Success — clear any recorded attempts ──────────────────────────
+        Cache::forget($attemptKey);
+        Cache::forget($lockoutKey);
 
         return response()->json([
             'success' => true,
             'message' => 'Login successful',
-            'user' => $user,
+            'user'    => $user,
         ]);
     }
 
@@ -267,10 +316,10 @@ class UserController extends Controller
                 'avatar' => 'required|string',
                 'category' => 'required|string',
                 'student_category' => 'nullable|string',
-                'sex' => 'required|in:Male,Female',
-                'region' => 'required|integer',
-                'province' => 'required|integer',
-                'city' => 'required|integer',
+                'sex' => 'required|in:Male,Female,Prefer not to say',
+                'region' => 'required|numeric',
+                'province' => 'required|numeric',
+                'city' => 'required|numeric',
             ], [
                 'username.required' => 'Username is required',
                 'username.min' => 'Username must be at least 3 characters',
@@ -282,13 +331,13 @@ class UserController extends Controller
                 'avatar.required' => 'Avatar is required',
                 'category.required' => 'Category is required',
                 'sex.required' => 'Sex is required',
-                'sex.in' => 'Sex must be either Male or Female',
+                'sex.in' => 'Sex must be Male, Female, or Prefer not to say',
                 'region.required' => 'Region is required',
-                'region.integer' => 'Invalid region selected',
+                'region.numeric' => 'Invalid region selected',
                 'province.required' => 'Province is required',
-                'province.integer' => 'Invalid province selected',
+                'province.numeric' => 'Invalid province selected',
                 'city.required' => 'City is required',
-                'city.integer' => 'Invalid city selected',
+                'city.numeric' => 'Invalid city selected',
             ]);
 
         } catch (ValidationException $e) {
