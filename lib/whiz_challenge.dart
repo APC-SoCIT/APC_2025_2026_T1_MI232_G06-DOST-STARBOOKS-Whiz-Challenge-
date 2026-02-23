@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 import 'quiz_game.dart';
-import 'global_music_manager.dart';
-import 'package:flame_audio/flame_audio.dart';
+import 'difficulty_settings_service.dart';
+import 'audio_service.dart';  // Use AudioService instead of flame_audio
+import 'game_tutorial_overlay.dart';
 
 class WhizChallenge extends StatefulWidget {
   final String userId;
   final String userAvatar;
   final String username;
+  final String? preselectedDifficulty;
+  final String? preselectedCategory;
 
   const WhizChallenge({
     super.key,
     required this.userId,
     required this.userAvatar,
     required this.username,
+    this.preselectedDifficulty,
+    this.preselectedCategory,
   });
 
   @override
@@ -20,121 +25,197 @@ class WhizChallenge extends StatefulWidget {
 }
 
 class _WhizChallengeState extends State<WhizChallenge> {
-  String selectedCategory = 'Science';
-  String selectedDifficulty = 'Easy';
-  String? _hoveredCategory;
+  final AudioService _audioService = AudioService();  // Add AudioService
+  String selectedDifficulty = 'Easy';  // Changed from 'EASY' to match database
+  String? selectedMainCategory;
 
-  Future<void> _logoutDialog() async {
-    try {
-      await FlameAudio.play('click1.wav');
-    } catch (e) {
-      debugPrint('Click sound not found: $e');
+  // Tutorial state
+  bool _showGameTutorial = false;
+  bool _checkingTutorialStatus = true;
+  final String baseUrl = "http://localhost:8000";
+
+  // Difficulty options
+  final List<Map<String, String>> difficultyLevels = [
+    {'value': 'Easy', 'display': 'Easy'},        // Changed from 'EASY'
+    {'value': 'Average', 'display': 'Average'},  // Changed from 'AVERAGE'
+    {'value': 'Difficult', 'display': 'Difficult'},  // Changed from 'DIFFICULT'
+  ];
+
+  // Simplified category definitions - Less detailed topics
+  // Expanded topic lists per difficulty
+  final Map<String, List<String>> mathSubcategories = {
+    'Easy': [  // Changed from 'EASY'
+      'Addition & Subtraction',
+      'Multiplication',
+      'Division',
+      'Counting & Numbers',
+      'Basic Shapes',
+      'Comparing Numbers',
+      'Number Patterns',
+      'Telling Time',
+    ],
+    'Average': [  // Changed from 'AVERAGE'
+      'Fractions & Decimals',
+      'Algebra Basics',
+      'Geometry',
+      'Ratios & Proportions',
+      'Percentages',
+      'Area & Perimeter',
+      'Integers',
+      'Word Problems',
+    ],
+    'Difficult': [  // Changed from 'DIFFICULT'
+      'Calculus',
+      'Statistics & Probability',
+      'Advanced Algebra',
+      'Trigonometry',
+      'Linear Equations',
+      'Polynomials',
+      'Logarithms',
+      'Matrices',
+    ],
+  };
+
+  final Map<String, List<String>> scienceSubcategories = {
+    'Easy': [  // Changed from 'EASY'
+      'Plants & Animals',
+      'Human Body',
+      'Weather & Seasons',
+      'Day & Night',
+      'Rocks & Soil',
+      'Food Chains',
+      'Simple Machines',
+      'Senses',
+    ],
+    'Average': [  // Changed from 'AVERAGE'
+      'Ecosystems',
+      'Cells & Organisms',
+      'Matter & States',
+      'Forces & Motion',
+      'Solar System',
+      'Energy Types',
+      'Water Cycle',
+      'Photosynthesis',
+    ],
+    'Difficult': [  // Changed from 'DIFFICULT'
+      'Molecular Biology',
+      'Advanced Chemistry',
+      'Quantum Physics',
+      'Genetics & DNA',
+      'Thermodynamics',
+      'Electromagnetism',
+      'Chemical Reactions',
+      'Atomic Structure',
+    ],
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-load difficulty settings so quiz has them ready
+    DifficultySettingsService.instance.load();
+
+    // Initialize preselected values
+    if (widget.preselectedDifficulty != null) {
+      selectedDifficulty = widget.preselectedDifficulty!;
+    }
+    if (widget.preselectedCategory != null) {
+      selectedMainCategory = widget.preselectedCategory;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset("assets/images-icons/sadlogout.png", width: 80, height: 80),
-              const SizedBox(height: 15),
-              const Text(
-                "Logout Confirmation",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                "Are you sure you want to log out?",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
-              ),
-              const SizedBox(height: 25),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        try {
-                          FlameAudio.play('click1.wav');
-                        } catch (e) {
-                          debugPrint('Click sound not found: $e');
-                        }
-                        Navigator.pop(context, false);
-                      },
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFF046EB8), width: 1),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      child: const Text(
-                        "Cancel",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          color: Color(0xFF046EB8),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        try {
-                          FlameAudio.play('click1.wav');
-                        } catch (e) {
-                          debugPrint('Click sound not found: $e');
-                        }
-                        Navigator.pop(context, true);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFDD000),
-                        foregroundColor: const Color(0xFF816A03),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      child: const Text(
-                        "Logout",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            ],
-          ),
-        ),
-      ),
-    );
+    // Handle music transition - stop homepage music, start quiz music
+    _initializeMusic();
 
-    if (confirmed == true && mounted) {
-      Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkGameTutorialStatus();
+    });
+  }
+
+  Future<void> _initializeMusic() async {
+    try {
+      // Smoothly transition from homepage music to quiz music
+      await _audioService.playQuizMusic(fadeIn: true);
+    } catch (e) {
+      debugPrint('Error initializing music: $e');
+    }
+  }
+
+  Future<void> _checkGameTutorialStatus() async {
+    try {
+      final shouldShow = await GameTutorialOverlay.shouldShowTutorial(
+        widget.userId,
+        'challenge',
+      );
+
+      if (shouldShow && mounted) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          setState(() {
+            _showGameTutorial = true;
+            _checkingTutorialStatus = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _checkingTutorialStatus = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking tutorial status: $e');
+      if (mounted) {
+        setState(() {
+          _checkingTutorialStatus = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        // Play click sound
+        await _audioService.playClickSound();
+
+        // Stop quiz music and transition to homepage music
+        await _audioService.stopMusic();
+        await _audioService.playHomepageMusic(fadeIn: true);
+
+        if (!mounted) return;
+        Navigator.of(context).pop();
+      },
+      child: Stack(
         children: [
-          _buildTopBar(),
-          Expanded(
-            child: _buildSelectionScreen(),
+          Scaffold(
+            backgroundColor: Colors.white,
+            body: _checkingTutorialStatus
+                ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFDD000)),
+            )
+                : Column(
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: _buildSelectionScreen(),
+                ),
+              ],
+            ),
           ),
+
+          // Game Tutorial Overlay
+          if (_showGameTutorial)
+            GameTutorialOverlay(
+              userId: widget.userId,
+              gameType: 'challenge',
+              onComplete: () {
+                setState(() => _showGameTutorial = false);
+              },
+            ),
         ],
       ),
     );
@@ -144,19 +225,20 @@ class _WhizChallengeState extends State<WhizChallenge> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // White top section with logo and avatar
         Container(
           color: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
           child: Row(
             children: [
+              // Logo on the left
               Image.asset(
-                "assets/images-logo/starbooksmainlogo.png",
+                "assets/images-logo/newhomepagelogo.png",
                 width: 150,
                 height: 50,
                 fit: BoxFit.contain,
               ),
               const Spacer(),
+              // Avatar on the right
               MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: GestureDetector(
@@ -166,13 +248,10 @@ class _WhizChallengeState extends State<WhizChallenge> {
                     height: 44,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF046EB8), width: 3),
+                      border: Border.all(color: const Color(0xFFFDD000), width: 3),
                     ),
                     child: ClipOval(
-                      child: Image.asset(
-                        widget.userAvatar,
-                        fit: BoxFit.cover,
-                      ),
+                      child: Image.asset(widget.userAvatar, fit: BoxFit.cover),
                     ),
                   ),
                 ),
@@ -180,30 +259,30 @@ class _WhizChallengeState extends State<WhizChallenge> {
             ],
           ),
         ),
-        // Colored header bar with back button and game name
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: const BoxDecoration(
             color: Color(0xFFFDD000),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 3,
-                offset: Offset(0, 2),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3, offset: Offset(0, 2))],
           ),
           child: Row(
             children: [
+              // Simple back arrow button with just <
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: Color(0xFF915701), size: 28),
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.black87, size: 20),
                 onPressed: () async {
                   try {
-                    await FlameAudio.play('click1.wav');
+                    await _audioService.playClickSound();
                   } catch (e) {
                     debugPrint('Click sound not found: $e');
                   }
+
+                  // Stop quiz music and transition to homepage music
+                  await _audioService.stopMusic();
+                  await _audioService.playHomepageMusic(fadeIn: true);
+
+                  if (!mounted) return;
                   Navigator.pop(context);
                 },
                 padding: EdgeInsets.zero,
@@ -211,16 +290,16 @@ class _WhizChallengeState extends State<WhizChallenge> {
               ),
               Expanded(
                 child: Text(
-                  "Starbooks Whiz Challenge",
+                  "Whiz Challenge",
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xFF915701),
+                    color: Colors.black87,
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              const SizedBox(width: 28), // Balance the back button space
+              const SizedBox(width: 28),
             ],
           ),
         ),
@@ -229,98 +308,258 @@ class _WhizChallengeState extends State<WhizChallenge> {
   }
 
   Widget _buildSelectionScreen() {
-    return Container(
-      color: Colors.white,
-      child: Center(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(40),
+    return Center(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Category Selection
-                    Column(
-                      children: [
-                        const Text(
-                          "Select Category",
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFDD000),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        Row(
-                          children: [
-                            _buildCategoryCard('Science', 'assets/images-icons/science.png'),
-                            const SizedBox(width: 30),
-                            _buildCategoryCard('Math', 'assets/images-icons/math.png'),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 80),
-                    // Difficulty Selection
-                    Column(
-                      children: [
-                        const Text(
-                          "Difficulty Level",
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFDD000),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        _buildDifficultyButton('Easy', const Color(0xFF1D9358)),
-                        _buildDifficultyButton('Average', const Color(0xFF046EB8)),
-                        _buildDifficultyButton('Difficult', const Color(0xFFBD442E)),
-                      ],
-                    ),
-                  ],
+                // Difficulty label
+                const Text(
+                  'DIFFICULTY',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black54,
+                    letterSpacing: 1.2,
+                  ),
                 ),
-                const SizedBox(height: 50),
-                // PLAY Button
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await FlameAudio.play('click1.wav');
-                    } catch (e) {
-                      debugPrint('Click sound not found: $e');
-                    }
-                    GlobalMusicManager().stopMusic();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => QuizScreen(
-                          category: selectedCategory,
-                          difficulty: selectedDifficulty,
-                          userId: widget.userId,
-                          participationType: 'Whiz Challenge',
+                const SizedBox(height: 10),
+                // Difficulty Row Selection
+                _buildDifficultyRow(),
+                const SizedBox(height: 28),
+
+                // Category label
+                const Text(
+                  'CATEGORY',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black54,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Math Category (Expandable)
+                _buildExpandableCategorySection('Math', Icons.calculate),
+                const SizedBox(height: 14),
+
+                // Science Category (Expandable)
+                _buildExpandableCategorySection('Science', Icons.science),
+                const SizedBox(height: 40),
+
+                // Play Button
+                Center(child: _buildPlayButton()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDifficultyRow() {
+    return Row(
+      children: difficultyLevels.map((difficulty) {
+        final isSelected = selectedDifficulty == difficulty['value'];
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () async {
+                  try {
+                    await _audioService.playClickSound();
+                  } catch (e) {
+                    debugPrint('Click sound error: $e');
+                  }
+                  setState(() {
+                    selectedDifficulty = difficulty['value']!;
+                    selectedMainCategory = null; // Reset category when difficulty changes
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFFFDD000) : Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFFFDD000) : Colors.black87,
+                      width: 2,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                      BoxShadow(
+                        color: const Color(0xFFFDD000).withValues(alpha: 0.5),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                        : [],
+                  ),
+                  child: Text(
+                    difficulty['display']!.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildExpandableCategorySection(String category, IconData icon) {
+    final isExpanded = selectedMainCategory?.toLowerCase() == category.toLowerCase();
+    final topics = category.toLowerCase() == 'math'
+        ? mathSubcategories[selectedDifficulty] ?? []
+        : scienceSubcategories[selectedDifficulty] ?? [];
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () async {
+          try {
+            await _audioService.playClickSound();
+          } catch (e) {
+            debugPrint('Click sound error: $e');
+          }
+          setState(() {
+            if (isExpanded) {
+              selectedMainCategory = null;
+            } else {
+              selectedMainCategory = category.toUpperCase();
+            }
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isExpanded ? const Color(0xFFFDD000) : Colors.black87,
+              width: 2,
+            ),
+            boxShadow: isExpanded
+                ? [
+              BoxShadow(
+                color: const Color(0xFFFDD000).withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ]
+                : [],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Column(
+              children: [
+                // ── Yellow header ──
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  color: isExpanded ? const Color(0xFFFDD000) : Colors.white,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(icon, color: Colors.black87, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Text(
+                        category.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.black87,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFDD000),
-                    foregroundColor: const Color(0xFF915701),
-                    padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 4,
+                      const Spacer(),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isExpanded ? Icons.remove : Icons.add,
+                          color: Colors.black87,
+                          size: 18,
+                        ),
+                      ),
+                    ],
                   ),
-                  child: const Text(
-                    "PLAY",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                ),
+                // ── White topics body (animated) ──
+                AnimatedCrossFade(
+                  firstChild: const SizedBox(width: double.infinity, height: 0),
+                  secondChild: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+                    color: Colors.white,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'TOPICS',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.black45,
+                            letterSpacing: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: topics.map((topic) => Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(50),
+                              border: Border.all(
+                                  color: Colors.grey[300]!, width: 1.5),
+                            ),
+                            child: Text(
+                              topic,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          )).toList(),
+                        ),
+                      ],
                     ),
                   ),
+                  crossFadeState: isExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 250),
                 ),
               ],
             ),
@@ -330,143 +569,167 @@ class _WhizChallengeState extends State<WhizChallenge> {
     );
   }
 
-  Widget _buildCategoryCard(String category, String imagePath) {
-    final isSelected = selectedCategory == category;
-    final isHovered = _hoveredCategory == category;
-    final showColorful = isSelected || isHovered;
+  Widget _buildPlayButton() {
+    final isEnabled = selectedMainCategory != null;
 
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hoveredCategory = category),
-      onExit: (_) => setState(() => _hoveredCategory = null),
+      cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.forbidden,
       child: GestureDetector(
-        onTap: () async {
+        onTap: isEnabled
+            ? () async {
           try {
-            await FlameAudio.play('click1.wav');
+            await _audioService.playClickSound();
           } catch (e) {
-            debugPrint('Click sound not found: $e');
+            debugPrint('Click sound error: $e');
           }
-          setState(() => selectedCategory = category);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          width: 220,
-          height: 280,
-          padding: EdgeInsets.zero,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isSelected ? const Color(0xFFFDD000) : Colors.grey[300]!,
-              width: isSelected ? 4 : 2,
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => QuizScreen(
+                userId: widget.userId,
+                category: selectedMainCategory!,
+                difficulty: selectedDifficulty,
+              ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isHovered ? 0.15 : 0.1),
-                blurRadius: isHovered ? 12 : 8,
-                offset: Offset(0, isHovered ? 6 : 4),
+          );
+        }
+            : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 16),
+          decoration: BoxDecoration(
+            gradient: isEnabled
+                ? const LinearGradient(
+              colors: [Color(0xFFFDD000), Color(0xFFFFC700)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            )
+                : null,
+            color: isEnabled ? null : Colors.grey[300],
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: isEnabled
+                ? [
+              const BoxShadow(
+                color: Color(0x40FDD000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
               ),
-            ],
+            ]
+                : [],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Expanded(
-                child: ClipRect(
-                  child: Transform.scale(
-                    scale: 1.35,
-                    child: Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.zero,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        child: ColorFiltered(
-                          key: ValueKey(showColorful),
-                          colorFilter: showColorful
-                              ? const ColorFilter.mode(
-                            Colors.transparent,
-                            BlendMode.dst,
-                          )
-                              : const ColorFilter.matrix([
-                            0.2126, 0.7152, 0.0722, 0, 0,
-                            0.2126, 0.7152, 0.0722, 0, 0,
-                            0.2126, 0.7152, 0.0722, 0, 0,
-                            0,      0,      0,      1, 0,
-                          ]),
-                          child: Image.asset(
-                            imagePath,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Container(
-                height: 2,
-                width: double.infinity,
-                color: Colors.grey[300],
-              ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                child: Text(
-                  category,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.black : Colors.grey[700],
-                  ),
-                ),
-              ),
-            ],
+          child: Text(
+            'PLAY',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isEnabled ? Colors.black87 : Colors.grey[600],
+              letterSpacing: 1,
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildDifficultyButton(String difficulty, Color color) {
-    final isSelected = selectedDifficulty == difficulty;
-    return GestureDetector(
-      onTap: () async {
-        try {
-          await FlameAudio.play('click1.wav');
-        } catch (e) {
-          debugPrint('Click sound not found: $e');
-        }
-        setState(() => selectedDifficulty = difficulty);
-      },
-      child: Container(
-        width: 280,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: color, width: 3),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
+  void _logoutDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: 400,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  "assets/images-icons/sadlogout.png",
+                  width: 80,
+                  height: 80,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(Icons.exit_to_app, size: 80, color: Color(0xFFFDD000));
+                  },
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  "Exit Game",
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Are you sure you want to exit?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 25),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(
+                            color: Color(0xFFFDD000),
+                            width: 1,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: const Text(
+                          "No",
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: Color(0xFFFDD000),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          Navigator.of(context).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFDD000),
+                          foregroundColor: const Color(0xFF816A03),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: const Text(
+                          "Yes",
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              ],
             ),
-          ],
-        ),
-        child: Text(
-          difficulty.toUpperCase(),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: isSelected ? Colors.white : color,
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

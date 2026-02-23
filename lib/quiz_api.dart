@@ -5,37 +5,58 @@ import 'package:flutter/foundation.dart';
 class QuizQuestion {
   final String id;
   final String question;
+  final String? questionImage;  // Support for images
   final String answer1;
+  final String? answer1Image;
   final String answer2;
+  final String? answer2Image;
   final String answer3;
+  final String? answer3Image;
   final String answer4;
+  final String? answer4Image;
   final String correctAnswer;
   final String category;
   final String difficultyLevel;
+  final String? yearLevel;  // Made optional
+  final int hasImages;
 
   QuizQuestion({
     required this.id,
     required this.question,
+    this.questionImage,
     required this.answer1,
+    this.answer1Image,
     required this.answer2,
+    this.answer2Image,
     required this.answer3,
+    this.answer3Image,
     required this.answer4,
+    this.answer4Image,
     required this.correctAnswer,
     required this.category,
     required this.difficultyLevel,
+    this.yearLevel,  // Made optional
+    this.hasImages = 0,
   });
 
   factory QuizQuestion.fromJson(Map<String, dynamic> json) {
     return QuizQuestion(
       id: json['id'] ?? '',
       question: json['question'] ?? '',
+      questionImage: json['question_image'],
       answer1: json['choice_a'] ?? '',
+      answer1Image: json['choice_a_image'],
       answer2: json['choice_b'] ?? '',
+      answer2Image: json['choice_b_image'],
       answer3: json['choice_c'] ?? '',
+      answer3Image: json['choice_c_image'],
       answer4: json['choice_d'] ?? '',
+      answer4Image: json['choice_d_image'],
       correctAnswer: json['correct_answer'] ?? '',
       category: json['category'] ?? '',
       difficultyLevel: json['difficulty_level'] ?? '',
+      yearLevel: json['year_level'] ?? '',  // NEW!
+      hasImages: json['has_images'] ?? 0,
     );
   }
 
@@ -77,12 +98,17 @@ class GameResultResponse {
 class QuizApiService {
   static const String baseUrl = 'http://localhost:8000/api';
 
+  // UPDATED: yearLevel is now optional
   static Future<List<QuizQuestion>> fetchQuestions(
       String category,
       String difficulty,
+      {String? yearLevel}  // Made optional with named parameter
       ) async {
     try {
-      final url = Uri.parse('$baseUrl/quiz/questions/$category/$difficulty');
+      // UPDATED URL - only include yearLevel if provided
+      final url = yearLevel != null
+          ? Uri.parse('$baseUrl/quiz/questions/$category/$difficulty/$yearLevel')
+          : Uri.parse('$baseUrl/quiz/questions/$category/$difficulty');
 
       if (kDebugMode) {
         debugPrint('Fetching questions from: $url');
@@ -116,7 +142,7 @@ class QuizApiService {
           throw Exception(data['message'] ?? 'Failed to load questions');
         }
       } else if (response.statusCode == 404) {
-        throw Exception('No questions found for this category and difficulty');
+        throw Exception('No questions found for this category, difficulty, and year level');
       } else {
         throw Exception('Server error: ${response.statusCode}');
       }
@@ -132,7 +158,6 @@ class QuizApiService {
     required String playerId,
     required String category,
     required String difficultyLevel,
-    required int score,
     required int totalQuestions,
     required int correctAnswers,
     required int timeTaken,
@@ -144,7 +169,6 @@ class QuizApiService {
         'player_id': playerId,
         'category': category,
         'difficulty_level': difficultyLevel,
-        'score': score,
         'total_questions': totalQuestions,
         'correct_answers': correctAnswers,
         'time_taken': timeTaken,
@@ -209,7 +233,7 @@ class QuizApiService {
           'player_id': playerId,
           'category': category,
           'difficulty_level': difficulty,
-          'player_score': score,  // ✅ Changed from 'score'
+          'player_score': score,
           'result': result,
           'battle_id': battleId,
           'questions_answered': questionsAnswered,
@@ -225,7 +249,7 @@ class QuizApiService {
           debugPrint('🎯 Badge info: ${data['badge_awarded']}');
         }
 
-        return data; // ✅ NOW RETURNS DATA
+        return data;
       } else {
         debugPrint('⚠️ Failed to save battle result: ${response.statusCode}');
         return null;
