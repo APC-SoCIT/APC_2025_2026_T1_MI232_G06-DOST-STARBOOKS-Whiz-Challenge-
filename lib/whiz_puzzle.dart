@@ -51,6 +51,7 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
   String? _imageUrl;
 
   // Difficulty options
+  bool _isMusicEnabled = true; // ✅ Music toggle
   final List<Map<String, String>> difficultyLevels = [
     {'value': 'EASY', 'display': 'Easy', 'grid': '3x3 grid'},
     {'value': 'AVERAGE', 'display': 'Average', 'grid': '4x4 grid'},
@@ -438,7 +439,42 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
+
+                  // ✅ Music mute/unmute toggle
+                  StatefulBuilder(
+                    builder: (context, setDialogState) {
+                      return Container(
+                        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(children: [
+                              Icon(_isMusicEnabled ? Icons.music_note : Icons.music_off,
+                                  color: _difficultyColor(_difficulty), size: 22),
+                              const SizedBox(width: 10),
+                              const Text('Music', style: TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w600)),
+                            ]),
+                            Switch(
+                              value: _isMusicEnabled,
+                              activeColor: _difficultyColor(_difficulty),
+                              onChanged: (val) {
+                                setState(() => _isMusicEnabled = val);
+                                setDialogState(() {});
+                                if (val) {
+                                  AudioService().resumeMusic().catchError((_) => AudioService().playPuzzleMusic());
+                                } else {
+                                  AudioService().pauseMusic();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
 
                   // RESUME BUTTON
                   SizedBox(
@@ -459,7 +495,7 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE6833A),
+                        backgroundColor: _difficultyColor(_difficulty),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
@@ -1019,6 +1055,15 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
     );
   }
 
+  Color _difficultyColor(String value) {
+    switch (value) {
+      case 'EASY':      return const Color(0xFF1D9358);
+      case 'AVERAGE':   return const Color(0xFF046EB8);
+      case 'DIFFICULT': return const Color(0xFFBD442E);
+      default:          return const Color(0xFF1D9358);
+    }
+  }
+
   Widget _buildDifficultyRow() {
     return Row(
       children: difficultyLevels.map((difficulty) {
@@ -1043,20 +1088,17 @@ class _WhizPuzzleState extends State<WhizPuzzle> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFE6833A) : Colors.white,
+                    color: isSelected ? _difficultyColor(difficulty['value']!) : Colors.white,
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
-                      color: isSelected ? const Color(0xFFE6833A) : Colors.black87,
+                      color: isSelected ? _difficultyColor(difficulty['value']!) : Colors.black87,
                       width: 2,
                     ),
                     boxShadow: isSelected
-                        ? [
-                      BoxShadow(
-                        color: const Color(0xFFE6833A).withValues(alpha: 0.5),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
+                        ? [BoxShadow(
+                      color: _difficultyColor(difficulty['value']!).withValues(alpha: 0.5),
+                      blurRadius: 8, offset: const Offset(0, 3),
+                    )]
                         : [],
                   ),
                   child: Column(
@@ -1849,19 +1891,23 @@ class _PuzzleResultsPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
 
-                        // Star with spin-in animation
+                        // Bird Badge with bounce animation
                         TweenAnimationBuilder<double>(
                           duration: const Duration(milliseconds: 800),
                           tween: Tween(begin: 0.0, end: 1.0),
                           curve: Curves.elasticOut,
-                          builder: (context, value, child) => Transform.scale(
-                            scale: value,
-                            child: Transform.rotate(
-                              angle: (1 - value) * -3.14,
-                              child: Opacity(
-                                  opacity: value.clamp(0.0, 1.0), child: child),
-                            ),
-                          ),
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: value,
+                              child: Transform.rotate(
+                                angle: (1 - value) * -3.14,
+                                child: Opacity(
+                                  opacity: value.clamp(0.0, 1.0),
+                                  child: child,
+                                ),
+                              ),
+                            );
+                          },
                           child: SizedBox(
                             width: 130,
                             height: 130,
@@ -1870,37 +1916,11 @@ class _PuzzleResultsPage extends StatelessWidget {
                               children: [
                                 ..._buildSparkles(),
                                 Center(
-                                  child: Builder(
-                                    builder: (context) {
-                                      // Use tier color from StarsController (based on total stars).
-                                      // Fall back to difficulty-based color if tier not yet loaded.
-                                      Color starColor;
-                                      if (currentTier != null &&
-                                          currentTier!['color'] != null) {
-                                        final hex = (currentTier!['color'] as String)
-                                            .replaceFirst('#', '0xFF');
-                                        starColor = Color(int.parse(hex));
-                                      } else {
-                                        starColor =
-                                        difficulty.toUpperCase() == 'EASY'
-                                            ? const Color(0xFFCD7F32) // Bronze
-                                            : difficulty.toUpperCase() == 'AVERAGE'
-                                            ? const Color(0xFFC0C0C0) // Silver
-                                            : const Color(0xFFFFD700); // Gold
-                                      }
-                                      return Icon(
-                                        Icons.star_rounded,
-                                        size: 120,
-                                        color: starColor,
-                                        shadows: [
-                                          Shadow(
-                                            color: starColor.withValues(alpha: 0.6),
-                                            blurRadius: 16,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ],
-                                      );
-                                    },
+                                  child: Image.asset(
+                                    'assets/images-badges/whiz-achiever.png',
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
                               ],
@@ -2066,6 +2086,9 @@ class _PuzzleResultsPage extends StatelessWidget {
                             ),
                             child: Column(
                               children: [
+                                // ✅ Badge icon
+                                const Icon(Icons.military_tech, color: Color(0xFFFDD000), size: 48),
+                                const SizedBox(height: 4),
                                 Text(
                                   '${newMilestone!['icon']} MILESTONE!',
                                   style: const TextStyle(
