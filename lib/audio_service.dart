@@ -184,7 +184,7 @@ class AudioService {
   Future<void> pauseMusic() async {
     _isFading = false; // Cancel any active fade loop
     try {
-      await _musicPlayer.setVolume(0);
+      // ✅ Don't zero volume — just pause. resumeMusic() restores volume correctly.
       await _musicPlayer.pause();
     } catch (e) {
       debugPrint('❌ pauseMusic: $e');
@@ -195,6 +195,12 @@ class AudioService {
     if (!_isMusicEnabled) return;
     try {
       await _musicPlayer.resume();
+      // ✅ Restore the correct volume after resume (in case it was at 0)
+      final targetVolume = _currentMusic != null
+          ? (_volumes[_currentMusic!] ?? _currentVolume)
+          : _currentVolume;
+      await _musicPlayer.setVolume(targetVolume);
+      _currentVolume = targetVolume;
     } catch (_) {
       // If resume fails (source was released), replay the track
       if (_currentMusic != null) await _playMusic(_currentMusic!, fadeIn: false);
@@ -227,7 +233,8 @@ class AudioService {
   // ── Settings ─────────────────────────────────────────────────────────────
   void toggleMusic() {
     _isMusicEnabled = !_isMusicEnabled;
-    _isMusicEnabled ? resumeMusic() : stopMusic();
+    // ✅ Use pause/resume (not stop) so the track position is preserved
+    _isMusicEnabled ? resumeMusic() : pauseMusic();
   }
 
   void toggleSfx() {
