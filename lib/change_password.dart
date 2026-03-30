@@ -383,7 +383,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
               obscureText: !showOld,
               onChanged: (_) => setState(() => oldPasswordError = false),
               decoration: _inputDecoration(
-                "Old Password",
+                "Current Password",
                 icon: Icons.lock_outline,
                 hasError: oldPasswordError,
               ).copyWith(
