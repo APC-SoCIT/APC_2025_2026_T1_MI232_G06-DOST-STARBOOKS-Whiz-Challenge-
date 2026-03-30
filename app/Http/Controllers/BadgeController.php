@@ -77,9 +77,14 @@ class BadgeController extends Controller
     private function calculateProgress($totalCount)
     {
         $currentInSet = $totalCount % 3;
+        // When exactly on a milestone (currentInSet=0) and totalCount>0,
+        // show full set (3/3) not empty set (0/3)
+        $displayCount = ($currentInSet === 0 && $totalCount > 0) ? 3 : $currentInSet;
+        $remaining    = ($currentInSet === 0 && $totalCount > 0) ? 0 : (3 - $currentInSet);
+
         return [
-            'current_count' => $currentInSet,
-            'remaining'     => 3 - $currentInSet,
+            'current_count' => $displayCount,
+            'remaining'     => $remaining,
             'total_earned'  => $totalCount,
         ];
     }
@@ -135,10 +140,30 @@ class BadgeController extends Controller
             $badgeCountField   = strtolower($difficulty) . '_badge_count';
             $currentBadgeCount = $playerBadge->$badgeCountField ?? 0;
 
-            if ($currentBadgeCount === 0 || $currentBadgeCount % 3 !== 0) {
+            // Must have at least 3 badges AND be on a milestone boundary
+            if ($currentBadgeCount < 3 || $currentBadgeCount % 3 !== 0) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Not eligible to claim reward. You need 3 badges first.'
+                ], 400);
+            }
+
+            // Double-check: make sure this specific reward record belongs to a valid milestone
+            $alreadyRequestedCount = PlayerReward::where('player_id', $playerObjectId)
+                ->where('difficulty', $difficulty)
+                ->where('requested', true)
+                ->count();
+            $alreadyClaimedCount = PlayerReward::where('player_id', $playerObjectId)
+                ->where('difficulty', $difficulty)
+                ->where('claimed', true)
+                ->count();
+            $totalProcessed = $alreadyRequestedCount + $alreadyClaimedCount;
+            $milestoneNumber = (int) floor($currentBadgeCount / 3);
+
+            if ($totalProcessed >= $milestoneNumber) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This milestone reward has already been requested or claimed.'
                 ], 400);
             }
 
@@ -215,8 +240,12 @@ class BadgeController extends Controller
     {
         try {
             $unclaimedRewards = PlayerReward::where('player_id', new ObjectId($playerId))
-                ->where('requested', '!=', true)
                 ->where('claimed', '!=', true)
+                ->where(function ($query) {
+                    // Match both: requested=false OR requested field doesn't exist (old records)
+                    $query->where('requested', '!=', true)
+                          ->orWhereNull('requested');
+                })
                 ->get();
 
             $format = fn($r) => [

@@ -51,6 +51,7 @@ class GameController extends Controller
             $badgeCountField = $difficultyLower . '_badge_count';
             $playerBadge->increment($badgeCountField);
             $playerBadge->refresh();
+            // Track that we incremented so we can roll back if reward insert fails
 
             $currentCount = $playerBadge->$badgeCountField;
             $currentInSet = $currentCount % 3;
@@ -86,26 +87,32 @@ class GameController extends Controller
                         'badge_number' => $badgeNumber,
                     ]);
                 } else {
-                    // Create claimable reward in player_rewards collection
-                    // requested=true immediately so admin can see and award it
-                    DB::connection('mongodb')->table('player_rewards')->insert([
-                        'player_id'      => $playerObjectId,
-                        'difficulty'     => $difficultyLower,
-                        'badge_number'   => $badgeNumber,
-                        'earned_date'    => now(),
-                        'claimed'        => false,
-                        'claimed_date'   => null,
-                        'requested'      => true,
-                        'requested_date' => now(),
-                        'created_at'     => now(),
-                        'updated_at'     => now(),
-                    ]);
+                    try {
+                        DB::connection('mongodb')->table('player_rewards')->insert([
+                            'player_id'      => $playerObjectId,
+                            'difficulty'     => $difficultyLower,
+                            'badge_number'   => $badgeNumber,
+                            'earned_date'    => now(),
+                            'claimed'        => false,
+                            'claimed_date'   => null,
+                            'requested'      => false,   // player must tap Claim themselves
+                            'requested_date' => null,
+                            'created_at'     => now(),
+                            'updated_at'     => now(),
+                        ]);
 
-                    Log::info('✅ Claimable reward created in player_rewards', [
-                        'difficulty' => $difficultyLower,
-                        'badge_number' => $badgeNumber,
-                        'must_claim' => true
-                    ]);
+                        Log::info('Claimable reward created — awaiting player claim', [
+                            'difficulty'   => $difficultyLower,
+                            'badge_number' => $badgeNumber,
+                        ]);
+                    } catch (\Exception $insertEx) {
+                        // Roll back badge count so player doesn't lose their milestone
+                        Log::error('Reward insert failed — rolling back badge count', [
+                            'error' => $insertEx->getMessage(),
+                        ]);
+                        $playerBadge->decrement($badgeCountField);
+                        throw $insertEx;
+                    }
                 }
 
                 return [
@@ -146,65 +153,100 @@ class GameController extends Controller
      */
     public function saveChallengeResult(Request $request)
     {
-        $validated = $request->validate([
-            'player_id' => 'required|string',
-            'category' => 'required|string',
-            'difficulty_level' => 'required|string',
-            'score' => 'required|integer',
-            'total_questions' => 'required|integer',
-            'correct_answers' => 'required|integer',
-            'time_taken' => 'required|integer',
-        ]);
-
-        $playerObjectId = new ObjectId($validated['player_id']);
-
-        $badgeAwarded = null;
-
-        // Check if perfect score
-        if ($validated['correct_answers'] === $validated['total_questions']) {
-            Log::info('🎯 Perfect score detected!', [
-                'player_id' => $validated['player_id'],
-                'difficulty' => $validated['difficulty_level'],
-                'correct' => $validated['correct_answers'],
-                'total' => $validated['total_questions'],
+        try {
+            $validated = $request->validate([
+                'player_id'        => 'required|string',
+                'category'         => 'required|string',
+                'difficulty_level' => 'required|string',
+                'total_questions'  => 'required|integer',
+                'correct_answers'  => 'required|integer',
+                'time_taken'       => 'required|integer',
+                'score'            => 'nullable|integer',
             ]);
 
-            // ✅ UPDATE PLAYER_STATS - THIS WAS MISSING!
-            PlayerStats::updateStats(
-                $validated['player_id'],
-                'challenge',
-                $validated['category'],
-                $validated['difficulty_level'],
-                'won',  // Perfect score = won
-                $validated['score']
-            );
+            $playerObjectId = new ObjectId($validated['player_id']);
+            $isPerfect      = $validated['correct_answers'] === $validated['total_questions'];
+            $badgeAwarded   = null;
 
-            Log::info('✅ Player stats updated in player_stats collection');
-
-            // Record badge progress (creates claimable reward if milestone reached)
-            $badgeAwarded = $this->recordBadgeProgress(
-                $validated['player_id'],
-                $validated['difficulty_level'],
-                'challenge'
-            );
-
-            Log::info('✅ Badge progress recorded', [
-                'badge_awarded' => $badgeAwarded
+            // Always save game result record regardless of score
+            DB::connection('mongodb')->table('game_results')->insert([
+                'player_id'        => $playerObjectId,
+                'category'         => $validated['category'],
+                'difficulty_level' => $validated['difficulty_level'],
+                'total_questions'  => $validated['total_questions'],
+                'correct_answers'  => $validated['correct_answers'],
+                'time_taken'       => $validated['time_taken'],
+                'is_perfect'       => $isPerfect,
+                'created_at'       => now(),
+                'updated_at'       => now(),
             ]);
-        } else {
-            Log::info('ℹ️ Not a perfect score - no stats or badges awarded', [
-                'correct' => $validated['correct_answers'],
-                'total' => $validated['total_questions'],
+
+            Log::info('Challenge result saved', [
+                'player_id'       => $validated['player_id'],
+                'correct_answers' => $validated['correct_answers'],
+                'total_questions' => $validated['total_questions'],
+                'is_perfect'      => $isPerfect,
             ]);
+
+            if ($isPerfect) {
+                Log::info('Perfect score detected', [
+                    'player_id'  => $validated['player_id'],
+                    'difficulty' => $validated['difficulty_level'],
+                ]);
+
+                // Update player stats — non-fatal if it fails
+                try {
+                    PlayerStats::updateStats(
+                        $validated['player_id'],
+                        'challenge',
+                        $validated['category'],
+                        $validated['difficulty_level'],
+                        'won',
+                        $validated['score'] ?? $validated['correct_answers'],
+                    );
+                    Log::info('Player stats updated');
+                } catch (\Exception $e) {
+                    Log::error('Stats update failed (non-fatal): ' . $e->getMessage());
+                }
+
+                // Record badge progress
+                $badgeAwarded = $this->recordBadgeProgress(
+                    $validated['player_id'],
+                    $validated['difficulty_level'],
+                    'challenge'
+                );
+
+                Log::info('Badge progress recorded', ['badge_awarded' => $badgeAwarded]);
+            } else {
+                Log::info('Not a perfect score — no badge awarded', [
+                    'correct' => $validated['correct_answers'],
+                    'total'   => $validated['total_questions'],
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Game result saved successfully',
+                'data'    => ['badge_awarded' => $badgeAwarded],
+            ], 201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Validation error in saveChallengeResult', $e->errors());
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Exception in saveChallengeResult', [
+                'message' => $e->getMessage(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error: ' . $e->getMessage(),
+            ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Game result saved successfully',
-            'data' => [
-                'badge_awarded' => $badgeAwarded,
-            ]
-        ], 201);
     }
 
     /**
@@ -217,6 +259,11 @@ class GameController extends Controller
         Log::info('Request Data:', $request->all());
 
         try {
+            // Support both 'difficulty' and 'difficulty_level' field names from the Flutter client
+            if (!$request->has('difficulty_level') && $request->has('difficulty')) {
+                $request->merge(['difficulty_level' => $request->input('difficulty')]);
+            }
+
             $validated = $request->validate([
                 'player_id' => 'required|string',
                 'opponent_id' => 'nullable|string',

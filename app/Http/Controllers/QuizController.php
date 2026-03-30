@@ -7,165 +7,52 @@ use Illuminate\Http\Request;
 class QuizController extends Controller
 {
     /**
-     * Get questions WITHOUT year level filter (for Whiz Challenge)
-     * Returns questions from ALL year levels
+     * Get questions — yearLevel is optional.
+     * Route:  GET /api/quiz/questions/{category}/{difficulty}/{yearLevel?}
      *
-     * @param string $category - Math or Science
-     * @param string $difficulty - Easy, Average, or Difficult
+     * Whiz Challenge omits yearLevel → returns questions from ALL year levels.
+     * Other game modes pass yearLevel → filters to that level only.
      */
     public function getQuestionsWithoutYearLevel($category, $difficulty)
     {
-        try {
-            $normalizedCategory = ucfirst(strtolower($category));
-            $normalizedDifficulty = ucfirst(strtolower($difficulty));
-
-            \Log::info("Fetching questions WITHOUT year level filter", [
-                'category' => $normalizedCategory,
-                'difficulty' => $normalizedDifficulty
-            ]);
-
-            // Get questions from MongoDB - NO year level filter
-            $rawQuestions = \DB::connection('mongodb')
-                ->table('quiz_questions')
-                ->where('category', $normalizedCategory)
-                ->where('difficulty_level', $normalizedDifficulty)
-                ->where('is_active', 1)  // Only get active questions
-                ->get();
-
-            $questionCount = $rawQuestions->count();
-            \Log::info("Questions found (all year levels)", ['count' => $questionCount]);
-
-            if ($rawQuestions->isEmpty()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => "No questions found for {$normalizedCategory} - {$normalizedDifficulty}",
-                    'questions' => []
-                ], 404);
-            }
-
-            // Format questions with image support
-            $formattedQuestions = $rawQuestions->map(function ($question) {
-                // Convert stdClass to array
-                $q = json_decode(json_encode($question), true);
-
-                // Handle MongoDB ObjectId format
-                $id = '';
-                if (isset($q['id']['$oid'])) {
-                    $id = $q['id']['$oid'];
-                } elseif (isset($q['_id']['$oid'])) {
-                    $id = $q['_id']['$oid'];
-                } elseif (isset($q['id'])) {
-                    $id = (string) $q['id'];
-                } elseif (isset($q['_id'])) {
-                    $id = (string) $q['_id'];
-                } else {
-                    $id = uniqid();
-                }
-
-                return [
-                    'id' => $id,
-                    'question' => $q['question'] ?? '',
-                    'question_image' => $q['question_image'] ?? null,
-                    'choice_a' => $q['choice_a'] ?? '',
-                    'choice_a_image' => $q['choice_a_image'] ?? null,
-                    'choice_b' => $q['choice_b'] ?? '',
-                    'choice_b_image' => $q['choice_b_image'] ?? null,
-                    'choice_c' => $q['choice_c'] ?? '',
-                    'choice_c_image' => $q['choice_c_image'] ?? null,
-                    'choice_d' => $q['choice_d'] ?? '',
-                    'choice_d_image' => $q['choice_d_image'] ?? null,
-                    'correct_answer' => $q['correct_answer'] ?? '',
-                    'category' => $q['category'] ?? '',
-                    'difficulty_level' => $q['difficulty_level'] ?? '',
-                    'year_level' => $q['year_level'] ?? '',
-                    'has_images' => $q['has_images'] ?? 0,
-                ];
-            })
-            ->shuffle()
-            ->values();
-
-            // Look up num_questions from difficulty settings (admin-configurable)
-            $diffSetting = \DB::table('quiz_difficulty_settings')
-                ->where('difficulty_level', $normalizedDifficulty)
-                ->first();
-            $numQuestions = $diffSetting ? (int) $diffSetting->num_questions : 10;
-
-            \Log::info("Difficulty setting applied", [
-                'difficulty' => $normalizedDifficulty,
-                'num_questions' => $numQuestions,
-            ]);
-
-            $formattedQuestions = $formattedQuestions->take($numQuestions);
-
-            $finalCount = $formattedQuestions->count();
-
-            // Warn if fewer questions available than configured
-            $warning = null;
-            if ($finalCount < $numQuestions) {
-                $warning = "Only {$finalCount} questions available for this combination (configured: {$numQuestions}).";
-                \Log::warning($warning);
-            }
-
-            return response()->json([
-                'success' => true,
-                'count' => $finalCount,
-                'warning' => $warning,
-                'questions' => $formattedQuestions
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error("Error in getQuestionsWithoutYearLevel", [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching questions',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        return $this->getQuestions($category, $difficulty, null);
     }
 
-    /**
-     * Get questions filtered by category, difficulty, AND year level
-     * Supports both text-only and image-based questions
-     *
-     * @param string $category - Math or Science
-     * @param string $difficulty - Easy, Average, or Difficult
-     * @param string $yearLevel - ELEMENTARY, JUNIOR, or SENIOR
-     */
-    public function getQuestions($category, $difficulty, $yearLevel)
+    public function getQuestions($category, $difficulty, $yearLevel = null)
     {
         try {
-            $normalizedCategory = ucfirst(strtolower($category));
+            $normalizedCategory   = ucfirst(strtolower($category));
             $normalizedDifficulty = ucfirst(strtolower($difficulty));
-            $normalizedYearLevel = strtoupper($yearLevel);
+            // ✅ yearLevel is optional — null = all year levels (Whiz Challenge)
+            $normalizedYearLevel  = $yearLevel ? strtoupper($yearLevel) : null;
 
             \Log::info("Fetching questions", [
-                'category' => $normalizedCategory,
+                'category'   => $normalizedCategory,
                 'difficulty' => $normalizedDifficulty,
-                'year_level' => $normalizedYearLevel
+                'year_level' => $normalizedYearLevel ?? 'ALL',
             ]);
 
-            // Get questions from MongoDB with ALL filters including active status
-            $rawQuestions = \DB::connection('mongodb')
+            // ✅ Build query — only filter by year_level when provided
+            $query = \DB::connection('mongodb')
                 ->table('quiz_questions')
                 ->where('category', $normalizedCategory)
                 ->where('difficulty_level', $normalizedDifficulty)
-                ->where('year_level', $normalizedYearLevel)
-                ->where('is_active', 1)  // Only get active questions
-                ->get();
+                ->where('is_active', 1);
+
+            if ($normalizedYearLevel) {
+                $query->where('year_level', $normalizedYearLevel);
+            }
+
+            $rawQuestions = $query->get();
 
             $questionCount = $rawQuestions->count();
             \Log::info("Questions found", ['count' => $questionCount]);
 
             if ($rawQuestions->isEmpty()) {
+                $levelLabel = $normalizedYearLevel ?? 'ALL year levels';
                 return response()->json([
                     'success' => false,
-                    'message' => "No questions found for {$normalizedCategory} - {$normalizedDifficulty} - {$normalizedYearLevel}",
+                    'message' => "No questions found for {$normalizedCategory} - {$normalizedDifficulty} ({$levelLabel})",
                     'questions' => []
                 ], 404);
             }
@@ -212,10 +99,12 @@ class QuizController extends Controller
             ->values();
 
             // Look up num_questions from difficulty settings (admin-configurable)
-            $diffSetting = \DB::table('quiz_difficulty_settings')
+            // ✅ Use mongodb connection — quiz_difficulty_settings is in MongoDB
+            $diffSetting = \DB::connection('mongodb')
+                ->table('quiz_difficulty_settings')
                 ->where('difficulty_level', $normalizedDifficulty)
                 ->first();
-            $numQuestions = $diffSetting ? (int) $diffSetting->num_questions : 10;
+            $numQuestions = $diffSetting ? (int) ($diffSetting->num_questions ?? 10) : 10;
 
             \Log::info("Difficulty setting applied", [
                 'difficulty' => $normalizedDifficulty,
@@ -241,7 +130,7 @@ class QuizController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error("Error in getQuestions", [
+            \Log::error("Error in getQuestions (yearLevel=" . ($yearLevel ?? 'ALL') . ")", [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
