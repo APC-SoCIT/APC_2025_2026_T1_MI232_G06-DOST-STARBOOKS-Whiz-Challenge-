@@ -7,6 +7,7 @@ import 'homepage.dart';
 import 'admin_login.dart';
 import 'loading_page.dart';
 import 'audio_service.dart';  // ✅ Use AudioService instead of FlameAudio directly
+import 'session_manager.dart'; // ✅ Save session on login so refresh skips splash screen
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -223,22 +224,30 @@ class _LoginScreenState extends State<LoginScreen>
         // Check if widget is still mounted before navigation
         if (!mounted) return;
 
+        // ✅ Build the profile object once so we can both save it and pass it
+        final profile = UserProfile(
+          id: userId,
+          username: data['user']['username'],
+          school: data['user']['school'] ?? 'Unknown School',
+          age: data['user']['age']?.toString() ?? 'N/A',
+          category: data['user']['category'] ?? 'Student',
+          sex: data['user']['sex'] ?? 'N/A',
+          region: data['user']['region']?.toString() ?? '',
+          province: data['user']['province']?.toString() ?? '',
+          city: data['user']['city']?.toString() ?? '',
+          avatar: data['user']['avatar'] ?? 'default',
+        );
+
+        // ✅ Persist session so a page refresh goes straight to HomePage
+        await SessionManager.saveSession(profile);
+
+        if (!mounted) return;
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (context) => HomePage(
-              profile: UserProfile(
-                id: userId,
-                username: data['user']['username'],
-                school: data['user']['school'] ?? 'Unknown School',
-                age: data['user']['age']?.toString() ?? 'N/A',
-                category: data['user']['category'] ?? 'Student',
-                sex: data['user']['sex'] ?? 'N/A',
-                region: data['user']['region']?.toString() ?? '',
-                province: data['user']['province']?.toString() ?? '',
-                city: data['user']['city']?.toString() ?? '',
-                avatar: data['user']['avatar'] ?? 'default',
-              ),
+              profile: profile,
               isNewUser: isFirstLogin,
             ),
           ),
