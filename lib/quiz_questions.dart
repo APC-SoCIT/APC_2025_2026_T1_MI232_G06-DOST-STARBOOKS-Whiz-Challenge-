@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'quiz_api.dart';
 
 class Question {
@@ -50,9 +51,10 @@ class QuizData {
           .map((apiQ) => Question.fromApiQuestion(apiQ))
           .toList();
     } catch (e) {
-      print('Error loading questions from API: $e');
-      // Return empty list instead of fallback data
-      return [];
+      // ✅ Rethrow so quiz_game.dart shows "Failed to load" instead of
+      // "No questions available" — makes the real error visible in debug logs
+      debugPrint('Error loading questions from API: $e');
+      rethrow;
     }
   }
 }

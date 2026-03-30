@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'quiz_game.dart';
 import 'audio_service.dart';
-import 'whiz_challenge.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class QuizResultScreen extends StatelessWidget {
   final String category;
@@ -117,7 +114,7 @@ class QuizResultScreen extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Title moved above image
+                      // Title
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Stack(
@@ -166,7 +163,8 @@ class QuizResultScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),
-                      // Badge banner moved above bird
+
+                      // ✅ FIXED: Badge banner — always shown when badgeAwarded is not null
                       if (_hasBadge()) ...[
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -182,7 +180,7 @@ class QuizResultScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.amber.withValues(alpha:0.5),
+                                color: Colors.amber.withValues(alpha: 0.5),
                                 blurRadius: 15,
                                 spreadRadius: 2,
                               ),
@@ -193,7 +191,7 @@ class QuizResultScreen extends StatelessWidget {
                             children: [
                               Image.asset(
                                 _getBadgeImage(
-                                    badgeAwarded!['difficulty'] ?? 'easy'),
+                                    badgeAwarded!['difficulty'] ?? difficulty),
                                 width: 60,
                                 height: 60,
                                 errorBuilder: (context, error, stackTrace) {
@@ -228,7 +226,7 @@ class QuizResultScreen extends StatelessWidget {
                                     ],
                                   ),
                                   Text(
-                                    "Achievement",
+                                    "Achievement Unlocked",
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.white70,
@@ -242,7 +240,8 @@ class QuizResultScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 20),
                       ],
-                      // Victory/Lose Image moved below title and badge
+
+                      // Victory/Lose Image
                       Image.asset(
                         _getResultImage(),
                         width: 180,
@@ -256,6 +255,8 @@ class QuizResultScreen extends StatelessWidget {
                         },
                       ),
                       const SizedBox(height: 20),
+
+                      // Performance stats
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -313,13 +314,14 @@ class QuizResultScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 25),
+
+                      // Buttons
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () async {
-                                // Play click sound
                                 try {
                                   await AudioService().playClickSound();
                                 } catch (e) {
@@ -362,7 +364,6 @@ class QuizResultScreen extends StatelessWidget {
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () async {
-                                // Play click sound
                                 try {
                                   await AudioService().playClickSound();
                                 } catch (e) {
@@ -370,38 +371,29 @@ class QuizResultScreen extends StatelessWidget {
                                 }
 
                                 if (_isPerfectScore()) {
-                                  // Perfect score - go to next difficulty level
-                                  String nextDifficulty;
+                                  // ✅ FIXED: Determine next difficulty
+                                  String? nextDifficulty;
                                   if (difficulty == 'Easy') {
                                     nextDifficulty = 'Average';
                                   } else if (difficulty == 'Average') {
                                     nextDifficulty = 'Difficult';
-                                  } else {
-                                    // Already at Difficult, go back to selection
-                                    if (context.mounted) {
-                                      Navigator.of(context).pop();
-                                    }
-                                    return;
                                   }
+                                  // If already at Difficult, nextDifficulty stays null
 
-                                  // Navigate to WhizChallenge with preselected difficulty
+                                  // ✅ Pop results screen — quiz_game.dart catches this
+                                  // and pops itself too, landing back on WhizChallenge
+                                  // which then updates difficulty + category in setState
                                   if (context.mounted) {
-                                    Navigator.of(context).pushReplacement(
-                                      MaterialPageRoute(
-                                        builder: (_) => WhizChallenge(
-                                          userId: userId!,
-                                          userAvatar: '', // Pass from parent if available
-                                          username: '', // Pass from parent if available
-                                          preselectedDifficulty: nextDifficulty,
-                                          preselectedCategory: category,
-                                        ),
-                                      ),
-                                    );
+                                    Navigator.of(context).pop({
+                                      'nextDifficulty': nextDifficulty,
+                                      'category': category,
+                                    });
                                   }
                                 } else {
-                                  // Not perfect - pop back so quiz_game can restart
+                                  // ✅ FIXED: Not perfect — use true so quiz_game
+                                  // correctly identifies this as a retry request
                                   if (context.mounted) {
-                                    Navigator.of(context).pop(false);
+                                    Navigator.of(context).pop(true);
                                   }
                                 }
                               },
@@ -419,7 +411,7 @@ class QuizResultScreen extends StatelessWidget {
                               ),
                               child: Text(
                                 _isPerfectScore()
-                                    ? "Next Level"
+                                    ? (_getDifficultyLabel())
                                     : "Retry",
                                 style: const TextStyle(
                                   fontSize: 14,
@@ -440,6 +432,13 @@ class QuizResultScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  // ✅ Helper: label for the right button when perfect score
+  String _getDifficultyLabel() {
+    if (difficulty == 'Easy') return 'Next Level →';
+    if (difficulty == 'Average') return 'Next Level →';
+    return 'Done'; // Already at Difficult
   }
 
   Widget _buildHeader(Color difficultyColor) {

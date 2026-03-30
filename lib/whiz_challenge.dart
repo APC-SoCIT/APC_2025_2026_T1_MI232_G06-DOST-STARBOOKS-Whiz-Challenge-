@@ -238,7 +238,7 @@ class _WhizChallengeState extends State<WhizChallenge> {
                 fit: BoxFit.contain,
               ),
               const Spacer(),
-              // Avatar on the right
+              // ✅ FIXED: Avatar with safe fallback for empty/invalid path
               MouseRegion(
                 cursor: SystemMouseCursors.click,
                 child: GestureDetector(
@@ -251,7 +251,13 @@ class _WhizChallengeState extends State<WhizChallenge> {
                       border: Border.all(color: const Color(0xFFFDD000), width: 3),
                     ),
                     child: ClipOval(
-                      child: Image.asset(widget.userAvatar, fit: BoxFit.cover),
+                      child: widget.userAvatar.isNotEmpty
+                          ? Image.asset(
+                        widget.userAvatar,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const _AvatarFallback(),
+                      )
+                          : const _AvatarFallback(),
                     ),
                   ),
                 ),
@@ -268,7 +274,7 @@ class _WhizChallengeState extends State<WhizChallenge> {
           ),
           child: Row(
             children: [
-              // Simple back arrow button with just <
+              // Simple back arrow button
               IconButton(
                 icon: const Icon(Icons.arrow_back_ios, color: Colors.black87, size: 20),
                 onPressed: () async {
@@ -362,6 +368,16 @@ class _WhizChallengeState extends State<WhizChallenge> {
     );
   }
 
+  // ✅ Easy=Green, Average=Blue, Difficult=Red
+  Color _difficultyColor(String value) {
+    switch (value) {
+      case 'Easy':      return const Color(0xFF1D9358);
+      case 'Average':   return const Color(0xFF046EB8);
+      case 'Difficult': return const Color(0xFFBD442E);
+      default:          return const Color(0xFF1D9358);
+    }
+  }
+
   Widget _buildDifficultyRow() {
     return Row(
       children: difficultyLevels.map((difficulty) {
@@ -387,29 +403,27 @@ class _WhizChallengeState extends State<WhizChallenge> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFFDD000) : Colors.white,
+                    color: isSelected ? _difficultyColor(difficulty['value']!) : Colors.white,
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
-                      color: isSelected ? const Color(0xFFFDD000) : Colors.black87,
+                      color: isSelected ? _difficultyColor(difficulty['value']!) : Colors.black87,
                       width: 2,
                     ),
                     boxShadow: isSelected
-                        ? [
-                      BoxShadow(
-                        color: const Color(0xFFFDD000).withValues(alpha: 0.5),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
+                        ? [BoxShadow(
+                      color: _difficultyColor(difficulty['value']!).withValues(alpha: 0.5),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    )]
                         : [],
                   ),
                   child: Text(
                     difficulty['display']!.toUpperCase(),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: isSelected ? Colors.white : Colors.black87,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -427,6 +441,7 @@ class _WhizChallengeState extends State<WhizChallenge> {
     final topics = category.toLowerCase() == 'math'
         ? mathSubcategories[selectedDifficulty] ?? []
         : scienceSubcategories[selectedDifficulty] ?? [];
+    final diffColor = _difficultyColor(selectedDifficulty);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -451,7 +466,7 @@ class _WhizChallengeState extends State<WhizChallenge> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isExpanded ? const Color(0xFFFDD000) : Colors.black87,
+              color: isExpanded ? diffColor : Colors.black87,
               width: 2,
             ),
             boxShadow: isExpanded
@@ -468,11 +483,11 @@ class _WhizChallengeState extends State<WhizChallenge> {
             borderRadius: BorderRadius.circular(14),
             child: Column(
               children: [
-                // ── Yellow header ──
+                // ── Colored header ──
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                  color: isExpanded ? const Color(0xFFFDD000) : Colors.white,
+                  color: isExpanded ? diffColor : Colors.white,
                   child: Row(
                     children: [
                       Container(
@@ -482,15 +497,15 @@ class _WhizChallengeState extends State<WhizChallenge> {
                           color: Colors.black.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(icon, color: Colors.black87, size: 22),
+                        child: Icon(icon, color: isExpanded ? Colors.white : Colors.black87, size: 22),
                       ),
                       const SizedBox(width: 14),
                       Text(
                         category.toUpperCase(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w900,
-                          color: Colors.black87,
+                          color: isExpanded ? Colors.white : Colors.black87,
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -504,7 +519,7 @@ class _WhizChallengeState extends State<WhizChallenge> {
                         ),
                         child: Icon(
                           isExpanded ? Icons.remove : Icons.add,
-                          color: Colors.black87,
+                          color: isExpanded ? Colors.white : Colors.black87,
                           size: 18,
                         ),
                       ),
@@ -583,6 +598,8 @@ class _WhizChallengeState extends State<WhizChallenge> {
             debugPrint('Click sound error: $e');
           }
           if (!mounted) return;
+          // ✅ FIXED: Listen for result from quiz so we can update
+          // difficulty + category when "Next Level" is tapped
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -592,7 +609,19 @@ class _WhizChallengeState extends State<WhizChallenge> {
                 difficulty: selectedDifficulty,
               ),
             ),
-          );
+          ).then((result) {
+            if (result is Map && mounted) {
+              setState(() {
+                if (result['nextDifficulty'] != null) {
+                  selectedDifficulty = result['nextDifficulty'] as String;
+                }
+                if (result['category'] != null) {
+                  // Keep category selected so user sees it pre-filled
+                  selectedMainCategory = (result['category'] as String).toUpperCase();
+                }
+              });
+            }
+          });
         }
             : null,
         child: AnimatedContainer(
@@ -730,6 +759,23 @@ class _WhizChallengeState extends State<WhizChallenge> {
           ),
         );
       },
+    );
+  }
+}
+
+// ✅ Private fallback widget for when avatar is empty or fails to load
+class _AvatarFallback extends StatelessWidget {
+  const _AvatarFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFFDD000).withValues(alpha: 0.2),
+      child: const Icon(
+        Icons.person,
+        size: 28,
+        color: Color(0xFFFDD000),
+      ),
     );
   }
 }
