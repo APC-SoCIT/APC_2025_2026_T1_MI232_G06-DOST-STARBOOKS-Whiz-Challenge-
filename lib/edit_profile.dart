@@ -1031,7 +1031,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                       elevation: 2,
                     ),
                     child: const Text(
-                      "Change Avatar",
+                      "Select Avatar",
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                     ),
                   ),
