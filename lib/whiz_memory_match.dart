@@ -54,6 +54,7 @@ class _WhizMemoryMatchState extends State<WhizMemoryMatch>
 
   late final ConfettiController _confettiController;
   final AudioService _audioService = AudioService();
+  bool _isMusicEnabled = true; // ✅ Music toggle state
 
   // Track win state
   bool _isNewPersonalRecord = false;
@@ -162,7 +163,7 @@ class _WhizMemoryMatchState extends State<WhizMemoryMatch>
           'game_type': 'memory_match',
           'difficulty': _difficulty,
           'time_seconds': _timer,
-          'moves': 0, // Required by backend
+          'moves': _moves,
         }),
       );
 
@@ -173,12 +174,17 @@ class _WhizMemoryMatchState extends State<WhizMemoryMatch>
         final data = json.decode(response.body);
 
         bool isNewRecord = data['is_new_record'] ?? false;
-        bool isNewBest = _globalFastestTime != null && _timer < _globalFastestTime!;
+
+        // Guard against race condition: if _fastestTime was already loaded and
+        // the current time is NOT faster, don't trust the backend's is_new_record.
+        if (isNewRecord && _fastestTime != null && _timer >= _fastestTime!) {
+          isNewRecord = false;
+        }
 
         // ✅ FIX: Update state directly from save response — no redundant re-fetch
+        // Note: _isNewBestTime is set in _checkWin() using pre-save snapshot — don't set it here.
         setState(() {
           _isNewPersonalRecord = isNewRecord;
-          _isNewBestTime = isNewBest;
           // Update personal best in memory if this run was faster
           if (_fastestTime == null || _timer < _fastestTime!) {
             _fastestTime = _timer;
@@ -186,7 +192,6 @@ class _WhizMemoryMatchState extends State<WhizMemoryMatch>
         });
 
         debugPrint('Is new personal record: $isNewRecord');
-        debugPrint('Is new best time: $isNewBest');
         // ❌ REMOVED: await _loadFastestTime()
         // That was triggering 2 extra sequential API calls after every game finish
       }
@@ -1089,7 +1094,52 @@ class _WhizMemoryMatchState extends State<WhizMemoryMatch>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
+
+                  // ✅ Music mute/unmute toggle
+                  StatefulBuilder(
+                    builder: (context, setDialogState) {
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  _isMusicEnabled ? Icons.music_note : Icons.music_off,
+                                  color: const Color(0xFF5F6FDB),
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 10),
+                                const Text('Music',
+                                  style: TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: _isMusicEnabled,
+                              activeColor: const Color(0xFF5F6FDB),
+                              onChanged: (val) {
+                                setState(() => _isMusicEnabled = val);
+                                setDialogState(() {});
+                                if (val) {
+                                  _audioService.resumeMusic().catchError((_) => _audioService.playMemoryMatchMusic());
+                                } else {
+                                  _audioService.pauseMusic();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
 
                   // RESUME BUTTON
                   SizedBox(
