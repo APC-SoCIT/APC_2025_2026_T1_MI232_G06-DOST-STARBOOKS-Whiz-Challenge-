@@ -1451,7 +1451,7 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
                           elevation: 2,
                         ),
                         child: const Text(
-                          "Change Avatar",
+                          "Select Avatar",
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                         ),
                       ),
