@@ -214,6 +214,20 @@ class _SplashScreenState extends State<SplashScreen>
           ),
 
 
+        // ✅ DOST-STII logo — bottom left
+        Positioned(
+          bottom: 20, left: 20,
+          child: Image.asset(
+            'assets/splashscreen/dost_stii_logo.png',
+            height: 50,
+            errorBuilder: (_, __, ___) => const Text(
+              'DOST-STII',
+              style: TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'Poppins'),
+            ),
+          ),
+        ),
+
+        // Starbooks logo — bottom right
         Positioned(
           bottom: 20, right: 20,
           child: Row(
@@ -230,7 +244,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
               const SizedBox(width: 4),
-              Image.asset('assets/splashscreen/starbooks.png', height: 38,
+              Image.asset('assets/splashscreen/starbooks1.png', height: 38,
                 errorBuilder: (_, __, ___) => const Text('STARBOOKS',
                     style: TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Poppins', fontWeight: FontWeight.bold)),
               ),
