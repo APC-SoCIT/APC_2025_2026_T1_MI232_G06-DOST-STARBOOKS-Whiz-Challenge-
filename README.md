@@ -46,7 +46,7 @@ docker pull dostnexus/laravel-starbooks-api:latest
 
 **Whiz Battle Server**
 ```
-docker pull dostnexus/
+docker pull dostnexus/whiz-battle-server:latest
 ```
 
 ## 2. Import CSV data into MongoDB
@@ -86,6 +86,13 @@ docker push dostnexus/flutter-starbooks:latest
 cd C:\laragon\www\api
 docker build -t dostnexus/laravel-starbooks-api:latest .
 docker push dostnexus/laravel-starbooks-api:latest
+```
+**Whiz Battle Server Image**
+- Note: Adjust to your Laravel file path
+```
+C:\laragon\www\whiz-battle-server
+docker build -t dostnexus/whiz-battle-server:latest .
+docker push dostnexus/whiz-battle-server:latest
 ```
 
 ## 3. Starting and Stopping Docker Compose Containers

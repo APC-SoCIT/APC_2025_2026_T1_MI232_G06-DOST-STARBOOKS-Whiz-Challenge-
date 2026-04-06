@@ -21,9 +21,14 @@ LOG_DEPRECATIONS_CHANNEL=null
 LOG_LEVEL=debug
 
 DB_CONNECTION=mongodb
-DB_HOST=mongodb # 127.0.0.1
+DB_HOST=127.0.0.1
+# laragon: 127.0.0.1
+# docker: mongodb
 DB_PORT=27017
-MONGODB_URI=mongodb://mongodb:27017   # "mongodb://localhost:27017"
+MONGODB_URI=mongodb://mongodb:27017   
+# laragon: "mongodb://localhost:27017"
+# docker: "mongodb://mongodb:27017"
+
 DB_DATABASE=starbooksWhizbee
 DB_USERNAME=
 DB_PASSWORD=

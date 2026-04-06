@@ -29,6 +29,7 @@ services:
       - DB_HOST=mongodb
       - DB_PORT=27017
       - DB_DATABASE=starbooksWhizbee
+      - MONGODB_URI=mongodb://mongodb:27017 
     depends_on:
       - mongodb
     networks:
@@ -50,7 +51,7 @@ services:
     image: dostnexus/whiz-battle-server:latest
     container_name: battle-server
     ports:
-      - "8080:8080"
+      - "8085:8080"
     environment:
       - MONGO_URI=mongodb://mongodb:27017/
       - LARAVEL_API_URL=http://nginx:80/api
