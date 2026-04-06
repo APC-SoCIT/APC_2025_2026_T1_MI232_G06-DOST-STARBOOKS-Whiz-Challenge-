@@ -42,6 +42,11 @@ docker pull dostnexus/flutter-starbooks:latest
 **Laravel API**
 ```
 docker pull dostnexus/laravel-starbooks-api:latest
+
+# In case errors occur:
+docker-compose down
+docker-compose up -d --force-recreate laravel-api
+docker-compose restart laravel-api
 ```
 
 **Whiz Battle Server**
@@ -113,7 +118,7 @@ On the host computer (Windows):
 3. Click "Inbound Rules" (left side)
 4. Click "New Rule" (right side)
 5. Select "Port" → Next
-6. Select "TCP" → Specific ports: 8080, 8000 → Next
+6. Select "TCP" → Specific ports: 8080, 8000, 8085 → Next
 7. Select "Allow the connection" → Next
 8. Check all boxes (Domain, Private, Public) → Next
 9. Name: Starbooks Docker → Finish
@@ -127,14 +132,12 @@ ipconfig
 cd C:\starbooks
 docker-compose up -d
 ```
-
 ## Access the App
 
 **Host (plays locally):**
 ```
 Opens browser → http://localhost:8080
 ```
-
 **Guest (connects to host):**
 ```
 Opens browser → http://192.168.1.100:8080
