@@ -29,9 +29,13 @@ services:
       - DB_HOST=mongodb
       - DB_PORT=27017
       - DB_DATABASE=starbooksWhizbee
-      - MONGODB_URI=mongodb://mongodb:27017 
+      - MONGODB_URI=mongodb://mongodb:27017
+      - APP_KEY=base64:YK96P6FCOjs3UeHff6yip09Badf7krdeL9ng7yM6uLo=
+      - APP_ENV=production
+      - APP_DEBUG=false
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - starbooks-network
 
@@ -46,7 +50,13 @@ services:
       - MONGO_INITDB_DATABASE=starbooksWhizbee
     networks:
       - starbooks-network
-  
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   battle-server:
     image: dostnexus/whiz-battle-server:latest
     container_name: battle-server
@@ -56,8 +66,10 @@ services:
       - MONGO_URI=mongodb://mongodb:27017/
       - LARAVEL_API_URL=http://nginx:80/api
     depends_on:
-      - mongodb
-      - nginx
+      mongodb:
+        condition: service_healthy
+      nginx:
+        condition: service_started
     networks:
       - starbooks-network
 
