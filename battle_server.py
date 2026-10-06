@@ -1,27 +1,29 @@
 """
-WebSocket Battle Server for Whiz Battle (MongoDB Integration)
-Database: starbooksWhizbee
-Install: pip install fastapi uvicorn websockets pymongo python-dotenv
-Run: python battle_server.py
+battle_server.py  — complete fixed server
+Run with:  uvicorn battle_server:app --host 0.0.0.0 --port 80
+or behind nginx with:  uvicorn battle_server:app --uds /run/battle.sock
 """
+
+import asyncio
+import json
+import random
+import string
+import traceback
+from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import MongoClient
-from datetime import datetime
-import os
-from dotenv import load_dotenv
-import json
-import asyncio
-from typing import Dict
-from bson import ObjectId
 
-# Load environment variables
+import httpx                         # pip install httpx
+from dotenv import load_dotenv       # pip install python-dotenv
+import os
+
 load_dotenv()
+
+LARAVEL_API_URL = os.getenv("LARAVEL_API_URL", "http://localhost:8000/api")
 
 app = FastAPI()
 
-# CORS for Flutter
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,427 +32,363 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# MongoDB Connection
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
-client = MongoClient(MONGO_URI)
-db = client['starbooksWhizbee']  # Your existing database
+# ── In-memory state ──────────────────────────────────────────────────────────
+# rooms[room_code] = {
+#   host_id, host_name, host_avatar,
+#   opponent_id, opponent_name, opponent_avatar,
+#   category, difficulty,
+#   status: 'waiting' | 'ready' | 'playing' | 'finished',
+#   scores: {user_id: int},
+#   correct_answers: {user_id: int},
+#   questions: [...],
+#   answers_this_round: {user_id: bool},
+#   current_question_index: int,
+# }
+rooms: dict = {}
 
-# Collections
-battles_collection = db['battle']  # New collection for battles
-player_info_collection = db['player_info']  # Your existing collection
-game_results_collection = db['game_results']  # New collection for results
+# connected_players[user_id] = WebSocket
+connected_players: dict[str, WebSocket] = {}
 
-# In-memory storage for active connections
-active_rooms: Dict[str, dict] = {}
-active_connections: Dict[str, WebSocket] = {}
 
-# Helper Functions
-def serialize_doc(doc):
-    """Convert MongoDB document to JSON-serializable format"""
-    if doc and '_id' in doc:
-        doc['_id'] = str(doc['_id'])
-    return doc
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
-async def broadcast_to_room(room_code: str, message: dict):
-    """Send message to all players in a room"""
-    print(f"📢 Broadcasting to room {room_code}: {message['event']}")
-    
-    if room_code in active_rooms:
-        room = active_rooms[room_code]
-        print(f"📢 Players in room: {room['players']}")
-        
-        for player_id in room['players']:
-            if player_id in active_connections:
-                try:
-                    await active_connections[player_id].send_json(message)
-                    print(f"  ✅ Sent to player {player_id}")
-                except Exception as e:
-                    print(f"  ❌ Error broadcasting to {player_id}: {e}")
-            else:
-                print(f"  ⚠️ Player {player_id} not in active connections")
+async def send_to_player(user_id: str, data: dict) -> None:
+    ws = connected_players.get(user_id)
+    if ws:
+        try:
+            await ws.send_text(json.dumps(data))
+        except Exception as e:
+            print(f"❌ send_to_player({user_id}) failed: {e}")
+
+
+async def fetch_questions(category: str, difficulty: str) -> list:
+    url = f"{LARAVEL_API_URL}/quiz/questions/{category}/{difficulty}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("success"):
+                return data.get("questions", [])
+            return []
+    except Exception as e:
+        print(f"❌ fetch_questions failed: {e}")
+        return []
+
+
+def _room_for_user(user_id: str) -> Optional[str]:
+    """Return the room_code the user is currently in, or None."""
+    for code, room in rooms.items():
+        if room["host_id"] == user_id or room["opponent_id"] == user_id:
+            return code
+    return None
+
+
+async def _handle_disconnect(user_id: str) -> None:
+    """Notify the opponent when a player drops the connection."""
+    room_code = _room_for_user(user_id)
+    if not room_code:
+        return
+    room = rooms.get(room_code)
+    if room is None or room["status"] == "finished":
+        rooms.pop(room_code, None)
+        return
+
+    opponent_id = (
+        room["opponent_id"]
+        if room["host_id"] == user_id
+        else room["host_id"]
+    )
+
+    # Notify opponent BEFORE removing the room
+    if opponent_id and opponent_id in connected_players:
+        await send_to_player(opponent_id, {"event": "player_disconnected"})
+
+    # Clean up the room
+    rooms.pop(room_code, None)
+    print(f"🧹 Room {room_code} cleaned up after disconnect of {user_id}")
+
+
+async def _advance_round(room: dict, room_code: str) -> None:
+    """Called in a background task after both players answer.
+    Waits for the feedback delay then sends next_question or game_over."""
+    await asyncio.sleep(2.5)   # let clients show answer feedback
+
+    # Room may have been cleaned up (e.g. a player disconnected mid-sleep)
+    if room_code not in rooms:
+        return
+
+    if room["current_question_index"] < len(room["questions"]):
+        next_q = {"event": "next_question"}
+        await send_to_player(room["host_id"],     next_q)
+        await send_to_player(room["opponent_id"], next_q)
     else:
-        print(f"  ⚠️ Room {room_code} not found in active_rooms")
+        # ── GAME OVER ──
+        room["status"] = "finished"
+        h_id = room["host_id"]
+        o_id = room["opponent_id"]
+        h_score = room["scores"].get(h_id, 0)
+        o_score = room["scores"].get(o_id, 0)
 
-async def save_battle_to_db(room_code: str, room_data: dict):
-    """Save battle session to MongoDB"""
-    try:
-        battle_doc = {
-            'room_code': room_code,
-            'host_id': room_data['host']['user_id'],
-            'host_name': room_data['host']['name'],
-            'opponent_id': room_data.get('opponent', {}).get('user_id'),
-            'opponent_name': room_data.get('opponent', {}).get('name'),
-            'category': room_data['category'],
-            'difficulty': room_data['difficulty'],
-            'total_questions': room_data['total_questions'],
-            'host_score': room_data['scores'].get(room_data['host']['user_id'], 0),
-            'opponent_score': room_data['scores'].get(room_data.get('opponent', {}).get('user_id', 'unknown'), 0),
-            'status': room_data['status'],
-            'created_at': room_data['created_at'],
-            'started_at': room_data.get('started_at'),
-            'ended_at': datetime.utcnow() if room_data['status'] == 'finished' else None
-        }
-        
-        result = battles_collection.insert_one(battle_doc)
-        print(f"✅ Battle saved to MongoDB: {result.inserted_id}")
-        return str(result.inserted_id)
-    except Exception as e:
-        print(f"❌ Error saving battle: {e}")
-        return None
-
-async def update_player_stats(user_id: str, won: bool, score: int):
-    """Update player statistics in MongoDB"""
-    try:
-        # Check if user exists
-        user = player_info_collection.find_one({'_id': ObjectId(user_id)})
-        
-        if user:
-            # Update existing user stats
-            player_info_collection.update_one(
-                {'_id': ObjectId(user_id)},
-                {
-                    '$inc': {
-                        'total_battles': 1,
-                        'total_wins' if won else 'total_losses': 1,
-                        'total_score': score
-                    },
-                    '$set': {
-                        'last_battle': datetime.utcnow()
-                    }
-                }
-            )
-            print(f"✅ Updated stats for user {user_id}: {'WIN' if won else 'LOSS'}, Score: {score}")
+        if h_score > o_score:
+            winner_id = h_id
+        elif o_score > h_score:
+            winner_id = o_id
         else:
-            print(f"⚠️ User {user_id} not found in player_info")
-    except Exception as e:
-        print(f"❌ Error updating stats for {user_id}: {e}")
+            winner_id = None   # draw
+
+        game_over = {
+            "event":     "game_over",
+            "winner_id": winner_id,
+            "scores":    room["scores"],
+        }
+        await send_to_player(h_id, game_over)
+        await send_to_player(o_id, game_over)
+        print(f"🏁 Game over: {room_code}  winner={winner_id}")
+
+
+# ── WebSocket endpoint ───────────────────────────────────────────────────────
 
 @app.websocket("/ws/battle/{user_id}")
 async def battle_websocket(websocket: WebSocket, user_id: str):
     await websocket.accept()
-    active_connections[user_id] = websocket
-    print(f"✅ User {user_id} connected")
-    
+    connected_players[user_id] = websocket
+    print(f"✅ Player connected: {user_id}  (total: {len(connected_players)})")
+
+    current_room: Optional[str] = None   # tracks which room this socket joined
+
     try:
-        # Send connection confirmation
-        await websocket.send_json({
-            'event': 'connection_open',
-            'user_id': user_id
-        })
-        
         while True:
-            data = await websocket.receive_json()
-            event = data.get('event')
-            print(f"📨 Received event: {event} from {user_id}")
-            
-            if event == 'create_room':
-                # Create new battle room
-                room_code = data['room_code']
-                
-                # Store in MongoDB
-                battle_doc = {
-                    'room_code': room_code,
-                    'host_id': user_id,
-                    'host_name': data['host_name'],
-                    'category': data['category'],
-                    'difficulty': data['difficulty'],
-                    'status': 'waiting',
-                    'created_at': datetime.utcnow()
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                await send_to_player(user_id, {"event": "error", "message": "Invalid JSON"})
+                continue
+
+            event = data.get("event", "")
+            print(f"📨 [{user_id}] {event}")
+
+            # ── CREATE ROOM ──────────────────────────────────────────────────
+            if event == "create_room":
+                room_code = data["room_code"]
+
+                # Clean up any previous room this user was hosting
+                old_code = _room_for_user(user_id)
+                if old_code and old_code != room_code:
+                    rooms.pop(old_code, None)
+
+                current_room = room_code
+
+                rooms[room_code] = {
+                    "host_id":      user_id,
+                    "host_name":    data["host_name"],
+                    "host_avatar":  data["host_avatar"],
+                    "category":     data["category"],
+                    "difficulty":   data["difficulty"],
+                    "opponent_id":     None,
+                    "opponent_name":   None,
+                    "opponent_avatar": None,
+                    "status":   "waiting",
+                    "scores":   {user_id: 0},
+                    "correct_answers": {user_id: 0},
+                    "questions": [],
+                    "answers_this_round": {},
+                    "current_question_index": 0,
                 }
-                battles_collection.insert_one(battle_doc)
-                
-                # Store in active rooms
-                active_rooms[room_code] = {
-                    'host': {
-                        'user_id': user_id,
-                        'name': data['host_name'],
-                        'avatar': data.get('host_avatar', '')
-                    },
-                    'opponent': None,
-                    'category': data['category'],
-                    'difficulty': data['difficulty'],
-                    'total_questions': data.get('total_questions', 10),
-                    'status': 'waiting',
-                    'scores': {user_id: 0},
-                    'answers_submitted': {user_id: 0},
-                    'players': [user_id],
-                    'created_at': datetime.utcnow().isoformat()
-                }
-                
-                print(f"🎮 Room created: {room_code}")
-                await websocket.send_json({
-                    'event': 'room_created',
-                    'room_code': room_code,
-                    'status': 'waiting'
+                await send_to_player(user_id, {
+                    "event":     "room_created",
+                    "room_code": room_code,
                 })
-            
-            elif event == 'join_room':
-                room_code = data['room_code']
-                
-                if room_code not in active_rooms:
-                    # Check MongoDB for room
-                    db_room = battles_collection.find_one({'room_code': room_code, 'status': 'waiting'})
-                    if not db_room:
-                        await websocket.send_json({
-                            'event': 'error',
-                            'message': 'Room not found or already started'
-                        })
-                        continue
-                
-                room = active_rooms[room_code]
-                
-                if len(room['players']) >= 2:
-                    await websocket.send_json({
-                        'event': 'error',
-                        'message': 'Room is full'
+                print(f"🏠 Room created: {room_code} by {user_id}")
+
+            # ── JOIN ROOM ────────────────────────────────────────────────────
+            elif event == "join_room":
+                room_code = data["room_code"]
+
+                if room_code not in rooms:
+                    await send_to_player(user_id, {
+                        "event":   "error",
+                        "message": "Room not found",
                     })
                     continue
-                
-                # Add opponent
-                room['opponent'] = {
-                    'user_id': user_id,
-                    'name': data['player_name'],
-                    'avatar': data.get('player_avatar', '')
-                }
-                room['players'].append(user_id)
-                room['scores'][user_id] = 0
-                room['answers_submitted'][user_id] = 0
-                
-                # Update MongoDB
-                battles_collection.update_one(
-                    {'room_code': room_code},
-                    {
-                        '$set': {
-                            'opponent_id': user_id,
-                            'opponent_name': data['player_name'],
-                            'status': 'ready'
-                        }
-                    }
-                )
-                
+
+                room = rooms[room_code]
+
+                # Guard: can't join your own room
+                if room["host_id"] == user_id:
+                    await send_to_player(user_id, {
+                        "event":   "error",
+                        "message": "You cannot join your own room",
+                    })
+                    continue
+
+                if room["opponent_id"] is not None:
+                    await send_to_player(user_id, {
+                        "event":   "error",
+                        "message": "Room is full",
+                    })
+                    continue
+
+                if room["status"] != "waiting":
+                    await send_to_player(user_id, {
+                        "event":   "error",
+                        "message": "Game already started",
+                    })
+                    continue
+
+                room["opponent_id"]     = user_id
+                room["opponent_name"]   = data["player_name"]
+                room["opponent_avatar"] = data["player_avatar"]
+                room["scores"][user_id] = 0
+                room["correct_answers"][user_id] = 0
+                room["status"] = "ready"
+                current_room = room_code   # only set after all checks pass
+
                 print(f"👥 Player {user_id} joined room {room_code}")
-                
-                # Notify ALL players in room (including the one who just joined)
-                await broadcast_to_room(room_code, {
-                    'event': 'player_joined',
-                    'player': room['opponent']
+
+                # Tell the joiner the host's settings so the UI is consistent
+                await send_to_player(user_id, {
+                    "event":       "join_success",
+                    "room_code":   room_code,
+                    "host_name":   room["host_name"],
+                    "host_avatar": room["host_avatar"],
+                    "category":    room["category"],
+                    "difficulty":  room["difficulty"],
                 })
-            
-            elif event == 'start_game':
-                room_code = data['room_code']
-                if room_code in active_rooms:
-                    active_rooms[room_code]['status'] = 'playing'
-                    active_rooms[room_code]['started_at'] = datetime.utcnow().isoformat()
-                    
-                    # Update MongoDB
-                    battles_collection.update_one(
-                        {'room_code': room_code},
-                        {
-                            '$set': {
-                                'status': 'playing',
-                                'started_at': datetime.utcnow()
-                            }
-                        }
-                    )
-                    
-                    print(f"▶️ Game started in room {room_code}")
-                    
-                    # FIXED: Changed 'game_started' to 'start_game' to match Flutter
-                    await broadcast_to_room(room_code, {
-                        'event': 'start_game',  # ✅ FIXED - was 'game_started'
-                        'room_code': room_code
+
+                # Tell the host someone joined
+                await send_to_player(room["host_id"], {
+                    "event":           "opponent_joined",
+                    "opponent_name":   data["player_name"],
+                    "opponent_avatar": data["player_avatar"],
+                })
+
+            # ── START GAME ───────────────────────────────────────────────────
+            elif event == "start_game":
+                room_code = data.get("room_code", current_room)
+                if not room_code or room_code not in rooms:
+                    await send_to_player(user_id, {
+                        "event": "error", "message": "Room not found"
                     })
-            
-            elif event == 'player_answer':
-                room_code = data['room_code']
-                is_correct = data['is_correct']
-                
-                if room_code in active_rooms:
-                    room = active_rooms[room_code]
-                    
-                    # Update score
+                    continue
+
+                room = rooms[room_code]
+
+                # Only the host may start
+                if room["host_id"] != user_id:
+                    await send_to_player(user_id, {
+                        "event": "error", "message": "Only the host can start the game"
+                    })
+                    continue
+
+                if room["status"] != "ready":
+                    await send_to_player(user_id, {
+                        "event": "error", "message": "Opponent has not joined yet"
+                    })
+                    continue
+
+                questions = await fetch_questions(room["category"], room["difficulty"])
+                if not questions:
+                    await send_to_player(user_id, {
+                        "event": "error", "message": "Failed to load questions. Try again."
+                    })
+                    continue
+
+                room["questions"] = questions
+                room["status"] = "playing"
+                room["current_question_index"] = 0
+                room["answers_this_round"] = {}
+
+                payload = {
+                    "event":     "game_started",
+                    "questions": questions,
+                }
+                await send_to_player(room["host_id"],     payload)
+                await send_to_player(room["opponent_id"], payload)
+                print(f"🎮 Game started: {room_code}  ({len(questions)} questions)")
+
+            # ── SUBMIT ANSWER ────────────────────────────────────────────────
+            elif event == "submit_answer":
+                room_code = data.get("room_code", current_room)
+                if not room_code or room_code not in rooms:
+                    continue
+
+                room = rooms[room_code]
+                if room["status"] != "playing":
+                    continue
+
+                is_correct    = bool(data.get("is_correct", False))
+                points        = int(data.get("points", 0))
+                question_idx  = int(data.get("question_index", 0))
+
+                # Clamp points to valid range [0, 15]
+                points = max(0, min(15, points))
+
+                # Record the answer (guard against double-submission)
+                if user_id not in room["answers_this_round"]:
+                    room["scores"][user_id] = room["scores"].get(user_id, 0) + points
                     if is_correct:
-                        room['scores'][user_id] = room['scores'].get(user_id, 0) + 1
-                    
-                    room['answers_submitted'][user_id] = room['answers_submitted'].get(user_id, 0) + 1
-                    
-                    print(f"📝 Player {user_id} answered. Score: {room['scores'][user_id]}")
-                    
-                    # Broadcast score update
-                    await broadcast_to_room(room_code, {
-                        'event': 'score_update',
-                        'player_id': user_id,
-                        'score': room['scores'][user_id],
-                        'answers_submitted': room['answers_submitted'][user_id]
-                    })
-                    
-                    # Check if game is complete
-                    total_questions = room['total_questions']
-                    all_finished = all(
-                        room['answers_submitted'].get(pid, 0) >= total_questions 
-                        for pid in room['players']
+                        room["correct_answers"][user_id] = \
+                            room["correct_answers"].get(user_id, 0) + 1
+                    room["answers_this_round"][user_id] = is_correct
+
+                # Broadcast updated scores to both players
+                score_update = {
+                    "event":  "score_update",
+                    "scores": room["scores"],
+                }
+                await send_to_player(room["host_id"],     score_update)
+                await send_to_player(room["opponent_id"], score_update)
+
+                # Both players have answered this round?
+                both_ids = {room["host_id"], room["opponent_id"]}
+                answered = set(room["answers_this_round"].keys())
+                if both_ids <= answered:
+                    both_answered = {
+                        "event":  "both_answered",
+                        "scores": room["scores"],
+                    }
+                    await send_to_player(room["host_id"],     both_answered)
+                    await send_to_player(room["opponent_id"], both_answered)
+
+                    room["current_question_index"] += 1
+                    room["answers_this_round"] = {}
+
+                    # Run the delay + next-step dispatch in a background task so
+                    # the message-receive loop is not blocked for 2.5 s.
+                    asyncio.create_task(
+                        _advance_round(room, room_code)
                     )
-                    
-                    if all_finished:
-                        room['status'] = 'finished'
-                        
-                        # Determine winner
-                        host_id = room['host']['user_id']
-                        opponent_id = room['opponent']['user_id']
-                        host_score = room['scores'][host_id]
-                        opponent_score = room['scores'][opponent_id]
-                        
-                        winner_id = host_id if host_score > opponent_score else opponent_id
-                        
-                        print(f"🏆 Game finished! Winner: {winner_id}")
-                        
-                        # Save to MongoDB
-                        battle_id = await save_battle_to_db(room_code, room)
-                        
-                        # Update player stats
-                        await update_player_stats(host_id, winner_id == host_id, host_score)
-                        await update_player_stats(opponent_id, winner_id == opponent_id, opponent_score)
-                        
-                        # Broadcast game end
-                        await broadcast_to_room(room_code, {
-                            'event': 'game_end',
-                            'winner_id': winner_id,
-                            'final_scores': room['scores'],
-                            'battle_id': battle_id
-                        })
-            
-            elif event == 'leave_room':
-                room_code = data['room_code']
-                if room_code in active_rooms:
-                    room = active_rooms[room_code]
-                    
-                    # Update MongoDB
-                    battles_collection.update_one(
-                        {'room_code': room_code},
-                        {'$set': {'status': 'abandoned'}}
-                    )
-                    
-                    await broadcast_to_room(room_code, {
-                        'event': 'player_left',
-                        'player_id': user_id
-                    })
-                    
-                    # Clean up room if both players left
-                    if len(room['players']) <= 1:
-                        del active_rooms[room_code]
-                        print(f"🗑️ Room {room_code} deleted")
-    
-    except WebSocketDisconnect:
-        print(f"❌ User {user_id} disconnected")
-        # Handle disconnection
-        if user_id in active_connections:
-            del active_connections[user_id]
-        
-        # Find and update any rooms this player was in
-        for room_code, room in list(active_rooms.items()):
-            if user_id in room['players']:
-                await broadcast_to_room(room_code, {
-                    'event': 'player_disconnected',
-                    'player_id': user_id
-                })
-                
-                battles_collection.update_one(
-                    {'room_code': room_code},
-                    {'$set': {'status': 'abandoned'}}
+
+            # ── LEAVE ROOM ───────────────────────────────────────────────────
+            elif event == "leave_room":
+                room_code = data.get("room_code", current_room)
+                if not room_code or room_code not in rooms:
+                    continue
+
+                room = rooms[room_code]
+                opponent_id = (
+                    room["opponent_id"]
+                    if room["host_id"] == user_id
+                    else room["host_id"]
                 )
-                
-                # Remove room if empty
-                if len(room['players']) <= 1:
-                    del active_rooms[room_code]
+                if opponent_id and opponent_id in connected_players:
+                    await send_to_player(opponent_id, {"event": "player_left"})
 
-# API Endpoints for Laravel Integration
+                rooms.pop(room_code, None)
+                current_room = None
+                print(f"🚪 {user_id} left room {room_code}")
 
-@app.get("/api/battles/active")
-async def get_active_battles():
-    """Get all active battle rooms"""
-    return {
-        'active_rooms': len(active_rooms),
-        'rooms': [
-            {
-                'room_code': code,
-                'host': room['host']['name'],
-                'status': room['status'],
-                'players': len(room['players'])
-            }
-            for code, room in active_rooms.items()
-        ]
-    }
+            else:
+                print(f"⚠️ Unknown event '{event}' from {user_id}")
 
-@app.get("/api/battles/history/{user_id}")
-async def get_battle_history(user_id: str, limit: int = 10):
-    """Get battle history for a user"""
-    try:
-        battles = list(battles_collection.find(
-            {'$or': [{'host_id': user_id}, {'opponent_id': user_id}]}
-        ).sort('created_at', -1).limit(limit))
-        
-        return {
-            'battles': [serialize_doc(battle) for battle in battles]
-        }
-    except Exception as e:
-        return {'error': str(e)}
-
-@app.get("/api/battles/{battle_id}")
-async def get_battle_details(battle_id: str):
-    """Get specific battle details"""
-    try:
-        battle = battles_collection.find_one({'_id': ObjectId(battle_id)})
-        return serialize_doc(battle) if battle else {'error': 'Battle not found'}
-    except Exception as e:
-        return {'error': str(e)}
-
-@app.get("/api/users/{user_id}/stats")
-async def get_user_stats(user_id: str):
-    """Get user battle statistics"""
-    try:
-        user = player_info_collection.find_one({'_id': ObjectId(user_id)})
-        if not user:
-            return {'error': 'User not found'}
-        
-        return {
-            'user_id': str(user['_id']),
-            'total_battles': user.get('total_battles', 0),
-            'total_wins': user.get('total_wins', 0),
-            'total_losses': user.get('total_losses', 0),
-            'total_score': user.get('total_score', 0),
-            'win_rate': round((user.get('total_wins', 0) / max(user.get('total_battles', 1), 1)) * 100, 2)
-        }
-    except Exception as e:
-        return {'error': str(e)}
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    try:
-        client.server_info()  # Test MongoDB connection
-        return {
-            'status': 'ok',
-            'active_connections': len(active_connections),
-            'active_rooms': len(active_rooms),
-            'mongodb': 'connected',
-            'database': 'starbooksWhizbee'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'mongodb': 'disconnected',
-            'error': str(e)
-        }
-
-if __name__ == "__main__":
-    import uvicorn
-    print("=" * 60)
-    print("🚀 Starting WebSocket Battle Server with MongoDB...")
-    print("=" * 60)
-    print(f"📦 MongoDB: {MONGO_URI}")
-    print(f"🗄️ Database: starbooksWhizbee")
-    print(f"🔌 WebSocket: ws://localhost:8080/ws/battle/{{user_id}}")
-    print(f"🌐 API: http://localhost:8080/api/")
-    print(f"💚 Health: http://localhost:8080/health")
-    print("=" * 60)
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    except WebSocketDisconnect:
+        print(f"🔌 Player disconnected: {user_id}")
+    except Exception:
+        print(f"❌ Unhandled error for {user_id}:")
+        traceback.print_exc()
+    finally:
+        connected_players.pop(user_id, None)
+        await _handle_disconnect(user_id)
+        print(f"👋 Player removed: {user_id}  (total: {len(connected_players)})")
