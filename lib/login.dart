@@ -4,10 +4,11 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'register.dart';
 import 'homepage.dart';
-import 'admin_login.dart';
+import 'admin_auth_gate.dart';
 import 'loading_page.dart';
-import 'audio_service.dart';  // ✅ Use AudioService instead of FlameAudio directly
-import 'session_manager.dart'; // ✅ Save session on login so refresh skips splash screen
+import 'audio_service.dart';
+import 'session_manager.dart';
+import 'config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,33 +23,36 @@ class _LoginScreenState extends State<LoginScreen>
   bool usernameError = false;
   bool passwordError = false;
 
+  // Live, inline error messages — replaces the bottom snackbar. Field-level
+  // checks (empty / too short) show under their own field; server-side
+  // login failures (wrong password, user not found, banned, locked) show
+  // as a banner below both fields since they aren't tied to just one.
+  String? usernameErrorText;
+  String? passwordErrorText;
+  String? loginErrorText;
+
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  final String baseUrl = 'http://localhost:8000';
-  final AudioService _audioService = AudioService();  // ✅ Use AudioService
+  final AudioService _audioService = AudioService();
 
   late AnimationController _buttonScaleController;
   late Animation<double> _buttonScale;
 
+  bool get _isMobile => MediaQuery.of(context).size.width < 600;
+
   @override
   void initState() {
     super.initState();
-
-    // ✅ Ensure homepage music continues playing
     _audioService.playHomepageMusic();
 
-    // Button scale animation for press effect
     _buttonScaleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 150),
     );
-
     _buttonScale = Tween<double>(begin: 1.0, end: 0.9).animate(
       CurvedAnimation(
-        parent: _buttonScaleController,
-        curve: Curves.easeInOut,
-      ),
+          parent: _buttonScaleController, curve: Curves.easeInOut),
     );
   }
 
@@ -64,36 +68,35 @@ class _LoginScreenState extends State<LoginScreen>
     await _audioService.playClickSound();
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon, {bool hasError = false}) {
+  InputDecoration _inputDecoration(String label, IconData icon,
+      {bool hasError = false}) {
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(
-        fontFamily: 'Poppins',
-        fontSize: 12,
-        color: hasError ? Colors.red : null,
-      ),
-      prefixIcon: Icon(icon, color: hasError ? Colors.red : null),
+          fontFamily: 'Poppins',
+          fontSize: 12,
+          color: hasError ? Colors.red : null),
+      prefixIcon: Icon(icon, size: 18, color: hasError ? Colors.red : null),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
         borderSide: BorderSide(
-          color: hasError ? Colors.red : const Color(0xFF046EB8),
-          width: 2,
-        ),
+            color: hasError ? Colors.red : const Color(0xFF046EB8),
+            width: 2),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
         borderSide: BorderSide(
-          color: hasError ? Colors.red : Colors.grey,
-          width: hasError ? 2 : 1,
-        ),
+            color: hasError ? Colors.red : Colors.grey,
+            width: hasError ? 2 : 1),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
         borderSide: BorderSide(
-          color: hasError ? Colors.red : const Color(0xFF046EB8),
-          width: 2,
-        ),
+            color: hasError ? Colors.red : const Color(0xFF046EB8),
+            width: 2),
       ),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
     );
   }
 
@@ -101,130 +104,80 @@ class _LoginScreenState extends State<LoginScreen>
     _playClickSound();
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (context) => const RegisterPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const RegisterPage()),
     );
   }
 
   Future<void> _login() async {
     _playClickSound();
-
     await _buttonScaleController.forward();
     await _buttonScaleController.reverse();
 
-    // Clear previous errors
     setState(() {
       usernameError = false;
       passwordError = false;
+      usernameErrorText = null;
+      passwordErrorText = null;
+      loginErrorText = null;
     });
 
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    // Validation
-    if (username.isEmpty && password.isNotEmpty) {
-      if (!mounted) return;
-      setState(() => usernameError = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Username is required'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (password.isEmpty && username.isNotEmpty) {
-      if (!mounted) return;
-      setState(() => passwordError = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password is required'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (username.isEmpty && password.isEmpty) {
-      if (!mounted) return;
+    if (username.isEmpty) {
       setState(() {
         usernameError = true;
-        passwordError = true;
+        usernameErrorText = 'Username is required';
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please complete all required fields'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    }
+    if (password.isEmpty) {
+      setState(() {
+        passwordError = true;
+        passwordErrorText = 'Password is required';
+      });
+    }
+    if (username.isEmpty || password.isEmpty) {
       return;
     }
-
     if (username.length < 3) {
-      if (!mounted) return;
-      setState(() => usernameError = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Username must be at least 3 characters'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() {
+        usernameError = true;
+        usernameErrorText = 'Username must be at least 3 characters';
+      });
       return;
     }
 
-    if (username.length > 20) {
-      if (!mounted) return;
-      setState(() => usernameError = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Username exceeds maximum length'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // ✅ SHOW FULL PAGE LOADING - User passed all validations, now logging in
     if (!mounted) return;
     LoadingHelper.showLoadingPage(context, message: 'Logging in...');
 
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/login'),
+        Uri.parse('${AppConfig.baseUrl}/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-        }),
+        body: jsonEncode(
+            {'username': username, 'password': password}),
       );
 
       final data = jsonDecode(response.body);
-
-      // ✅ HIDE LOADING before showing any dialogs or navigating
       if (mounted) LoadingHelper.hideLoading(context);
-
       if (!mounted) return;
 
       if (response.statusCode == 200 && data['success'] == true) {
         final userId = data['user']['id']?.toString() ??
-            data['user']['_id']?.toString() ?? '';
-
-        // Check if this is the user's first login - use tutorial completion key
-        // so it survives logout (prefs.clear() wipes first_login but we check tutorial separately)
+            data['user']['_id']?.toString() ??
+            '';
         final prefs = await SharedPreferences.getInstance();
-        final tutorialCompletedKey = 'main_tutorial_completed_$userId';
-        final bool tutorialAlreadyCompleted = prefs.getBool(tutorialCompletedKey) ?? false;
+        final tutorialCompletedKey =
+            'main_tutorial_completed_$userId';
+        final bool tutorialAlreadyCompleted =
+            prefs.getBool(tutorialCompletedKey) ?? false;
         final bool isFirstLogin = !tutorialAlreadyCompleted;
 
-        // Check if widget is still mounted before navigation
         if (!mounted) return;
 
-        // ✅ Build the profile object once so we can both save it and pass it
         final profile = UserProfile(
           id: userId,
           username: data['user']['username'],
@@ -238,18 +191,14 @@ class _LoginScreenState extends State<LoginScreen>
           avatar: data['user']['avatar'] ?? 'default',
         );
 
-        // ✅ Persist session so a page refresh goes straight to HomePage
         await SessionManager.saveSession(profile);
-
         if (!mounted) return;
 
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => HomePage(
-              profile: profile,
-              isNewUser: isFirstLogin,
-            ),
+            builder: (context) =>
+                HomePage(profile: profile, isNewUser: isFirstLogin),
           ),
         );
       } else {
@@ -257,36 +206,74 @@ class _LoginScreenState extends State<LoginScreen>
         setState(() {
           usernameError = true;
           passwordError = true;
+          loginErrorText =
+              data['message'] ?? 'Invalid username or password.';
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(data['message'] ?? 'Invalid username or password. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
     } catch (e) {
-      // ✅ HIDE LOADING on error
       if (mounted) LoadingHelper.hideLoading(context);
-
       if (!mounted) return;
       setState(() {
         usernameError = true;
         passwordError = true;
+        loginErrorText = 'Error connecting to server: $e';
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error connecting to server: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
+  }
+
+
+  // ── Error indicator widget ────────────────────────────────────────────────
+  Widget _buildErrorMessage(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: const BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Text(
+                '!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Colors.red,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
+    final size = MediaQuery.of(context).size;
+    final screenWidth = size.width;
+    final screenHeight = size.height;
+
+    // 90% of original form width
+    final formWidth = _isMobile
+        ? screenWidth * 0.79
+        : (screenWidth * 0.38).clamp(306.0, 414.0);
 
     return AnimatedBuilder(
       animation: _buttonScaleController,
@@ -296,37 +283,38 @@ class _LoginScreenState extends State<LoginScreen>
           appBar: AppBar(
             automaticallyImplyLeading: false,
             backgroundColor: Colors.white,
+            toolbarHeight: 48,
             title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Image.asset(
-                  "assets/images-logo/newhomepagelogo.png",
-                  height: 50,
-                  filterQuality: FilterQuality.high,
-                  isAntiAlias: true,
-                ),
-                InkWell(
-                  onTap: () {
-                    _playClickSound();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const AdminLoginPage()),
-                    );
-                  },
-                  child: Row(
-                    children: const [
-                      Icon(Icons.person, color: Color(0xFF046EB8)),
-                      SizedBox(width: 5),
-                      Text(
-                        "ADMIN",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: Color(0xFF046EB8),
-                        ),
-                      ),
-                    ],
+                Image.asset("assets/images-logo/newhomepagelogo.png",
+                    height: 38, filterQuality: FilterQuality.high),
+                if (!_isMobile)
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: InkWell(
+                    onTap: () {
+                      _playClickSound();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const AdminAuthGate()),
+                      );
+                    },
+                    child: Row(
+                      children: [
+                        Icon(Icons.person,
+                            color: const Color(0xFF046EB8),
+                            size: _isMobile ? 20 : 16),
+                        const SizedBox(width: 4),
+                        Text("ADMIN",
+                            style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w700,
+                                fontSize: _isMobile ? 15 : 12,
+                                color: const Color(0xFF046EB8))),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -334,125 +322,203 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           body: Stack(
             children: [
-              Image.asset(
-                "assets/images-icons/background1.png",
-                width: screenWidth,
-                height: screenHeight,
-                fit: BoxFit.cover,
+              Positioned.fill(
+                child: Image.asset(
+                  "assets/images-icons/background1.png",
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.high,
+                ),
               ),
               Align(
-                alignment: Alignment.topCenter,
+                alignment: Alignment.center,
                 child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 60),
-                    child: Column(
-                      children: [
-                        Image.asset(
-                          "assets/images-logo/newloginlogo.png",
-                          height: 170,
-                          filterQuality: FilterQuality.high,
-                          isAntiAlias: true,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Logo — 90% of original clamp range
+                      Image.asset(
+                        "assets/images-logo/newloginlogo.png",
+                        height: (screenHeight * 0.20).clamp(117.0, 216.0),
+                        filterQuality: FilterQuality.high,
+                        isAntiAlias: true,
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Login card
+                      Container(
+                        width: formWidth,
+                        padding: EdgeInsets.all(_isMobile ? 18 : 25),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        const SizedBox(height: 10),
-
-                        Container(
-                          width: 380,
-                          padding: const EdgeInsets.all(28.0),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                "Log In",
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text("Log In",
                                 style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF046EB8),
+                                    fontFamily: 'Poppins',
+                                    fontSize: _isMobile ? 18 : 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF046EB8))),
+                            SizedBox(height: _isMobile ? 14 : 18),
+
+                            // Username field
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextField(
+                                  controller: _usernameController,
+                                  onSubmitted: (_) => _login(),
+                                  style: const TextStyle(
+                                      fontFamily: 'Poppins', fontSize: 12),
+                                  decoration: _inputDecoration(
+                                      "Username", Icons.person,
+                                      hasError: usernameError),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      // A previous server-side failure
+                                      // (wrong password, not found, etc.)
+                                      // no longer applies once they edit.
+                                      loginErrorText = null;
+                                      final trimmed = value.trim();
+                                      if (trimmed.isEmpty) {
+                                        usernameError = true;
+                                        usernameErrorText =
+                                            'Username is required';
+                                      } else if (trimmed.length < 3) {
+                                        usernameError = true;
+                                        usernameErrorText =
+                                            'Username must be at least 3 characters';
+                                      } else {
+                                        usernameError = false;
+                                        usernameErrorText = null;
+                                      }
+                                    });
+                                  },
                                 ),
-                              ),
-                              const SizedBox(height: 20),
+                                if (usernameError && usernameErrorText != null)
+                                  _buildErrorMessage(usernameErrorText!),
+                              ],
+                            ),
 
-                              TextField(
-                                controller: _usernameController,
-                                onSubmitted: (_) => _login(),
-                                decoration: _inputDecoration("Username", Icons.person, hasError: usernameError),
-                              ),
-                              const SizedBox(height: 15),
+                            SizedBox(height: _isMobile ? 10 : 13),
 
-                              TextField(
-                                controller: _passwordController,
-                                onSubmitted: (_) => _login(),
-                                obscureText: _obscurePassword,
-                                decoration: _inputDecoration("Password", Icons.lock, hasError: passwordError).copyWith(
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                                      color: passwordError ? Colors.red : null,
+                            // Password field
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextField(
+                                  controller: _passwordController,
+                                  onSubmitted: (_) => _login(),
+                                  obscureText: _obscurePassword,
+                                  style: const TextStyle(
+                                      fontFamily: 'Poppins', fontSize: 12),
+                                  decoration: _inputDecoration(
+                                          "Password", Icons.lock,
+                                          hasError: passwordError)
+                                      .copyWith(
+                                    suffixIcon: MouseRegion(
+                                      cursor: SystemMouseCursors.click,
+                                      child: IconButton(
+                                        icon: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility_off
+                                              : Icons.visibility,
+                                          size: 18,
+                                          color: passwordError
+                                              ? Colors.red
+                                              : null,
+                                        ),
+                                        onPressed: () => setState(() =>
+                                            _obscurePassword =
+                                                !_obscurePassword),
+                                      ),
                                     ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
                                   ),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      // A previous server-side failure no
+                                      // longer applies once they edit.
+                                      loginErrorText = null;
+                                      if (value.isEmpty) {
+                                        passwordError = true;
+                                        passwordErrorText =
+                                            'Password is required';
+                                      } else {
+                                        passwordError = false;
+                                        passwordErrorText = null;
+                                      }
+                                    });
+                                  },
                                 ),
-                              ),
-                              const SizedBox(height: 30),
+                                if (passwordError && passwordErrorText != null)
+                                  _buildErrorMessage(passwordErrorText!),
+                                // General login-attempt error (wrong
+                                // password, account not found, banned,
+                                // locked) — not tied to a single field.
+                                if (loginErrorText != null)
+                                  _buildErrorMessage(loginErrorText!),
+                              ],
+                            ),
 
-                              Transform.scale(
-                                scale: _buttonScale.value,
+                            SizedBox(height: _isMobile ? 20 : 26),
+
+                            Transform.scale(
+                              scale: _buttonScale.value,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
                                 child: SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton(
                                     onPressed: _login,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFDD000),
-                                      foregroundColor: const Color(0xFF816A03),
-                                      textStyle: const TextStyle(
-                                        fontFamily: 'Poppins',
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14,
-                                      ),
+                                      backgroundColor:
+                                          const Color(0xFFFDD000),
+                                      foregroundColor:
+                                          const Color(0xFF816A03),
+                                      padding: EdgeInsets.symmetric(
+                                          vertical:
+                                              _isMobile ? 11 : 13),
+                                      textStyle: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontWeight: FontWeight.w700,
+                                          fontSize:
+                                              _isMobile ? 13 : 14),
                                     ),
                                     child: const Text("LOG IN"),
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 10),
-
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text(
-                                    "No account yet? ",
+                            ),
+                            const SizedBox(height: 11),
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.center,
+                              children: [
+                                const Text("No account yet? ",
                                     style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                  InkWell(
-                                    onTap: _goToRegister,
-                                    child: const Text(
-                                      "Register here",
-                                      style: TextStyle(
                                         fontFamily: 'Poppins',
-                                        fontSize: 10,
-                                        color: Colors.blue,
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                    ),
+                                        fontSize: 11)),
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: InkWell(
+                                    onTap: _goToRegister,
+                                    child: const Text("Register here",
+                                        style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 11,
+                                            color: Colors.blue,
+                                            decoration: TextDecoration
+                                                .underline)),
                                   ),
-                                ],
-                              ),
-                            ],
-                          ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),

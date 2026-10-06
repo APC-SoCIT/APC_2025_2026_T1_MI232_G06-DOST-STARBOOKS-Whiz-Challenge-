@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'web_tts_service.dart';
 import 'quiz_questions.dart';
 import 'quiz_results.dart';
 import 'quiz_api.dart';
@@ -44,6 +45,10 @@ class _QuizScreenState extends State<QuizScreen> {
   bool _isAnswerLocked = false;
   bool _isMusicEnabled = true;
 
+  // TTS — independent from music mute
+  final WebTtsService _tts = WebTtsService();
+  bool _isSpeaking = false;
+
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -61,8 +66,25 @@ class _QuizScreenState extends State<QuizScreen> {
     // Music is already playing from selection screen
 
     _gameStartTime = DateTime.now();
+    _initTts();
     _loadSettingsThenQuestions();
     // No need to initialize audio - music already playing
+  }
+
+  Future<void> _initTts() async {
+    // WebTtsService handles all setup internally (language, rate, voice warmup)
+    await _tts.init();
+  }
+
+  Future<void> _speakQuestion(String text) async {
+    if (mounted) setState(() => _isSpeaking = true);
+    try {
+      await _tts.speak(text);
+    } catch (e) {
+      debugPrint('TTS error: $e');
+    } finally {
+      if (mounted) setState(() => _isSpeaking = false);
+    }
   }
 
   Future<void> _pauseBackgroundMusic() async {
@@ -92,7 +114,7 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _restartBackgroundMusic() async {
     try {
       if (_isMusicEnabled) {
-        await _audioService.playPuzzleMusic();
+        await _audioService.playQuizMusic();
       }
     } catch (e) {
       debugPrint('Error restarting music: $e');
@@ -153,8 +175,6 @@ class _QuizScreenState extends State<QuizScreen> {
       setState(() {
         _isLoading = false;
       });
-
-      _startTimer();
     } catch (e) {
       debugPrint('ERROR loading questions: $e');
       setState(() {
@@ -162,7 +182,16 @@ class _QuizScreenState extends State<QuizScreen> {
         'Failed to load questions. Please check your connection.';
         _isLoading = false;
       });
+      return;
     }
+
+    // TTS is OUTSIDE the try-catch so a TTS failure never shows the error screen
+    try {
+      await _speakQuestion(questions[currentQuestionIndex].question);
+    } catch (e) {
+      debugPrint('TTS failed, starting timer directly: $e');
+    }
+    if (mounted) _startTimer();
   }
 
   void _startTimer() {
@@ -213,7 +242,7 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _handleAnswer(String answer) {
-    if (_showFeedback || _isAnswerLocked) return;
+    if (_showFeedback || _isAnswerLocked || _isSpeaking) return;
 
     _timer?.cancel();
     _isAnswerLocked = true;
@@ -251,7 +280,7 @@ class _QuizScreenState extends State<QuizScreen> {
     });
   }
 
-  void _nextQuestion() {
+  Future<void> _nextQuestion() async {
     if (currentQuestionIndex < questions.length - 1) {
       setState(() {
         currentQuestionIndex++;
@@ -260,7 +289,13 @@ class _QuizScreenState extends State<QuizScreen> {
         _selectedAnswer = null;
         _isAnswerLocked = false;
       });
-      _startTimer();
+      // ✅ FIX: await TTS so timer starts only after speaking finishes
+      try {
+        await _speakQuestion(questions[currentQuestionIndex].question);
+      } catch (e) {
+        debugPrint('TTS failed, starting timer directly: $e');
+      }
+      if (mounted) _startTimer();
     } else {
       _saveResultAndNavigate();
     }
@@ -789,6 +824,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   void dispose() {
+    _tts.stop();
     _timer?.cancel();
     // Don't stop music here - let it continue to results screen
     super.dispose();
@@ -1016,7 +1052,117 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
+  Widget _buildTimerCircle(Color difficultyColor, {required double size, required double fontSize}) {
+    final activeColor = _isSpeaking
+        ? Colors.deepPurple
+        : (_secondsRemaining <= 5 ? Colors.red : difficultyColor);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: activeColor,
+        border: Border.all(color: Colors.white, width: 4),
+        boxShadow: [
+          BoxShadow(
+            color: activeColor.withValues(alpha: 0.4),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Center(
+        child: _isSpeaking
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.volume_up, color: Colors.white, size: 20),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Listen',
+                    style: TextStyle(
+                      fontSize: fontSize * 0.34,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                '$_secondsRemaining',
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+      ),
+    );
+  }
+
   Widget _buildHeader(Color difficultyColor) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    if (isMobile) {
+      // Mobile-only: compact single-row header. The pill hugs its own
+      // content (instead of being squeezed into a fixed 1/3 column) so
+      // "Category · Difficulty" never wraps to a second line.
+      return Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                ConstrainedBox(
+                  // Safety cap only — doesn't reserve unused space like
+                  // Flexible did, so it won't leave a gap before the
+                  // pause button.
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: difficultyColor,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '${widget.category} · ${widget.difficulty}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                        fontFamily: 'Poppins',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(Icons.pause_circle, size: 32, color: difficultyColor),
+                  onPressed: _showPauseDialog,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+          // Timer circle
+          Positioned(
+            top: 18,
+            child: _buildTimerCircle(difficultyColor, size: 82, fontSize: 28),
+          ),
+        ],
+      );
+    }
+
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
@@ -1077,11 +1223,15 @@ class _QuizScreenState extends State<QuizScreen> {
             height: 110,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _secondsRemaining <= 5 ? Colors.red : difficultyColor,
+              color: _isSpeaking
+                  ? Colors.deepPurple
+                  : (_secondsRemaining <= 5 ? Colors.red : difficultyColor),
               border: Border.all(color: Colors.white, width: 5),
               boxShadow: [
                 BoxShadow(
-                  color: (_secondsRemaining <= 5 ? Colors.red : difficultyColor)
+                  color: (_isSpeaking
+                      ? Colors.deepPurple
+                      : (_secondsRemaining <= 5 ? Colors.red : difficultyColor))
                       .withValues(alpha: 0.4),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
@@ -1089,15 +1239,32 @@ class _QuizScreenState extends State<QuizScreen> {
               ],
             ),
             child: Center(
-              child: Text(
-                '$_secondsRemaining',
-                style: const TextStyle(
-                  fontSize: 38,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Poppins',
-                ),
-              ),
+              child: _isSpeaking
+                  ? const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.volume_up, color: Colors.white, size: 28),
+                        SizedBox(height: 2),
+                        Text(
+                          'Listen',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      '$_secondsRemaining',
+                      style: const TextStyle(
+                        fontSize: 38,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
             ),
           ),
         ),
@@ -1106,11 +1273,13 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Widget _buildQuestionView(Question question, Color difficultyColor) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Dot indicators + label — OUTSIDE the white box, above it
-        const SizedBox(height: 16),
+        SizedBox(height: isMobile ? 10 : 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1161,10 +1330,12 @@ class _QuizScreenState extends State<QuizScreen> {
 
         // White question box
         ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 140),
+          constraints: BoxConstraints(minHeight: isMobile ? 100 : 140),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(30, 32, 30, 32),
+            padding: isMobile
+                ? const EdgeInsets.fromLTRB(18, 20, 18, 20)
+                : const EdgeInsets.fromLTRB(30, 32, 30, 32),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -1178,11 +1349,11 @@ class _QuizScreenState extends State<QuizScreen> {
             child: Center(
               child: Text(
                 question.question,
-                style: const TextStyle(
-                  fontSize: 20,
+                style: TextStyle(
+                  fontSize: isMobile ? 15 : 20,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'Poppins',
-                  height: 1.5,
+                  height: 1.4,
                 ),
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.visible,
@@ -1193,11 +1364,11 @@ class _QuizScreenState extends State<QuizScreen> {
         ),
 
         // Answer options
-        const SizedBox(height: 24),
+        SizedBox(height: isMobile ? 16 : 24),
         Center(
           child: Container(
             constraints: const BoxConstraints(maxWidth: 900),
-            margin: const EdgeInsets.symmetric(horizontal: 15),
+            margin: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 15),
             child: Builder(
               builder: (context) {
                 final hasImageChoices = question.optionImages.any(
@@ -1208,11 +1379,11 @@ class _QuizScreenState extends State<QuizScreen> {
                   return GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: isMobile ? 2 : 4,
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 12,
-                      childAspectRatio: 0.75,
+                      childAspectRatio: isMobile ? 1.0 : 0.75,
                     ),
                     itemCount: question.options.length,
                     itemBuilder: (context, index) {
@@ -1227,25 +1398,65 @@ class _QuizScreenState extends State<QuizScreen> {
                   );
                 }
 
-                // Text-only: normal 2x2 grid
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 3.5,
-                  ),
-                  itemCount: question.options.length,
-                  itemBuilder: (context, index) {
-                    return _buildAnswerButton(
-                      question.options[index],
-                      index,
-                      imageUrl: null,
-                    );
-                  },
-                );
+                // Desktop/web: unchanged fixed-aspect-ratio 2x2 grid.
+                if (!isMobile) {
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 3.5,
+                    ),
+                    itemCount: question.options.length,
+                    itemBuilder: (context, index) {
+                      return _buildAnswerButton(
+                        question.options[index],
+                        index,
+                        imageUrl: null,
+                      );
+                    },
+                  );
+                }
+
+                // Mobile-only: each row's height grows to fit whichever
+                // choice needs the most room, so wrapped answer text is
+                // never clipped the way a fixed aspect ratio would clip it.
+                final rows = <Widget>[];
+                for (int i = 0; i < question.options.length; i += 2) {
+                  final hasSecond = i + 1 < question.options.length;
+                  rows.add(
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _buildAnswerButton(
+                                question.options[i],
+                                i,
+                                imageUrl: null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: hasSecond
+                                  ? _buildAnswerButton(
+                                      question.options[i + 1],
+                                      i + 1,
+                                      imageUrl: null,
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return Column(mainAxisSize: MainAxisSize.min, children: rows);
               },
             ),
           ),
@@ -1255,6 +1466,7 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Widget _buildAnswerButton(String answer, int index, {String? imageUrl}) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     final buttonColor = _getButtonColor(index);
     final isSelected = _selectedAnswer == answer && _isAnswerLocked;
     final hasImage = imageUrl != null && imageUrl.isNotEmpty;
@@ -1336,14 +1548,14 @@ class _QuizScreenState extends State<QuizScreen> {
           )
               : Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 10 : 12,
+                vertical: isMobile ? 8 : 10,
               ),
               child: Text(
                 answer,
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: isMobile ? 13.5 : 18,
                   fontWeight: FontWeight.w600,
                   color: isSelected ? Colors.white : Colors.black87,
                   fontFamily: 'Poppins',
@@ -1359,61 +1571,70 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Widget _buildFeedbackView(Color difficultyColor) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Center(
       child: SingleChildScrollView(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 700),
-          margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+          margin: EdgeInsets.symmetric(
+            horizontal: isMobile ? 18 : 25,
+            vertical: 15,
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                _isCorrect ? "CORRECT ANSWER!" : "WRONG ANSWER!",
-                style: TextStyle(
-                  fontSize: 38,
-                  fontWeight: FontWeight.bold,
-                  color: _isCorrect
-                      ? const Color(0xFF1D9358)
-                      : const Color(0xFFE74C3C),
-                  fontFamily: 'Poppins',
-                  letterSpacing: 0.5,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _isCorrect ? "CORRECT ANSWER!" : "WRONG ANSWER!",
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: isMobile ? 26 : 38,
+                    fontWeight: FontWeight.bold,
+                    color: _isCorrect
+                        ? const Color(0xFF1D9358)
+                        : const Color(0xFFE74C3C),
+                    fontFamily: 'Poppins',
+                    letterSpacing: 0.5,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 25),
+              SizedBox(height: isMobile ? 18 : 25),
               ElevatedButton(
                 onPressed: _nextQuestion,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF046EB8),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 25,
-                    vertical: 16,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 20 : 25,
+                    vertical: isMobile ? 13 : 16,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       "Next Question",
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: isMobile ? 14 : 16,
                         fontWeight: FontWeight.bold,
                         fontFamily: 'Poppins',
                       ),
                     ),
-                    SizedBox(width: 6),
-                    Icon(Icons.arrow_forward, size: 18),
+                    const SizedBox(width: 6),
+                    Icon(Icons.arrow_forward, size: isMobile ? 16 : 18),
                   ],
                 ),
               ),
-              const SizedBox(height: 25),
+              SizedBox(height: isMobile ? 18 : 25),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(isMobile ? 12 : 16),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -1423,16 +1644,16 @@ class _QuizScreenState extends State<QuizScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.only(right: 12),
+                      padding: EdgeInsets.only(right: isMobile ? 8 : 12),
                       child: Image.asset(
                         "assets/images-icons/lightbulb.png",
-                        width: 35,
-                        height: 35,
+                        width: isMobile ? 26 : 35,
+                        height: isMobile ? 26 : 35,
                         errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
+                          return Icon(
                             Icons.lightbulb,
-                            color: Color(0xFFFFC107),
-                            size: 40,
+                            color: const Color(0xFFFFC107),
+                            size: isMobile ? 28 : 40,
                           );
                         },
                       ),
@@ -1443,34 +1664,42 @@ class _QuizScreenState extends State<QuizScreen> {
                         children: [
                           Text(
                             questions[currentQuestionIndex].question,
-                            style: const TextStyle(
-                              fontSize: 18,
+                            style: TextStyle(
+                              fontSize: isMobile ? 13.5 : 18,
                               fontWeight: FontWeight.w600,
                               fontFamily: 'Poppins',
                             ),
                           ),
                           const SizedBox(height: 6),
-                          RichText(
-                            text: TextSpan(
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontFamily: 'Poppins',
-                                color: Colors.black87,
-                              ),
-                              children: [
-                                const TextSpan(
-                                  text: "Answer: ",
-                                  style: TextStyle(fontWeight: FontWeight.w600),
+                          Row(
+                            children: [
+                              Text(
+                                "Answer: ",
+                                style: TextStyle(
+                                  fontSize: isMobile ? 12 : 14,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Poppins',
+                                  color: Colors.black87,
                                 ),
-                                TextSpan(
-                                  text: questions[currentQuestionIndex]
-                                      .correctAnswer,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                              ),
+                              Expanded(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    questions[currentQuestionIndex]
+                                        .correctAnswer,
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      fontSize: isMobile ? 12 : 14,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Poppins',
+                                      color: Colors.black87,
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

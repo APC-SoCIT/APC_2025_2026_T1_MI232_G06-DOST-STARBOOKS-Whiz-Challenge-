@@ -17,7 +17,7 @@ class GlobalMusicManager {
     if (_isInitialized) return;
 
     try {
-      await FlameAudio.audioCache.load('homepage_music.mp3');
+      await FlameAudio.audioCache.load('audio/homepage_music.wav');
       _isInitialized = true;
       debugPrint('✅ Music initialized successfully');
     } catch (e) {
@@ -32,7 +32,7 @@ class GlobalMusicManager {
     }
 
     try {
-      await FlameAudio.bgm.play('homepage_music.mp3', volume: 0.3);
+      await FlameAudio.bgm.play('audio/homepage_music.wav', volume: 0.3);
       _isPlaying = true;
       debugPrint('🎵 Homepage music started');
     } catch (e) {

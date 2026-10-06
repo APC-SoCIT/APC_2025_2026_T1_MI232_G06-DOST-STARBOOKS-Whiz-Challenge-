@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:confetti/confetti.dart';
-
+import 'config.dart';
+import 'prize_notifier.dart';
 
 class PlayerBadgesDialog extends StatefulWidget {
   final String playerId;
+  final String baseUrl;
 
-  const PlayerBadgesDialog({
+  PlayerBadgesDialog({
     super.key,
     required this.playerId,
-  });
+    String? baseUrl,
+  }) : baseUrl = baseUrl ?? AppConfig.baseUrl;
 
   @override
   State<PlayerBadgesDialog> createState() => _PlayerBadgesDialogState();
@@ -26,7 +29,21 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
     'difficult': [],
   };
   String? errorMessage;
-  final String baseUrl = "http://localhost:8000";
+
+  // ✅ FIX: claim errors previously used ScaffoldMessenger SnackBars, which
+  // render on the page BEHIND this dialog's modal barrier — under the
+  // dialog, exactly where users said they couldn't see them. This banner
+  // shows inside the dialog instead, at the top, above the badge content.
+  String? _claimErrorMessage;
+  Color _claimErrorColor = Colors.red;
+
+  void _showClaimError(String message, {Color color = Colors.red}) {
+    if (!mounted) return;
+    setState(() {
+      _claimErrorMessage = message;
+      _claimErrorColor = color;
+    });
+  }
 
   final Map<String, String> badgeImages = {
     "easy": "assets/images-badges/whiz-ready.png",
@@ -40,10 +57,24 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
     "difficult": const Color(0xFFBD442E),
   };
 
+  late final PrizeNotifier _prizeNotifier;
+
   @override
   void initState() {
     super.initState();
     _fetchPlayerBadges();
+    // Polls for "admin gave your prize" and shows a message; refreshes this dialog when it fires.
+    _prizeNotifier = PrizeNotifier(
+      playerId: widget.playerId,
+      baseUrl: widget.baseUrl,
+      onAwarded: () { if (mounted) _fetchPlayerBadges(); },
+    )..start(context);
+  }
+
+  @override
+  void dispose() {
+    _prizeNotifier.stop();
+    super.dispose();
   }
 
   Future<void> _fetchPlayerBadges() async {
@@ -55,8 +86,8 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
     try {
       debugPrint('🔍 Fetching badges for player: ${widget.playerId}');
 
-      final summaryUrl = '$baseUrl/api/badges/player/${widget.playerId}/summary';
-      final unclaimedUrl = '$baseUrl/api/badges/player/${widget.playerId}/unclaimed';
+      final summaryUrl = '${widget.baseUrl}/badges/player/${widget.playerId}/summary';
+      final unclaimedUrl = '${widget.baseUrl}/badges/player/${widget.playerId}/unclaimed';
 
       debugPrint('Summary URL: $summaryUrl');
       debugPrint('Unclaimed URL: $unclaimedUrl');
@@ -65,9 +96,9 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
         Uri.parse(summaryUrl),
         headers: {'Accept': 'application/json'},
       ).timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 30),
         onTimeout: () {
-          throw Exception('Connection timeout');
+          throw Exception('timeout');
         },
       );
 
@@ -78,9 +109,9 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
         Uri.parse(unclaimedUrl),
         headers: {'Accept': 'application/json'},
       ).timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 30),
         onTimeout: () {
-          throw Exception('Connection timeout');
+          throw Exception('timeout');
         },
       );
 
@@ -132,8 +163,17 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
       }
     } catch (e) {
       debugPrint('❌ Error loading badges: $e');
+      final msg = e.toString();
+      String friendlyMessage;
+      if (msg.contains('timeout')) {
+        friendlyMessage = 'Could not connect to the server. Please check your connection and try again.';
+      } else if (msg.contains('SocketException') || msg.contains('Failed to fetch') || msg.contains('NetworkException')) {
+        friendlyMessage = 'No internet connection. Please check your network and try again.';
+      } else {
+        friendlyMessage = 'Something went wrong loading badges. Please try again.';
+      }
       setState(() {
-        errorMessage = 'Error loading badges: $e';
+        errorMessage = friendlyMessage;
         isLoading = false;
       });
     }
@@ -429,20 +469,15 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
   }
 
   Future<void> _claimBadge(String difficulty) async {
+    // Clear any previous claim error before trying again.
+    if (mounted) setState(() => _claimErrorMessage = null);
     try {
       debugPrint('🎯 Attempting to claim badge for difficulty: $difficulty');
 
       final badgesList = unclaimedBadges[difficulty] ?? [];
 
       if (badgesList.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No badge available to claim'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
+        _showClaimError('No badge available to claim yet.', color: Colors.orange);
         return;
       }
 
@@ -466,18 +501,11 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
       debugPrint('📝 Extracted reward ID: $rewardId');
 
       if (rewardId == null || rewardId.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Invalid badge ID'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        _showClaimError('Something went wrong identifying this badge. Please try reopening this dialog.');
         return;
       }
 
-      final claimUrl = '$baseUrl/api/badges/player/${widget.playerId}/claim';
+      final claimUrl = '${widget.baseUrl}/badges/player/${widget.playerId}/claim';
       debugPrint('🌐 Claim URL: $claimUrl');
       debugPrint('📤 Sending reward_id: $rewardId');
 
@@ -491,7 +519,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
           'reward_id': rewardId,
         }),
       ).timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 30),
         onTimeout: () {
           throw Exception('Connection timeout while claiming badge');
         },
@@ -521,42 +549,70 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
             );
           }
         } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed: ${data['message'] ?? 'Unknown error'}'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
+          _showClaimError(data['message'] ?? 'Could not request this reward. Please try again.');
         }
       } else {
         final errorData = json.decode(response.body);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${errorData['message'] ?? 'Server error'}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        // ✅ Surface the backend's specific reason (e.g. "already requested",
+        // "not eligible", "already given by admin") instead of a generic
+        // message — this is the actual per-case wording BadgeController.php
+        // already sends back.
+        _showClaimError(errorData['message'] ?? 'Server error. Please try again.');
       }
     } catch (e) {
       debugPrint('❌ Error claiming badge: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error claiming badge: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showClaimError('Network error while claiming badge. Please check your connection and try again.');
     }
   }
 
   bool _hasUnclaimedBadge(String difficulty) {
     final badges = unclaimedBadges[difficulty] ?? [];
     return badges.isNotEmpty;
+  }
+
+  // ✅ Claim-error banner — rendered at the very top of the dialog content,
+  // above the badge categories, so it's visible without scrolling and isn't
+  // hidden behind the modal barrier the way a SnackBar would be.
+  Widget _buildClaimErrorBanner() {
+    if (_claimErrorMessage == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _claimErrorColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _claimErrorColor.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, color: _claimErrorColor, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _claimErrorMessage!,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12.5,
+                color: _claimErrorColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ FIX: the backend's /summary endpoint already returns a per-difficulty
+  // 'requested' count (rewards the player has tapped Claim on, pending admin
+  // confirmation) — but this was never read here, so "waiting for admin"
+  // and "not eligible yet" were indistinguishable and both showed a generic
+  // gray "LOCKED" button. This powers the new "CLAIMED" state.
+  int _getRequestedCount(String difficulty) {
+    if (badgeData == null || badgeData!['requested'] == null) return 0;
+    return badgeData!['requested'][difficulty] ?? 0;
   }
 
   int _getClaimedBadgeCount(String difficulty) {
@@ -589,20 +645,28 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final categorySpacing = isNarrow ? 20.0 : 42.0;
+
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 80),
+      insetPadding: EdgeInsets.symmetric(
+          horizontal: isNarrow ? 16 : 40, vertical: isNarrow ? 24 : 80),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: Colors.transparent,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Container(
-            constraints: const BoxConstraints(maxWidth: 410, minHeight: 450, maxHeight: 750),
+            constraints: isNarrow
+                ? BoxConstraints(maxWidth: 410, maxHeight: screenHeight - 48)
+                : const BoxConstraints(
+                    maxWidth: 410, minHeight: 520, maxHeight: 520),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
             ),
-            padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+            padding: EdgeInsets.fromLTRB(20, isNarrow ? 52 : 60, 20, 20),
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : errorMessage != null
@@ -630,18 +694,38 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
                 ),
               ),
             )
-                : SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildBadgeCategory("Easy", "easy"),
-                  const SizedBox(height: 20),
-                  _buildBadgeCategory("Average", "average"),
-                  const SizedBox(height: 20),
-                  _buildBadgeCategory("Difficult", "difficult"),
-                ],
+                : (isNarrow
+                    ? IntrinsicWidth(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildClaimErrorBanner(),
+                              _buildBadgeCategory("Easy", "easy", isNarrow),
+                              SizedBox(height: categorySpacing),
+                              _buildBadgeCategory("Average", "average", isNarrow),
+                              SizedBox(height: categorySpacing),
+                              _buildBadgeCategory("Difficult", "difficult", isNarrow),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Center(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildClaimErrorBanner(),
+                    _buildBadgeCategory("Easy", "easy", isNarrow),
+                    SizedBox(height: categorySpacing),
+                    _buildBadgeCategory("Average", "average", isNarrow),
+                    SizedBox(height: categorySpacing),
+                    _buildBadgeCategory("Difficult", "difficult", isNarrow),
+                  ],
+                ),
               ),
-            ),
+            )),
           ),
           Positioned(
             top: -74,
@@ -692,22 +776,107 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
     );
   }
 
-  Widget _buildBadgeCategory(String title, String difficulty) {
+  Widget _buildBadgeCategory(String title, String difficulty, bool isNarrow) {
     if (badgeData == null) return const SizedBox.shrink();
 
     final progress = _getProgress(difficulty);
     final hasUnclaimed = _hasUnclaimedBadge(difficulty);
+    // ✅ FIX: distinguishes "requested, waiting for admin" from "not
+    // eligible yet" — previously both showed as gray "LOCKED".
+    final isPendingAdmin = !hasUnclaimed && _getRequestedCount(difficulty) > 0;
     final totalBadgesEarned = _getClaimedBadgeCount(difficulty);
     final borderColor = badgeColors[difficulty] ?? Colors.grey;
     final badgeImage = badgeImages[difficulty] ?? "";
     final currentInSet = progress['current']!;
 
     List<String?> badgePaths;
-    if (hasUnclaimed) {
+    if (hasUnclaimed || isPendingAdmin) {
+      // A completed set of 3 — whether ready to claim or already requested
+      // and awaiting admin — should still show all 3 circles filled in.
       badgePaths = [badgeImage, badgeImage, badgeImage];
     } else {
       badgePaths = List.generate(3, (i) => i < currentInSet ? badgeImage : null);
     }
+
+    final circleSize = isNarrow ? 44.0 : 75.0;
+    final circleGap = isNarrow ? 6.0 : 10.0;
+
+    // ✅ FIX: three distinct button states instead of a binary
+    // Claim/Locked toggle:
+    //   • Not eligible (0/3, 1/3, 2/3)                → gray "LOCKED", disabled
+    //   • Eligible (3/3), not yet requested           → colored "CLAIM!", enabled
+    //   • Eligible (3/3), requested, pending admin     → gray "CLAIMED", disabled
+    // Once admin grants the reward, the badge count resets server-side, so
+    // hasUnclaimed and isPendingAdmin both go false again — naturally
+    // falling back to the "LOCKED" state, satisfying the reset rule too.
+    final String buttonLabel =
+        hasUnclaimed ? "CLAIM!" : (isPendingAdmin ? "CLAIMED" : "LOCKED");
+    final bool buttonEnabled = hasUnclaimed;
+
+    final claimButton = ElevatedButton(
+      onPressed: buttonEnabled ? () async {
+        try {
+          await AudioService().playClickSound();
+        } catch (e) {
+          debugPrint('Click sound not found: $e');
+        }
+        _claimBadge(difficulty);
+      } : null,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: buttonEnabled
+            ? borderColor
+            : Colors.grey.shade300,
+        foregroundColor: buttonEnabled
+            ? Colors.white
+            : Colors.grey.shade600,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+        ),
+        padding: EdgeInsets.symmetric(
+            horizontal: isNarrow ? 12 : 25, vertical: isNarrow ? 8 : 17),
+        textStyle: TextStyle(
+          fontSize: isNarrow ? 11 : 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      child: Text(buttonLabel),
+    );
+
+    final circles = List.generate(3, (i) {
+      final path = badgePaths[i];
+      return Padding(
+        padding: EdgeInsets.only(right: circleGap),
+        child: Container(
+          width: circleSize,
+          height: circleSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: path != null ? borderColor : Colors.grey.shade300,
+              width: 3,
+            ),
+            color: path == null ? Colors.grey.shade100 : null,
+          ),
+          child: path != null
+              ? ClipOval(
+                  child: Image.asset(path, fit: BoxFit.contain))
+              : ClipOval(
+                  child: ColorFiltered(
+                    colorFilter: const ColorFilter.matrix([
+                      0.2126, 0.7152, 0.0722, 0, 0,
+                      0.2126, 0.7152, 0.0722, 0, 0,
+                      0.2126, 0.7152, 0.0722, 0, 0,
+                      0,      0,      0,      1, 0,
+                    ]),
+                    child: Opacity(
+                      opacity: 0.45,
+                      child: Image.asset(badgeImage, fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+        ),
+      );
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -732,7 +901,7 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
               child: Text(
                 hasUnclaimed
                     ? '3/3 - Ready!'
-                    : '$currentInSet/3',
+                    : (isPendingAdmin ? '3/3 - Pending' : '$currentInSet/3'),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -778,67 +947,9 @@ class _PlayerBadgesDialogState extends State<PlayerBadgesDialog> {
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            ...List.generate(3, (i) {
-              final path = badgePaths[i];
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Container(
-                  width: 75,
-                  height: 75,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: path != null ? borderColor : Colors.grey.shade300,
-                      width: 3,
-                    ),
-                    color: path == null ? Colors.grey.shade100 : null,
-                  ),
-                  child: path != null
-                      ? ClipOval(
-                      child: Image.asset(path, fit: BoxFit.contain))
-                      : Center(
-                    child: Icon(
-                      Icons.lock_outline,
-                      color: Colors.grey.shade400,
-                      size: 30,
-                    ),
-                  ),
-                ),
-              );
-            }),
-            const Spacer(),
-            ElevatedButton(
-              onPressed: hasUnclaimed ? () async {
-                try {
-                  await AudioService().playClickSound();
-                } catch (e) {
-                  debugPrint('Click sound not found: $e');
-                }
-                _claimBadge(difficulty);
-              } : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: hasUnclaimed
-                    ? borderColor
-                    : Colors.grey.shade300,
-                foregroundColor: hasUnclaimed
-                    ? Colors.white
-                    : Colors.grey.shade600,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                padding:
-                const EdgeInsets.symmetric(horizontal: 25, vertical: 17),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              child: Text(hasUnclaimed ? "CLAIM!" : "LOCKED"),
-            ),
-          ],
-        ),
+        Row(children: isNarrow
+            ? [...circles, const SizedBox(width: 16), claimButton]
+            : [...circles, const Spacer(), claimButton]),
       ],
     );
   }

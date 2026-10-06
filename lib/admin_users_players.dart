@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -87,7 +88,7 @@ class AdminPlayersPage extends StatefulWidget {
 
 class _AdminPlayersPageState extends State<AdminPlayersPage> {
   final ApiService _api = ApiService();
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  static String get baseUrl => ApiService.baseUrl;
 
   final TextEditingController searchController = TextEditingController();
   List<Map<String, dynamic>> playersData = [];
@@ -97,6 +98,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
   String searchQuery = '', sortBy = 'username';
   bool sortAscending = true;
   String? filterCategory, filterSex, filterStudentCategory;
+  Timer? _searchDebounce;
 
   static const List<String> avatarPaths = [
     "assets/images-avatars/Adventurer.png", "assets/images-avatars/Astronaut.png",
@@ -108,7 +110,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
     "assets/images-avatars/Leonel.png",     "assets/images-avatars/Scientist-Boy.png",
     "assets/images-avatars/Scientist-Girl.png","assets/images-avatars/Sly-Fox.png",
     "assets/images-avatars/Sneaky-Snake.png","assets/images-avatars/Teacher-Boy.png",
-    "assets/images-avatars/Teacher-Girl.png","assets/images-avatars/Twirky.png",
+    "assets/images-avatars/Teacher-Girl.png","assets/images-avatars/Twirky.png", // cSpell:ignore Twirky
     "assets/images-avatars/Whiz-Achiever.png","assets/images-avatars/Whiz-Busy.png",
     "assets/images-avatars/Whiz-Happy.png", "assets/images-avatars/Whiz-Ready.png",
     "assets/images-avatars/Wise-Turtle.png",
@@ -117,7 +119,20 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
       .map((p) => p.split('/').last.replaceAll('.png', '').replaceAll('-', ' ')).toList();
 
   @override void initState() { super.initState(); _loadPlayers(); }
-  @override void dispose() { searchController.dispose(); super.dispose(); }
+  @override void dispose() {
+    _searchDebounce?.cancel();
+    searchController.dispose();
+    super.dispose();
+  }
+
+  // ── Debounced search: wait for the admin to stop typing before hitting
+  // the API, instead of firing a full reload (including address resolution)
+  // on every keystroke.
+  void _onSearchChanged(String v) {
+    setState(() => searchQuery = v);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), _refresh);
+  }
 
   // ─── API calls ────────────────────────────────────────────────────────────
 
@@ -171,37 +186,54 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
       } catch (_) {}
     }
 
-    // Fetch provinces per unique region
-    for (final p in players) {
-      final rid = p['region']?.toString() ?? '';
-      if (rid.isEmpty || rid == '0') continue;
-      if (!_provinceCache.containsKey(rid)) {
-        try {
-          final provs = await fetchProvinces(rid);
-          _provinceCache[rid] = { for (final pv in provs) pv['id']!: pv['name']! };
-        } catch (_) { _provinceCache[rid] = {}; }
+    // Fetch provinces for every not-yet-cached region IN PARALLEL instead of
+    // one `await` per player in a for-loop. With N players on a page that
+    // used to mean up to N sequential round trips (province, then city, for
+    // each) before the list could render — this was the main reason the
+    // Players page felt slow. Future.wait fires them all at once.
+    final regionIdsToFetch = players
+        .map((p) => p['region']?.toString() ?? '')
+        .where((rid) => rid.isNotEmpty && rid != '0' && !_provinceCache.containsKey(rid))
+        .toSet();
+
+    await Future.wait(regionIdsToFetch.map((rid) async {
+      try {
+        final provinceList = await fetchProvinces(rid);
+        _provinceCache[rid] = { for (final pv in provinceList) pv['id']!: pv['name']! };
+      } catch (_) {
+        _provinceCache[rid] = {};
       }
-      final pid = p['province']?.toString() ?? '';
-      if (pid.isEmpty || pid == '0') continue;
-      if (!_cityCache.containsKey(pid)) {
-        try {
-          final cities = await fetchCities(pid);
-          _cityCache[pid] = { for (final c in cities) c['id']!: c['name']! };
-        } catch (_) { _cityCache[pid] = {}; }
+    }));
+
+    // Same idea for cities, keyed by province.
+    final provinceIdsToFetch = players
+        .map((p) => p['province']?.toString() ?? '')
+        .where((pid) => pid.isNotEmpty && pid != '0' && !_cityCache.containsKey(pid))
+        .toSet();
+
+    await Future.wait(provinceIdsToFetch.map((pid) async {
+      try {
+        final cities = await fetchCities(pid);
+        _cityCache[pid] = { for (final c in cities) c['id']!: c['name']! };
+      } catch (_) {
+        _cityCache[pid] = {};
       }
-    }
+    }));
 
     return players.map((p) {
       final result = Map<String, dynamic>.from(p);
       final rid = p['region']?.toString() ?? '';
       final pid = p['province']?.toString() ?? '';
       final cid = p['city']?.toString() ?? '';
-      if ((result['region_name'] == null || (result['region_name'] as String?)!.isEmpty) && rid.isNotEmpty && rid != '0')
+      if ((result['region_name'] == null || (result['region_name'] as String?)!.isEmpty) && rid.isNotEmpty && rid != '0') {
         result['region_name'] = _regionCache[rid] ?? '';
-      if ((result['province_name'] == null || (result['province_name'] as String?)!.isEmpty) && rid.isNotEmpty && pid.isNotEmpty && pid != '0')
+      }
+      if ((result['province_name'] == null || (result['province_name'] as String?)!.isEmpty) && rid.isNotEmpty && pid.isNotEmpty && pid != '0') {
         result['province_name'] = (_provinceCache[rid] ?? {})[pid] ?? '';
-      if ((result['city_name'] == null || (result['city_name'] as String?)!.isEmpty) && pid.isNotEmpty && cid.isNotEmpty && cid != '0')
+      }
+      if ((result['city_name'] == null || (result['city_name'] as String?)!.isEmpty) && pid.isNotEmpty && cid.isNotEmpty && cid != '0') {
         result['city_name'] = (_cityCache[pid] ?? {})[cid] ?? '';
+      }
       return result;
     }).toList();
   }
@@ -221,7 +253,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
 
   Future<List<Map<String, String>>> fetchRegions() async {
     try {
-      final r = await http.get(Uri.parse('$baseUrl/api/region'));
+      final r = await http.get(Uri.parse('$baseUrl/region'));
       if (r.statusCode == 200) {
         final List data = jsonDecode(r.body);
         return data.map<Map<String, String>>((e) => {
@@ -235,7 +267,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
 
   Future<List<Map<String, String>>> fetchProvinces(String regionId) async {
     try {
-      final r = await http.get(Uri.parse('$baseUrl/api/province/$regionId'));
+      final r = await http.get(Uri.parse('$baseUrl/province/$regionId'));
       if (r.statusCode == 200) {
         final List data = jsonDecode(r.body);
         return data.map<Map<String, String>>((e) => {
@@ -249,7 +281,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
 
   Future<List<Map<String, String>>> fetchCities(String provinceId) async {
     try {
-      final r = await http.get(Uri.parse('$baseUrl/api/city/$provinceId'));
+      final r = await http.get(Uri.parse('$baseUrl/city/$provinceId'));
       if (r.statusCode == 200) {
         final List data = jsonDecode(r.body);
         return data.map<Map<String, String>>((e) => {
@@ -331,6 +363,35 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
       Container(width: 40, height: 4, decoration: BoxDecoration(
           color: currentPage == 1 ? const Color(0xFFFDD000) : Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
     ]);
+  }
+
+  // ─── Dialog error banner (shows validation/API errors INSIDE the dialog,
+  // at the top, instead of a SnackBar hiding behind the modal barrier) ──────
+  Widget _buildDialogErrorBanner(String? message) {
+    if (message == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5, color: Colors.red, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ─── Avatar picker dialog (same as edit_profile.dart) ────────────────────
@@ -420,6 +481,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
     int page = 0;
     final pageCtrl = PageController();
     bool obscure = true, obscureConfirm = true, saving = false;
+    String? dialogError;
 
     String? selAvatar, selAge, selSex, selCat, selStudCat;
     String? selRegionId, selRegionName, selProvId, selProvName, selCityId, selCityName;
@@ -435,10 +497,10 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           // ── location pickers ──
           Future<void> pickRegion() async {
             if (regions.isEmpty) {
-              LoadingHelper.showLoadingDialog(context, message: 'Loading regions...', width: 300, height: 200);
+              LoadingHelper.showLoadingDialog(ctx, message: 'Loading regions...', width: 300, height: 200);
               regions = await fetchRegions();
               if (!ctx.mounted) return;
-              LoadingHelper.hideLoading(context);
+              LoadingHelper.hideLoading(ctx);
               setDS(() {});
             }
             if (!ctx.mounted) return;
@@ -448,12 +510,12 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           }
 
           Future<void> pickProvince() async {
-            if (selRegionId == null) { _snack('Please select a region first.', Colors.orange); return; }
+            if (selRegionId == null) { setDS(() => dialogError = 'Please select a region first.'); return; }
             if (provinces.isEmpty) {
-              LoadingHelper.showLoadingDialog(context, message: 'Loading provinces...', width: 300, height: 200);
+              LoadingHelper.showLoadingDialog(ctx, message: 'Loading provinces...', width: 300, height: 200);
               provinces = await fetchProvinces(selRegionId!);
               if (!ctx.mounted) return;
-              LoadingHelper.hideLoading(context);
+              LoadingHelper.hideLoading(ctx);
               setDS(() {});
             }
             if (!ctx.mounted) return;
@@ -463,12 +525,12 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           }
 
           Future<void> pickCity() async {
-            if (selProvId == null) { _snack('Please select a province first.', Colors.orange); return; }
+            if (selProvId == null) { setDS(() => dialogError = 'Please select a province first.'); return; }
             if (cities.isEmpty) {
-              LoadingHelper.showLoadingDialog(context, message: 'Loading cities...', width: 300, height: 200);
+              LoadingHelper.showLoadingDialog(ctx, message: 'Loading cities...', width: 300, height: 200);
               cities = await fetchCities(selProvId!);
               if (!ctx.mounted) return;
-              LoadingHelper.hideLoading(context);
+              LoadingHelper.hideLoading(ctx);
               setDS(() {});
             }
             if (!ctx.mounted) return;
@@ -477,29 +539,115 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             });
           }
 
+          // ✅ FIX: returns the SPECIFIC reason instead of a blanket message,
+          // and clears/sets dialogError (shown in the top banner) instead of
+          // firing a SnackBar. Stops at the first failing field so the admin
+          // sees one clear reason at a time rather than a wall of red borders.
           bool validatePage1() {
-            bool err = false;
             final u = usernameCtrl.text.trim();
-            if (u.isEmpty || u.length < 3 || !RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(u)) { setDS(() => usernameErr = true); err = true; }
-            if (passwordCtrl.text.length < 8) { setDS(() => passwordErr = true); err = true; }
-            if (confirmPwCtrl.text.isEmpty || confirmPwCtrl.text != passwordCtrl.text) { setDS(() => confPwErr = true); err = true; }
-            if (selAge == null) { setDS(() => ageErr = true); err = true; }
-            if (selSex == null) { setDS(() => sexErr = true); err = true; }
-            if (selAvatar == null) { setDS(() => avatarErr = true); err = true; }
-            if (err) _snack('Please fill in all required fields on this page.', Colors.red);
-            return !err;
+            if (u.isEmpty) {
+              setDS(() { usernameErr = true; dialogError = 'Username is required.'; });
+              return false;
+            }
+            // ✅ FIX: removed the "must start with a letter" rule. The
+            // player-side registration (login.dart) never enforced this —
+            // it only requires non-empty and 3+ characters — so a
+            // numeric-only username like "123456" is a valid player
+            // account there. Admin's Add Player form was stricter than
+            // the player app itself, blocking usernames that already
+            // exist or would otherwise be perfectly valid. Now matches.
+            if (RegExp(r'\s').hasMatch(u)) {
+              setDS(() { usernameErr = true; dialogError = 'Username cannot contain spaces.'; });
+              return false;
+            }
+            if (u.length < 3) {
+              setDS(() { usernameErr = true; dialogError = 'Username must be at least 3 characters.'; });
+              return false;
+            }
+            if (u.length > 20) {
+              setDS(() { usernameErr = true; dialogError = 'Username must not exceed 20 characters.'; });
+              return false;
+            }
+            final pw = passwordCtrl.text.trim();
+            if (pw.isEmpty) {
+              setDS(() { passwordErr = true; dialogError = 'Password is required.'; });
+              return false;
+            }
+            if (pw.length < 8) {
+              setDS(() { passwordErr = true; dialogError = 'Password must be at least 8 characters.'; });
+              return false;
+            }
+            if (pw.length > 12) {
+              setDS(() { passwordErr = true; dialogError = 'Password must not exceed 12 characters.'; });
+              return false;
+            }
+            if (!RegExp(r'[a-z]').hasMatch(pw)) {
+              setDS(() { passwordErr = true; dialogError = 'Password must contain at least one lowercase letter.'; });
+              return false;
+            }
+            if (!RegExp(r'[A-Z]').hasMatch(pw)) {
+              setDS(() { passwordErr = true; dialogError = 'Password must contain at least one uppercase letter.'; });
+              return false;
+            }
+            if (!RegExp(r'\d').hasMatch(pw)) {
+              setDS(() { passwordErr = true; dialogError = 'Password must contain at least one number.'; });
+              return false;
+            }
+            if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\/;~`+=]').hasMatch(pw)) {
+              setDS(() { passwordErr = true; dialogError = 'Password must contain at least one special character.'; });
+              return false;
+            }
+            if (confirmPwCtrl.text.trim().isEmpty) {
+              setDS(() { confPwErr = true; dialogError = 'Please confirm the password.'; });
+              return false;
+            }
+            if (confirmPwCtrl.text.trim() != pw) {
+              setDS(() { confPwErr = true; dialogError = 'Passwords do not match.'; });
+              return false;
+            }
+            if (selAge == null) {
+              setDS(() { ageErr = true; dialogError = 'Please select an age range.'; });
+              return false;
+            }
+            if (selSex == null) {
+              setDS(() { sexErr = true; dialogError = 'Please select a sex.'; });
+              return false;
+            }
+            if (selAvatar == null) {
+              setDS(() { avatarErr = true; dialogError = 'Please select an avatar.'; });
+              return false;
+            }
+            setDS(() => dialogError = null);
+            return true;
           }
 
           bool validatePage2() {
-            bool err = false;
-            if (schoolCtrl.text.trim().length < 2) { setDS(() => schoolErr = true); err = true; }
-            if (selCat == null) { setDS(() => catErr = true); err = true; }
-            if (selCat == 'Student' && selStudCat == null) { setDS(() => studCatErr = true); err = true; }
-            if (selRegionId == null) { setDS(() => regionErr = true); err = true; }
-            if (selProvId == null) { setDS(() => provErr = true); err = true; }
-            if (selCityId == null) { setDS(() => cityErr = true); err = true; }
-            if (err) _snack('Please fill in all required fields.', Colors.red);
-            return !err;
+            if (schoolCtrl.text.trim().length < 2) {
+              setDS(() { schoolErr = true; dialogError = 'School / Institution must be at least 2 characters.'; });
+              return false;
+            }
+            if (selCat == null) {
+              setDS(() { catErr = true; dialogError = 'Please select a category.'; });
+              return false;
+            }
+            if (selCat == 'Student' && selStudCat == null) {
+              setDS(() { studCatErr = true; dialogError = 'Please select a student category.'; });
+              return false;
+            }
+            if (selRegionId == null) {
+              setDS(() { regionErr = true; dialogError = 'Please select a region.'; });
+              return false;
+            }
+            if (selProvId == null) {
+              setDS(() { provErr = true; dialogError = 'Please select a province.'; });
+              return false;
+            }
+            if (selCityId == null) {
+              setDS(() { cityErr = true; dialogError = 'Please select a city.'; });
+              return false;
+            }
+            setDS(() => dialogError = null);
+            return true;
           }
 
           // ── Page 1: Exact register.dart _buildPersonalInfoContent layout (30-70 split) ──
@@ -537,7 +685,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                         backgroundColor: const Color(0xFFFDD000), foregroundColor: const Color(0xFF816A03),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 2),
-                    child: const Text("Change Avatar", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                    child: const Text("Select Avatar", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                   ),
                 ),
                 if (avatarErr) const Padding(padding: EdgeInsets.only(top: 4), child: Text('Required', style: TextStyle(color: Colors.red, fontSize: 11))),
@@ -634,7 +782,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
             child: Container(
-              width: 700, height: 390,
+              width: 700, height: 430,
               padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
               child: Column(children: [
                 // Header
@@ -643,6 +791,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                   Text('Add New Player', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black)),
                 ]),
                 const SizedBox(height: 8),
+                _buildDialogErrorBanner(dialogError),
                 Expanded(child: PageView(controller: pageCtrl, physics: const NeverScrollableScrollPhysics(),
                     children: [buildPage1(), buildPage2()])),
                 const SizedBox(height: 6),
@@ -656,7 +805,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
                         child: const Text('Cancel'))
                   else
-                    TextButton(onPressed: () { pageCtrl.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); setDS(() => page = 0); },
+                    TextButton(onPressed: () { pageCtrl.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); setDS(() { page = 0; dialogError = null; }); },
                         style: TextButton.styleFrom(foregroundColor: const Color(0xFF046EB8), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                             textStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 14), side: const BorderSide(color: Color(0xFF046EB8), width: 1),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
@@ -672,8 +821,8 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     ElevatedButton(
                         onPressed: saving ? null : () async {
                           if (!validatePage2()) return;
-                          setDS(() => saving = true);
-                          LoadingHelper.showLoadingDialog(context, message: 'Adding player...', width: 300, height: 200);
+                          setDS(() { saving = true; dialogError = null; });
+                          LoadingHelper.showLoadingDialog(ctx, message: 'Adding player...', width: 300, height: 200);
                           // Map display category to backend enum value
                           String? backendCat = selCat == 'Student'
                               ? 'Student'
@@ -681,7 +830,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                               ? 'Others'
                               : 'Employee'; // Government/Private/Self-Employed/Not Employed → Employee
                           final res = await _api.addPlayer({
-                            'username': usernameCtrl.text.trim(), 'password': passwordCtrl.text,
+                            'username': usernameCtrl.text.trim(), 'password': passwordCtrl.text.trim(),
                             'school': schoolCtrl.text.trim(), 'age': selAge, 'sex': selSex,
                             'category': backendCat,
                             if (selStudCat != null && selCat == 'Student') 'student_category': selStudCat,
@@ -690,11 +839,14 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                             'province': int.tryParse(selProvId ?? '0') ?? 0,
                             'city': int.tryParse(selCityId ?? '0') ?? 0,
                           });
-                          if (!mounted) return;
-                          LoadingHelper.hideLoading(context);
+                          if (!ctx.mounted) return;
+                          LoadingHelper.hideLoading(ctx);
                           setDS(() => saving = false);
                           if (res['success'] == true) { Navigator.pop(ctx); _snack('Player added successfully!', const Color(0xFF27AE60)); _refresh(); }
-                          else { _snack(res['message'] ?? 'Failed to add player.', Colors.red); }
+                          // ✅ FIX: this now shows the backend's specific message
+                          // ("Username is already taken.", etc.) inside the
+                          // dialog's own top banner instead of a SnackBar.
+                          else { setDS(() => dialogError = res['message'] ?? 'Failed to add player.'); }
                         },
                         style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFDD000), foregroundColor: const Color(0xFF816A03),
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), textStyle: const TextStyle(fontFamily: "Poppins", fontSize: 13, fontWeight: FontWeight.w600),
@@ -712,12 +864,13 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
   // ═══════════════════════════════════════════════════════════════
 
   void _showChangePasswordDialog(Map<String, dynamic> player) {
-    // Admin resets player password directly — no old password needed
+    final currPwCtrl = TextEditingController();
     final newPwCtrl  = TextEditingController();
     final confPwCtrl = TextEditingController();
-    bool obscureNew = true, obscureConf = true;
+    bool obscureCurr = true, obscureNew = true, obscureConf = true;
     bool saving = false;
-    bool newPwErr = false, confPwErr = false;
+    bool currPwErr = false, newPwErr = false, confPwErr = false;
+    String? dialogError;
 
     showDialog(context: context, barrierDismissible: false,
         builder: (ctx) => StatefulBuilder(builder: (ctx, setDS) => Dialog(
@@ -728,19 +881,29 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Row(children: [
                 const Icon(Icons.vpn_key, color: Color(0xFF046EB8), size: 22), const SizedBox(width: 8),
-                Expanded(child: Text('Reset Password — ${player['username'] ?? ''}',
+                Expanded(child: Text('Change Password — ${player['username'] ?? ''}',
                     style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black))),
               ]),
               const SizedBox(height: 6),
-              Text('Set a new password for this player account.',
+              Text('Enter the current password and set a new one.',
                   style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Colors.grey.shade600)),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
+              _buildDialogErrorBanner(dialogError),
+              // Current password
+              TextField(controller: currPwCtrl, obscureText: obscureCurr,
+                  onChanged: (_) => setDS(() => currPwErr = false),
+                  decoration: _inputDecoration("Current Password", icon: Icons.lock, hasError: currPwErr).copyWith(
+                      suffixIcon: IconButton(icon: Icon(obscureCurr ? Icons.visibility_off : Icons.visibility, size: 18),
+                          onPressed: () => setDS(() => obscureCurr = !obscureCurr)))),
+              const SizedBox(height: 10),
+              // New password
               TextField(controller: newPwCtrl, obscureText: obscureNew,
                   onChanged: (_) => setDS(() => newPwErr = false),
                   decoration: _inputDecoration("New Password", icon: Icons.lock, hasError: newPwErr).copyWith(
                       suffixIcon: IconButton(icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, size: 18),
                           onPressed: () => setDS(() => obscureNew = !obscureNew)))),
               const SizedBox(height: 10),
+              // Confirm new password
               TextField(controller: confPwCtrl, obscureText: obscureConf,
                   onChanged: (_) => setDS(() => confPwErr = false),
                   decoration: _inputDecoration("Confirm New Password", icon: Icons.lock, hasError: confPwErr).copyWith(
@@ -748,7 +911,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                           onPressed: () => setDS(() => obscureConf = !obscureConf)))),
               const SizedBox(height: 8),
               Align(alignment: Alignment.centerLeft,
-                  child: Text('Min. 8 chars with uppercase, lowercase, number & special character.',
+                  child: Text('8–12 characters, with uppercase, lowercase, a number & a special character.',
                       style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: Colors.grey.shade500))),
               const SizedBox(height: 20),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -759,26 +922,70 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     child: const Text('Cancel', style: TextStyle(fontFamily: 'Poppins', fontSize: 13))),
                 ElevatedButton(
                     onPressed: saving ? null : () async {
-                      if (newPwCtrl.text.length < 8) { setDS(() => newPwErr = true); _snack('Password must be at least 8 characters.', Colors.red); return; }
-                      if (!newPwCtrl.text.contains(RegExp(r'[A-Z]')) || !newPwCtrl.text.contains(RegExp(r'[a-z]')) ||
-                          !newPwCtrl.text.contains(RegExp(r'[0-9]')) || !newPwCtrl.text.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) {
-                        setDS(() => newPwErr = true); _snack('Password must have uppercase, lowercase, number and special character.', Colors.red); return;
+                      // ✅ FIX: each check now sets a SPECIFIC dialogError
+                      // instead of one generic message for every case, and
+                      // stops at the first failing field.
+                      final currPw = currPwCtrl.text.trim();
+                      final newPw  = newPwCtrl.text.trim();
+                      final confPw = confPwCtrl.text.trim();
+                      if (currPw.isEmpty) {
+                        setDS(() { currPwErr = true; dialogError = 'Current password is required.'; });
+                        return;
                       }
-                      if (newPwCtrl.text != confPwCtrl.text) { setDS(() => confPwErr = true); _snack('Passwords do not match.', Colors.red); return; }
-                      setDS(() => saving = true);
-                      LoadingHelper.showLoadingDialog(context, message: 'Updating password...', width: 300, height: 200);
-                      final res = await _api.changePlayerPassword(player['id'].toString(), newPassword: newPwCtrl.text);
-                      if (!mounted) return;
-                      LoadingHelper.hideLoading(context);
+                      if (newPw.isEmpty) {
+                        setDS(() { newPwErr = true; dialogError = 'New password is required.'; });
+                        return;
+                      }
+                      if (newPw.length < 8) {
+                        setDS(() { newPwErr = true; dialogError = 'New password must be at least 8 characters.'; });
+                        return;
+                      }
+                      if (newPw.length > 12) {
+                        setDS(() { newPwErr = true; dialogError = 'New password must not exceed 12 characters.'; });
+                        return;
+                      }
+                      if (!newPw.contains(RegExp(r'[A-Z]'))) {
+                        setDS(() { newPwErr = true; dialogError = 'New password must contain at least one uppercase letter.'; });
+                        return;
+                      }
+                      if (!newPw.contains(RegExp(r'[a-z]'))) {
+                        setDS(() { newPwErr = true; dialogError = 'New password must contain at least one lowercase letter.'; });
+                        return;
+                      }
+                      if (!newPw.contains(RegExp(r'[0-9]'))) {
+                        setDS(() { newPwErr = true; dialogError = 'New password must contain at least one number.'; });
+                        return;
+                      }
+                      if (!newPw.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_\-\[\]\/;~`+=]'))) {
+                        setDS(() { newPwErr = true; dialogError = 'New password must contain at least one special character.'; });
+                        return;
+                      }
+                      if (newPw == currPw) {
+                        setDS(() { newPwErr = true; dialogError = 'New password must be different from the current password.'; });
+                        return;
+                      }
+                      if (newPw != confPw) {
+                        setDS(() { confPwErr = true; dialogError = 'New password and confirmation do not match.'; });
+                        return;
+                      }
+                      setDS(() { saving = true; dialogError = null; });
+                      LoadingHelper.showLoadingDialog(ctx, message: 'Updating password...', width: 300, height: 200);
+                      final res = await _api.changePlayerPassword(
+                        player['id'].toString(),
+                        oldPassword: currPw,
+                        newPassword: newPw,
+                      );
+                      if (!ctx.mounted) return;
+                      LoadingHelper.hideLoading(ctx);
                       setDS(() => saving = false);
-                      if (res['success'] == true) { Navigator.pop(ctx); _snack('Password reset successfully!', const Color(0xFF27AE60)); }
-                      else { _snack(res['message'] ?? 'Failed to reset password.', Colors.red); }
+                      if (res['success'] == true) { Navigator.pop(ctx); _snack('Password changed successfully!', const Color(0xFF27AE60)); }
+                      else { setDS(() => dialogError = res['message'] ?? 'Failed to change password.'); }
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFDD000), foregroundColor: const Color(0xFF816A03),
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                         textStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-                    child: const Text('RESET PASSWORD')),
+                    child: const Text('CHANGE PASSWORD')),
               ]),
             ]),
           ),
@@ -821,13 +1028,14 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
     } catch (_) {}
 
     if (!mounted) return;
+    // ignore: use_build_context_synchronously
     LoadingHelper.hideLoading(context);
-
     final usernameCtrl = TextEditingController(text: player['username'] ?? '');
     final schoolCtrl   = TextEditingController(text: player['school'] ?? '');
 
     int page = 0;
     final pageCtrl = PageController();
+    String? dialogError;
 
     String? selAvatar  = player['avatar'];
     String? selAge     = player['age'];
@@ -855,43 +1063,93 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
         builder: (ctx) => StatefulBuilder(builder: (ctx, setDS) {
 
           Future<void> pickRegion() async {
-            if (regions.isEmpty) { LoadingHelper.showLoadingDialog(context, message: 'Loading regions...', width: 300, height: 200); regions = await fetchRegions(); if (!ctx.mounted) return; LoadingHelper.hideLoading(context); setDS(() {}); }
+            if (regions.isEmpty) { LoadingHelper.showLoadingDialog(ctx, message: 'Loading regions...', width: 300, height: 200); regions = await fetchRegions(); if (!ctx.mounted) return;
+            LoadingHelper.hideLoading(ctx); setDS(() {}); }
             if (!ctx.mounted) return;
             _showLocationPicker(ctx, 'Select Region', regions, selRegionId, (id, name) { setDS(() { selRegionId = id; selRegionName = name; selProvId = null; selProvName = null; selCityId = null; selCityName = null; provinces = []; cities = []; regionErr = false; hasChanged = true; }); });
           }
           Future<void> pickProvince() async {
-            if (selRegionId == null) { _snack('Please select a region first.', Colors.orange); return; }
-            if (provinces.isEmpty) { LoadingHelper.showLoadingDialog(context, message: 'Loading provinces...', width: 300, height: 200); provinces = await fetchProvinces(selRegionId!); if (!ctx.mounted) return; LoadingHelper.hideLoading(context); setDS(() {}); }
+            if (selRegionId == null) { setDS(() => dialogError = 'Please select a region first.'); return; }
+            if (provinces.isEmpty) { LoadingHelper.showLoadingDialog(ctx, message: 'Loading provinces...', width: 300, height: 200); provinces = await fetchProvinces(selRegionId!); if (!ctx.mounted) return;
+            LoadingHelper.hideLoading(ctx); setDS(() {}); }
             if (!ctx.mounted) return;
             _showLocationPicker(ctx, 'Select Province', provinces, selProvId, (id, name) { setDS(() { selProvId = id; selProvName = name; selCityId = null; selCityName = null; cities = []; provErr = false; hasChanged = true; }); });
           }
           Future<void> pickCity() async {
-            if (selProvId == null) { _snack('Please select a province first.', Colors.orange); return; }
-            if (cities.isEmpty) { LoadingHelper.showLoadingDialog(context, message: 'Loading cities...', width: 300, height: 200); cities = await fetchCities(selProvId!); if (!ctx.mounted) return; LoadingHelper.hideLoading(context); setDS(() {}); }
+            if (selProvId == null) { setDS(() => dialogError = 'Please select a province first.'); return; }
+            if (cities.isEmpty) { LoadingHelper.showLoadingDialog(ctx, message: 'Loading cities...', width: 300, height: 200); cities = await fetchCities(selProvId!); if (!ctx.mounted) return;
+            LoadingHelper.hideLoading(ctx); setDS(() {}); }
             if (!ctx.mounted) return;
             _showLocationPicker(ctx, 'Select City', cities, selCityId, (id, name) { setDS(() { selCityId = id; selCityName = name; cityErr = false; hasChanged = true; }); });
           }
 
+          // ✅ FIX: specific message per field, shown in the top banner.
+          // Also dropped the "must start with a letter" rule here for the
+          // same reason as Add Player — the player app itself only
+          // requires non-empty, 3+ characters, so numeric-only usernames
+          // (e.g. "123456") are valid there and editing shouldn't reject
+          // them either.
           bool validatePage1() {
-            bool err = false;
-            if (usernameCtrl.text.trim().isEmpty) { setDS(() => usernameErr = true); err = true; }
-            if (schoolCtrl.text.trim().isEmpty)   { setDS(() => schoolErr   = true); err = true; }
-            if (selAge == null)    { setDS(() => ageErr    = true); err = true; }
-            if (selSex == null)    { setDS(() => sexErr    = true); err = true; }
-            if (selAvatar == null) { setDS(() => avatarErr = true); err = true; }
-            if (err) _snack('Please fill in all required fields on this page.', Colors.red);
-            return !err;
+            final u = usernameCtrl.text.trim();
+            if (u.isEmpty) {
+              setDS(() { usernameErr = true; dialogError = 'Username is required.'; });
+              return false;
+            }
+            if (RegExp(r'\s').hasMatch(u)) {
+              setDS(() { usernameErr = true; dialogError = 'Username cannot contain spaces.'; });
+              return false;
+            }
+            if (u.length < 3) {
+              setDS(() { usernameErr = true; dialogError = 'Username must be at least 3 characters.'; });
+              return false;
+            }
+            if (u.length > 20) {
+              setDS(() { usernameErr = true; dialogError = 'Username must not exceed 20 characters.'; });
+              return false;
+            }
+            if (schoolCtrl.text.trim().isEmpty) {
+              setDS(() { schoolErr = true; dialogError = 'School / Institution is required.'; });
+              return false;
+            }
+            if (selAge == null) {
+              setDS(() { ageErr = true; dialogError = 'Please select an age range.'; });
+              return false;
+            }
+            if (selSex == null) {
+              setDS(() { sexErr = true; dialogError = 'Please select a sex.'; });
+              return false;
+            }
+            if (selAvatar == null) {
+              setDS(() { avatarErr = true; dialogError = 'Please select an avatar.'; });
+              return false;
+            }
+            setDS(() => dialogError = null);
+            return true;
           }
 
           bool validatePage2() {
-            bool err = false;
-            if (selCat == null) { setDS(() => catErr = true); err = true; }
-            if (selCat == 'Student' && selStudCat == null) { setDS(() => studCatErr = true); err = true; }
-            if (selRegionId == null) { setDS(() => regionErr = true); err = true; }
-            if (selProvId   == null) { setDS(() => provErr   = true); err = true; }
-            if (selCityId   == null) { setDS(() => cityErr   = true); err = true; }
-            if (err) _snack('Please fill in all required fields.', Colors.red);
-            return !err;
+            if (selCat == null) {
+              setDS(() { catErr = true; dialogError = 'Please select a category.'; });
+              return false;
+            }
+            if (selCat == 'Student' && selStudCat == null) {
+              setDS(() { studCatErr = true; dialogError = 'Please select a student category.'; });
+              return false;
+            }
+            if (selRegionId == null) {
+              setDS(() { regionErr = true; dialogError = 'Please select a region.'; });
+              return false;
+            }
+            if (selProvId == null) {
+              setDS(() { provErr = true; dialogError = 'Please select a province.'; });
+              return false;
+            }
+            if (selCityId == null) {
+              setDS(() { cityErr = true; dialogError = 'Please select a city.'; });
+              return false;
+            }
+            setDS(() => dialogError = null);
+            return true;
           }
 
           // ── Page 1: same as Add New Player ──
@@ -912,7 +1170,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                 onPressed: () => _showAvatarPickerDialog(ctx, selAvatar, (a) => setDS(() { selAvatar = a; avatarErr = false; hasChanged = true; })),
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFDD000), foregroundColor: const Color(0xFF816A03),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 2),
-                child: const Text("Change Avatar", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                child: const Text("Select Avatar", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
               ),
               if (avatarErr) const Padding(padding: EdgeInsets.only(top: 4), child: Text('Required', style: TextStyle(color: Colors.red, fontSize: 11))),
             ])),
@@ -962,7 +1220,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             insetPadding: const EdgeInsets.all(20),
             child: Container(
-              width: 720, height: 320,
+              width: 720, height: 360,
               padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
               child: Column(children: [
                 // Header
@@ -979,6 +1237,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                   ),
                 ]),
                 const SizedBox(height: 6),
+                _buildDialogErrorBanner(dialogError),
                 Expanded(child: PageView(controller: pageCtrl, physics: const NeverScrollableScrollPhysics(),
                     children: [buildPage1(), buildPage2()])),
                 const SizedBox(height: 6),
@@ -992,7 +1251,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
                         child: const Text('Cancel'))
                   else
-                    TextButton(onPressed: () { pageCtrl.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); setDS(() => page = 0); },
+                    TextButton(onPressed: () { pageCtrl.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); setDS(() { page = 0; dialogError = null; }); },
                         style: TextButton.styleFrom(foregroundColor: const Color(0xFF046EB8), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                             textStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 14), side: const BorderSide(color: Color(0xFF046EB8), width: 1),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
@@ -1008,13 +1267,13 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     ElevatedButton(
                         onPressed: (saving || !hasChanged) ? null : () async {
                           if (!validatePage2()) return;
-                          setDS(() => saving = true);
-                          LoadingHelper.showLoadingDialog(context, message: 'Saving changes...', width: 300, height: 200);
+                          setDS(() { saving = true; dialogError = null; });
+                          LoadingHelper.showLoadingDialog(ctx, message: 'Saving changes...', width: 300, height: 200);
                           final res = await _api.updatePlayer(player['id'].toString(), {
                             'username': usernameCtrl.text.trim(),
                             'school': schoolCtrl.text.trim(),
-                            if (selAge != null) 'age': selAge,
-                            if (selSex != null) 'sex': selSex,
+                            if (selAge != null) 'age': selAge!,
+                            if (selSex != null) 'sex': selSex!,
                             // Map display category to backend enum value
                             if (selCat != null) 'category': selCat == 'Student'
                                 ? 'Student'
@@ -1022,16 +1281,16 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                                 ? 'Others'
                                 : 'Employee',
                             'student_category': selCat == 'Student' ? selStudCat : null,
-                            if (selAvatar != null) 'avatar': selAvatar,
+                            if (selAvatar != null) 'avatar': selAvatar!,
                             if (selRegionId != null) 'region': int.tryParse(selRegionId!) ?? 0,
                             if (selProvId   != null) 'province': int.tryParse(selProvId!)   ?? 0,
                             if (selCityId   != null) 'city': int.tryParse(selCityId!)       ?? 0,
                           });
-                          if (!mounted) return;
-                          LoadingHelper.hideLoading(context);
+                          if (!ctx.mounted) return;
+                          LoadingHelper.hideLoading(ctx);
                           setDS(() => saving = false);
                           if (res['success'] == true) { Navigator.pop(ctx); _snack('Player updated successfully!', const Color(0xFF27AE60)); _refresh(); }
-                          else { _snack(res['message'] ?? 'Failed to update.', Colors.red); }
+                          else { setDS(() => dialogError = res['message'] ?? 'Failed to update.'); }
                         },
                         style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFDD000), foregroundColor: const Color(0xFF816A03),
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), textStyle: const TextStyle(fontFamily: "Poppins", fontSize: 13, fontWeight: FontWeight.w600),
@@ -1076,6 +1335,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
     };
 
     bool awarding = false;
+    String? dialogError;
 
     showDialog(context: context, barrierDismissible: false,
         builder: (ctx) => StatefulBuilder(builder: (ctx, setDS) {
@@ -1085,13 +1345,18 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           final progress       = badgeData['progress']        as Map? ?? {};
 
           // Builds one difficulty card — EXACT copy of player_badges.dart _buildBadgeCategory, button changed only
-          Widget _diffRow(String diff) {
+          Widget diffRow(String diff) {
             final label      = difficultyLabels[diff]!;
             final color      = difficultyColors[diff]!;
             final asset      = badgeAssets[diff]!;
             final prog       = progress[diff] as Map? ?? {};
             final currentCount = (prog['current_count'] ?? 0) as int;
             final official     = (officialBadges[diff]  ?? 0) as int;
+            // ✅ Now backed by the fixed BadgeController::getPlayerSummary(),
+            // which only counts rewards where requested === true. Before that
+            // fix this counted every un-awarded reward regardless of whether
+            // the player had tapped Claim, so "Give Reward" could light up
+            // before the player ever claimed anything.
             final unclaimedN   = (unclaimed[diff]       ?? 0) as int;
             final hasPending   = unclaimedN > 0;
 
@@ -1147,18 +1412,52 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                   const Spacer(),
                   ElevatedButton(
                     onPressed: hasPending && !awarding ? () async {
-                      setDS(() => awarding = true);
-                      LoadingHelper.showLoadingDialog(context, message: 'Awarding...', width: 300, height: 200);
+                      // ✅ FIX: TC_ADMIN_REWARD_007/008 — this used to award
+                      // the badge immediately on tap with no confirmation at
+                      // all, even though it's a hard-to-undo action (resets
+                      // the player's badge progress for this difficulty).
+                      final confirmed = await showDialog<bool>(
+                        context: ctx,
+                        builder: (confirmCtx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Confirm Reward', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold)),
+                          content: Text(
+                            'Give the $label reward to ${player['username'] ?? 'this player'}? '
+                            'This will reset their $label badge progress back to 0.',
+                            style: const TextStyle(fontFamily: 'Poppins'),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(confirmCtx, false),
+                              child: const Text('Cancel', style: TextStyle(fontFamily: 'Poppins')),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(confirmCtx, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: color, foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              ),
+                              child: const Text('Give Reward', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true) return;
+
+                      setDS(() { awarding = true; dialogError = null; });
+                      LoadingHelper.showLoadingDialog(ctx, message: 'Awarding...', width: 300, height: 200);
                       final res = await _api.adminAwardBadge(player['id'].toString(), difficulty: diff);
-                      if (!mounted) return;
-                      LoadingHelper.hideLoading(context);
+                      if (!ctx.mounted) return;
+                      LoadingHelper.hideLoading(ctx);
                       setDS(() => awarding = false);
                       if (res['success'] == true) {
                         _snack('${player['username'] ?? 'Player'}\'s $label reward given! Badges reset.', const Color(0xFF27AE60));
                         final refreshed = await _api.getPlayerBadgeSummary(player['id'].toString());
                         if (refreshed['success'] == true && ctx.mounted) setDS(() => badgeData = refreshed['data'] ?? {});
                       } else {
-                        _snack(res['message'] ?? 'Failed to award badge.', Colors.red);
+                        // ✅ FIX: shown in the dialog's own top banner instead
+                        // of a SnackBar that renders behind the modal barrier.
+                        setDS(() => dialogError = res['message'] ?? 'Failed to award badge.');
                       }
                     } : null,
                     style: ElevatedButton.styleFrom(
@@ -1193,11 +1492,12 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                 ]),
                 const SizedBox(height: 10),
-                _diffRow('easy'),
+                _buildDialogErrorBanner(dialogError),
+                diffRow('easy'),
                 const SizedBox(height: 12),
-                _diffRow('average'),
+                diffRow('average'),
                 const SizedBox(height: 12),
-                _diffRow('difficult'),
+                diffRow('difficult'),
                 const SizedBox(height: 4),
               ]),
             ),
@@ -1225,8 +1525,8 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
         final r = regions.firstWhere((r) => r['id'] == regionId, orElse: () => {'name': regionId});
         regionName = r['name'] ?? regionId;
         if (provinceId != null && provinceId.isNotEmpty && provinceId != 'null') {
-          final provs = await fetchProvinces(regionId);
-          final p = provs.firstWhere((p) => p['id'] == provinceId, orElse: () => {'name': provinceId});
+          final provinceList = await fetchProvinces(regionId);
+          final p = provinceList.firstWhere((p) => p['id'] == provinceId, orElse: () => {'name': provinceId});
           provName = p['name'] ?? provinceId;
           if (cityId != null && cityId.isNotEmpty && cityId != 'null') {
             final cits = await fetchCities(provinceId);
@@ -1241,7 +1541,9 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
     final address = addressParts.isNotEmpty ? addressParts.join(', ') : '—';
 
     if (!mounted) return;
+    // ignore: use_build_context_synchronously
     LoadingHelper.hideLoading(context);
+    // ignore: use_build_context_synchronously
     showDialog(context: context, builder: (ctx) => Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1252,7 +1554,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
               decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFF046EB8), width: 3), color: Colors.grey.shade100),
               clipBehavior: Clip.hardEdge,
               child: player['avatar'] != null && (player['avatar'] as String).isNotEmpty
-                  ? Image.asset(player['avatar'], fit: BoxFit.cover, width: 100, height: 100, errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 50, color: Color(0xFF046EB8)))
+                  ? Image.asset(player['avatar'], fit: BoxFit.cover, width: 100, height: 100, errorBuilder: (ctx, err, st) => const Icon(Icons.person, size: 50, color: Color(0xFF046EB8)))
                   : const Icon(Icons.person, size: 50, color: Color(0xFF046EB8))),
           const SizedBox(height: 12),
           Text(player['username'] ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
@@ -1292,16 +1594,18 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
 
   void _showDeletePlayerDialog(Map<String, dynamic> player) {
     bool deleting = false;
+    String? dialogError;
     showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDS) => Dialog(
       backgroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(width: 340, padding: const EdgeInsets.all(24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          _buildDialogErrorBanner(dialogError),
           Container(width: 52, height: 52, decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: const Icon(Icons.delete_forever, size: 26, color: Colors.red)),
           const SizedBox(height: 12),
           const Text('Delete Player?', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
           const SizedBox(height: 8),
-          Text('This will permanently delete "${player['username'] ?? ''}".', textAlign: TextAlign.center,
+          Text('"${player['username'] ?? ''}" will be removed from the player list and won\'t be able to log in.', textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, fontFamily: 'Poppins', color: Colors.grey.shade600)),
           const SizedBox(height: 20),
           Row(children: [
@@ -1311,15 +1615,22 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             const SizedBox(width: 12),
             Expanded(child: ElevatedButton(
                 onPressed: deleting ? null : () async {
-                  setDS(() => deleting = true);
-                  LoadingHelper.showLoadingDialog(context, message: 'Deleting player...', width: 300, height: 200);
+                  setDS(() { deleting = true; dialogError = null; });
+                  LoadingHelper.showLoadingDialog(ctx, message: 'Deleting player...', width: 300, height: 200);
                   final res = await _api.deletePlayer(player['id'].toString());
-                  if (!mounted) return;
-                  LoadingHelper.hideLoading(context);
+                  if (!ctx.mounted) return;
+                  LoadingHelper.hideLoading(ctx);
                   setDS(() => deleting = false);
-                  Navigator.pop(ctx);
-                  if (res['success'] == true) { _snack('Player deleted.', Colors.red); _refresh(); }
-                  else { _snack(res['message'] ?? 'Failed.', Colors.red); }
+                  if (res['success'] == true) {
+                    Navigator.pop(ctx);
+                    _snack('Player deleted.', Colors.red);
+                    _refresh();
+                  } else {
+                    // ✅ FIX: stays inside the dialog (top banner) instead of
+                    // popping the dialog and firing a SnackBar the admin
+                    // might miss, since the delete didn't actually happen.
+                    setDS(() => dialogError = res['message'] ?? 'Failed to delete player.');
+                  }
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)), elevation: 0),
@@ -1337,7 +1648,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
   void _showFilterDialog() {
     String? tc = filterCategory, ts = filterSex, tsc = filterStudentCategory;
 
-    Widget _chip(String label, String? current, void Function(String?) onTap, {String? value}) {
+    Widget chip(String label, String? current, void Function(String?) onTap, {String? value}) {
       final selected = current == value;
       return MouseRegion(
         cursor: SystemMouseCursors.click,
@@ -1377,10 +1688,10 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           const Text('Category', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF046EB8))),
           const SizedBox(height: 7),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _chip('All', tc, (v) => set(() { tc = v; if (v != 'Student') tsc = null; }), value: null),
-            _chip('Student', tc, (v) => set(() => tc = v), value: 'Student'),
-            _chip('Employee', tc, (v) => set(() { tc = v; tsc = null; }), value: 'Employee'),
-            _chip('Others', tc, (v) => set(() { tc = v; tsc = null; }), value: 'Others'),
+            chip('All', tc, (v) => set(() { tc = v; if (v != 'Student') tsc = null; }), value: null),
+            chip('Student', tc, (v) => set(() => tc = v), value: 'Student'),
+            chip('Employee', tc, (v) => set(() { tc = v; tsc = null; }), value: 'Employee'),
+            chip('Others', tc, (v) => set(() { tc = v; tsc = null; }), value: 'Others'),
           ]),
 
           // Student Category (only when Student selected)
@@ -1389,12 +1700,12 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             const Text('Student Category', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF046EB8))),
             const SizedBox(height: 7),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              _chip('All', tsc, (v) => set(() => tsc = v), value: null),
-              _chip('Elementary', tsc, (v) => set(() => tsc = v), value: 'Grade 1-6 (Elementary)'),
-              _chip('Junior High', tsc, (v) => set(() => tsc = v), value: 'Grade 7-10 (Junior High)'),
-              _chip('Senior High', tsc, (v) => set(() => tsc = v), value: 'Grade 11-12 (Senior High)'),
-              _chip('College', tsc, (v) => set(() => tsc = v), value: 'College'),
-              _chip('Graduate', tsc, (v) => set(() => tsc = v), value: 'Graduate School'),
+              chip('All', tsc, (v) => set(() => tsc = v), value: null),
+              chip('Elementary', tsc, (v) => set(() => tsc = v), value: 'Grade 1-6 (Elementary)'),
+              chip('Junior High', tsc, (v) => set(() => tsc = v), value: 'Grade 7-10 (Junior High)'),
+              chip('Senior High', tsc, (v) => set(() => tsc = v), value: 'Grade 11-12 (Senior High)'),
+              chip('College', tsc, (v) => set(() => tsc = v), value: 'College'),
+              chip('Graduate', tsc, (v) => set(() => tsc = v), value: 'Graduate School'),
             ]),
           ],
           const SizedBox(height: 12),
@@ -1403,9 +1714,9 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           const Text('Sex', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF046EB8))),
           const SizedBox(height: 7),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _chip('All', ts, (v) => set(() => ts = v), value: null),
-            _chip('Male', ts, (v) => set(() => ts = v), value: 'Male'),
-            _chip('Female', ts, (v) => set(() => ts = v), value: 'Female'),
+            chip('All', ts, (v) => set(() => ts = v), value: null),
+            chip('Male', ts, (v) => set(() => ts = v), value: 'Male'),
+            chip('Female', ts, (v) => set(() => ts = v), value: 'Female'),
           ]),
           const SizedBox(height: 20),
 
@@ -1443,7 +1754,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
       'province': 'Province', 'city': 'City',
     };
 
-    Widget _chip(String label, bool selected, VoidCallback onTap) {
+    Widget chip(String label, bool selected, VoidCallback onTap) {
       return MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -1483,7 +1794,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           const Text('Sort by', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF046EB8))),
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 8, children: sortOpts.entries.map((e) =>
-              _chip(e.value, ts == e.key, () => set(() => ts = e.key)),
+              chip(e.value, ts == e.key, () => set(() => ts = e.key)),
           ).toList()),
           const SizedBox(height: 16),
 
@@ -1491,9 +1802,9 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
           const Text('Order', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF046EB8))),
           const SizedBox(height: 8),
           Row(children: [
-            _chip('↑  Ascending', ta, () => set(() => ta = true)),
+            chip('↑  Ascending', ta, () => set(() => ta = true)),
             const SizedBox(width: 8),
-            _chip('↓  Descending', !ta, () => set(() => ta = false)),
+            chip('↓  Descending', !ta, () => set(() => ta = false)),
           ]),
           const SizedBox(height: 20),
 
@@ -1560,7 +1871,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
         child: Container(width: 44, height: 44,
             decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFF046EB8), width: 2), color: Colors.grey.shade100),
             child: p['avatar'] != null && (p['avatar'] as String).isNotEmpty
-                ? Image.asset(p['avatar'], fit: BoxFit.cover, width: 44, height: 44, errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 22, color: Color(0xFF046EB8)))
+                ? Image.asset(p['avatar'], fit: BoxFit.cover, width: 44, height: 44, errorBuilder: (ctx, err, st) => const Icon(Icons.person, size: 22, color: Color(0xFF046EB8)))
                 : const Icon(Icons.person, size: 22, color: Color(0xFF046EB8))),
       ))),
       Expanded(flex: 2, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(p['username'] ?? '', style: const TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis))),
@@ -1573,25 +1884,25 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
       Expanded(flex: 4, child: _buildAddressCell(p)),
       Expanded(flex: 1, child: Center(child: Text(p['age'] ?? '—', style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)))),
       Expanded(flex: 1, child: Center(child: Text(p['sex'] ?? '—', style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)))),
-      SizedBox(width: 140, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      SizedBox(width: 170, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         _actionBtn(Icons.visibility,   Colors.blue,             'View',         () => _showViewPlayerDialog(p)),
-        const SizedBox(width: 5),
+        const SizedBox(width: 6),
         _actionBtn(Icons.edit,         Colors.green,            'Edit',         () => _showEditPlayerDialog(p)),
-        const SizedBox(width: 5),
+        const SizedBox(width: 6),
         _actionBtn(Icons.emoji_events, const Color(0xFFF39C12), 'Award Badge',  () => _showAwardBadgeDialog(p)),
-        const SizedBox(width: 5),
+        const SizedBox(width: 6),
         _actionBtn(Icons.delete,       Colors.red,              'Delete',       () => _showDeletePlayerDialog(p)),
       ])),
     ]),
   );
 
   Widget _buildTable() {
-    if (isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFF046EB8)));
-    if (errorMessage != null) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+    if (isLoading) { return const Center(child: CircularProgressIndicator(color: Color(0xFF046EB8))); }
+    if (errorMessage != null) { return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       Icon(Icons.error_outline, size: 64, color: Colors.red.shade300), const SizedBox(height: 16),
       Text(errorMessage!, style: const TextStyle(fontSize: 16, fontFamily: 'Poppins', color: Colors.red)), const SizedBox(height: 16),
       ElevatedButton(onPressed: _refresh, child: const Text('Retry')),
-    ]));
+    ])); }
     return LayoutBuilder(builder: (context, tc) {
       final isMobileTable = tc.maxWidth < 700;
       Widget table = Container(
@@ -1607,7 +1918,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                 Expanded(flex: 4, child: Text('Address',   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, fontFamily: 'Poppins'))),
                 Expanded(flex: 1, child: Center(child: Text('Age',      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, fontFamily: 'Poppins')))),
                 Expanded(flex: 1, child: Center(child: Text('Sex',      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, fontFamily: 'Poppins')))),
-                SizedBox(width: 140, child: Center(child: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, fontFamily: 'Poppins')))),
+                SizedBox(width: 170, child: Center(child: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, fontFamily: 'Poppins')))),
               ])),
           const Divider(height: 1, color: Color(0xFFE5E7EB)),
           Expanded(child: playersData.isEmpty
@@ -1616,7 +1927,7 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             Text('No players found', style: TextStyle(fontSize: 18, color: Colors.grey[600], fontFamily: 'Poppins')),
           ]))
               : ListView.separated(itemCount: playersData.length,
-              separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
+              separatorBuilder: (ctx, i) => Divider(height: 1, color: Colors.grey.shade200),
               itemBuilder: (_, i) => _buildPlayerRow(playersData[i], i.isEven))),
         ]),
       );
@@ -1753,9 +2064,9 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
                     Expanded(child: TextField(controller: searchController,
                         style: const TextStyle(fontFamily: 'Poppins', fontSize: 14),
                         decoration: const InputDecoration(hintText: 'Search players...', hintStyle: TextStyle(fontFamily: 'Poppins', fontSize: 14), border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
-                        onChanged: (v) { setState(() => searchQuery = v); _refresh(); })),
+                        onChanged: _onSearchChanged)),
                     if (searchQuery.isNotEmpty) IconButton(icon: const Icon(Icons.clear, size: 20, color: Color(0xFF858585)),
-                        onPressed: () { searchController.clear(); setState(() => searchQuery = ''); _refresh(); }, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                        onPressed: () { _searchDebounce?.cancel(); searchController.clear(); setState(() => searchQuery = ''); _refresh(); }, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                   ])),
               const SizedBox(height: 10),
               // Action buttons row
@@ -1781,44 +2092,44 @@ class _AdminPlayersPageState extends State<AdminPlayersPage> {
             ]);
           }
           return Row(children: [
-            const Icon(Icons.people, size: 28), const SizedBox(width: 12),
-            const Text('List of Players', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
+            const Icon(Icons.people, size: 22), const SizedBox(width: 12),
+            const Text('List of Players', style: TextStyle(fontSize: 19.2, fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
             const SizedBox(width: 12),
             Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: const Color(0xFF046EB8).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                child: Text('$totalPlayers total', style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Color(0xFF046EB8)))),
+                child: Text('$totalPlayers total', style: const TextStyle(fontFamily: 'Poppins', fontSize: 11.2, color: Color(0xFF046EB8)))),
             const SizedBox(width: 24),
-            Expanded(child: Container(height: 45, padding: const EdgeInsets.symmetric(horizontal: 16),
+            Expanded(child: Container(height: 40, padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(25)),
                 child: Row(children: [
-                  const Icon(Icons.search, color: Color(0xFF858585), size: 20), const SizedBox(width: 8),
+                  const Icon(Icons.search, color: Color(0xFF858585), size: 18), const SizedBox(width: 8),
                   Expanded(child: TextField(controller: searchController,
-                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 14),
-                      decoration: const InputDecoration(hintText: 'Search players...', hintStyle: TextStyle(fontFamily: 'Poppins', fontSize: 14), border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
-                      onChanged: (v) { setState(() => searchQuery = v); _refresh(); })),
-                  if (searchQuery.isNotEmpty) IconButton(icon: const Icon(Icons.clear, size: 20, color: Color(0xFF858585)),
-                      onPressed: () { searchController.clear(); setState(() => searchQuery = ''); _refresh(); }, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.8),
+                      decoration: const InputDecoration(hintText: 'Search players...', hintStyle: TextStyle(fontFamily: 'Poppins', fontSize: 12.8), border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                      onChanged: _onSearchChanged)),
+                  if (searchQuery.isNotEmpty) IconButton(icon: const Icon(Icons.clear, size: 18, color: Color(0xFF858585)),
+                      onPressed: () { _searchDebounce?.cancel(); searchController.clear(); setState(() => searchQuery = ''); _refresh(); }, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                 ]))),
             const SizedBox(width: 8),
             ElevatedButton.icon(onPressed: _showAddPlayerDialog,
-                icon: const Icon(Icons.person_add, size: 18), label: const Text('Add Player', style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                icon: const Icon(Icons.person_add, size: 16), label: const Text('Add Player', style: TextStyle(fontFamily: 'Poppins', fontSize: 10.4)),
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF046EB8), foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), elevation: 0)),
             const SizedBox(width: 8),
             OutlinedButton.icon(onPressed: _showSortDialog,
-                icon: const Icon(Icons.sort, size: 18), label: const Text('Sort', style: TextStyle(fontFamily: 'Poppins')),
+                icon: const Icon(Icons.sort, size: 16), label: const Text('Sort', style: TextStyle(fontFamily: 'Poppins', fontSize: 10.4)),
                 style: OutlinedButton.styleFrom(foregroundColor: Colors.black87, side: BorderSide(color: Colors.grey.shade400),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10))),
             const SizedBox(width: 8),
             OutlinedButton.icon(onPressed: _showFilterDialog,
-                icon: const Icon(Icons.filter_list, size: 18),
-                label: Text('Filter${(filterCategory != null || filterSex != null) ? " •" : ""}', style: const TextStyle(fontFamily: 'Poppins')),
+                icon: const Icon(Icons.filter_list, size: 16),
+                label: Text('Filter${(filterCategory != null || filterSex != null) ? " •" : ""}', style: const TextStyle(fontFamily: 'Poppins', fontSize: 10.4)),
                 style: OutlinedButton.styleFrom(
                     foregroundColor: (filterCategory != null || filterSex != null) ? const Color(0xFF046EB8) : Colors.black87,
                     side: BorderSide(color: (filterCategory != null || filterSex != null) ? const Color(0xFF046EB8) : Colors.grey.shade400),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10))),
             const SizedBox(width: 8),
-            IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh, size: 20),
+            IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh, size: 18),
                 style: IconButton.styleFrom(side: BorderSide(color: Colors.grey.shade300), shape: const CircleBorder()), tooltip: 'Refresh'),
           ]);
         }),

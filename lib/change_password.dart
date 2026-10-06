@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'audio_service.dart';
 import 'loading_page.dart'; // ✅ Loading screen
+import 'config.dart';
 
 class ChangePasswordDialog extends StatefulWidget {
   final String userId;
@@ -27,7 +28,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   bool confirmPasswordError = false;
   bool _hasFormChanged = false;
 
-  final String baseUrl = "http://localhost:8000";
+  // ✅ FIX: error now lives inside the dialog (shown at the top) instead of a
+  // SnackBar. A SnackBar posted while a Dialog is open renders on the
+  // underlying page's Scaffold, which sits BEHIND the dialog's modal
+  // barrier — so it was invisible/hard to see under the dialog.
+  String? _errorMessage;
+  Color _errorColor = Colors.red;
 
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) {
@@ -35,6 +41,9 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     }
     if (value.length < 8) {
       return 'Password must be at least 8 characters';
+    }
+    if (value.length > 12) {
+      return 'Password must not exceed 12 characters';
     }
     if (!value.contains(RegExp(r'[A-Z]'))) {
       return 'Password must contain at least one uppercase letter';
@@ -44,9 +53,6 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     }
     if (!value.contains(RegExp(r'[0-9]'))) {
       return 'Password must contain at least one number';
-    }
-    if (!value.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
-      return 'Password must contain at least one special character';
     }
     return null;
   }
@@ -74,6 +80,14 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       oldPasswordError = false;
       newPasswordError = false;
       confirmPasswordError = false;
+      _errorMessage = null;
+    });
+  }
+
+  void _showInlineError(String message, {Color color = Colors.red}) {
+    setState(() {
+      _errorMessage = message;
+      _errorColor = color;
     });
   }
 
@@ -125,7 +139,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Container(
-            width: 350,
+            width: _isMobile ? MediaQuery.of(context).size.width * 0.82 : 350,
             padding: const EdgeInsets.all(25),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -133,16 +147,16 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 // Success image
                 Image.asset(
                   'assets/images-logo/success.png',
-                  width: 160,
-                  height: 160,
+                  width: _isMobile ? 110 : 160,
+                  height: _isMobile ? 110 : 160,
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   "Password Changed!",
                   style: TextStyle(
                     fontFamily: 'Poppins',
-                    fontSize: 20,
+                    fontSize: _isMobile ? 16 : 20,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF046EB8),
                   ),
@@ -189,56 +203,44 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   Future<void> updatePassword() async {
     // Check if form has been modified
     if (!_hasFormChanged) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("No changes have been made."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showInlineError("No changes have been made.", color: Colors.orange);
       return;
     }
 
+    // ✅ FIX: leading/trailing spaces are now auto-trimmed and accepted for
+    // password fields too, consistently with registration/login, which now
+    // also trim before hashing/comparing. Trimming only here (and not there)
+    // would have caused a correct password with a space to be rejected.
     final oldPassword = oldPasswordController.text.trim();
-    final newPassword = newPasswordController.text;
-    final confirmPassword = confirmPasswordController.text;
+    final newPassword = newPasswordController.text.trim();
+    final confirmPassword = confirmPasswordController.text.trim();
 
     _clearErrors();
 
     // Validation
     if (oldPassword.isEmpty) {
       setState(() => oldPasswordError = true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter your current password."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showInlineError("Please enter your current password.", color: Colors.orange);
       return;
     }
 
     if (newPassword.isEmpty) {
       setState(() => newPasswordError = true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter a new password."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showInlineError("Please enter a new password.", color: Colors.orange);
       return;
     }
 
     if (confirmPassword.isEmpty) {
       setState(() => confirmPasswordError = true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please confirm your new password."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showInlineError("Please confirm your new password.", color: Colors.orange);
+      return;
+    }
+
+    // ✅ FIX: catch "new password same as current" client-side, immediately,
+    // instead of only after a round trip to the server.
+    if (newPassword == oldPassword) {
+      setState(() => newPasswordError = true);
+      _showInlineError("New password must be different from your current password.");
       return;
     }
 
@@ -247,26 +249,14 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         newPasswordError = true;
         confirmPasswordError = true;
       });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Passwords do not match."),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showInlineError("Passwords do not match.");
       return;
     }
 
     final passwordError = _validatePassword(newPassword);
     if (passwordError != null) {
       setState(() => newPasswordError = true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(passwordError),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showInlineError(passwordError);
       return;
     }
 
@@ -278,7 +268,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
     try {
       final response = await http.put(
-        Uri.parse('$baseUrl/api/user/change-password/${widget.userId}'),
+        Uri.parse('${AppConfig.baseUrl}/user/change-password/${widget.userId}'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'old_password': oldPassword,
@@ -305,77 +295,115 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
           // Show success dialog
           await _showSuccessDialog();
         } else {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(data['message'] ?? "Failed to update password."),
-              backgroundColor: Colors.red,
-            ),
-          );
+          _showInlineError(data['message'] ?? "Failed to update password.");
         }
       } else {
         final data = jsonDecode(response.body);
         String errorMessage =
             data['message'] ?? "Error updating password. Please try again.";
 
-        // Set error highlighting based on error message
+        // Set error highlighting based on error message — keeps the
+        // highlighted field aligned with what the server actually rejected.
         if (errorMessage.toLowerCase().contains('old password') ||
             errorMessage.toLowerCase().contains('current password')) {
           setState(() => oldPasswordError = true);
+        } else if (errorMessage.toLowerCase().contains('new password')) {
+          setState(() => newPasswordError = true);
         }
 
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        _showInlineError(errorMessage);
       }
     } catch (e) {
       // ✅ HIDE LOADING on error
       if (mounted) LoadingHelper.hideLoading(context);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) _showInlineError('Error: $e');
     } finally {
       if (mounted) setState(() => saving = false);
     }
   }
 
+  bool get _isMobile => MediaQuery.of(context).size.width < 600;
+
+  // ── Error indicator widget ────────────────────────────────────────────────
+  // Matches the "!" inline style used on Login, Register, and Edit Profile,
+  // instead of the old bordered/tinted banner box this dialog used before.
+  Widget _buildErrorMessage(String message, {Color color = Colors.red}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, top: 4, bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Text(
+                '!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sw = MediaQuery.of(context).size.width;
     return Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 600, // ✅ Changed from 480 to 600 to match edit_profile
-        padding: const EdgeInsets.all(30),
+        width: _isMobile ? sw * 0.92 : 600,
+        padding: EdgeInsets.all(_isMobile ? 18 : 30),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Header
             Row(
-              children: const [
-                Icon(Icons.vpn_key, color: Colors.black, size: 26),
-                SizedBox(width: 8),
+              children: [
+                Icon(Icons.vpn_key, color: Colors.black, size: _isMobile ? 20 : 26),
+                const SizedBox(width: 8),
                 Text(
                   "Change Password",
                   style: TextStyle(
                     fontFamily: 'Poppins',
                     fontWeight: FontWeight.bold,
-                    fontSize: 22,
+                    fontSize: _isMobile ? 17 : 22,
                     color: Colors.black,
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 20),
+            SizedBox(height: _isMobile ? 14 : 20),
+
+            // Error message sits here — top of the dialog, above every
+            // field, always visible while the dialog is open. Uses the same
+            // inline "!" style as Login/Register/Edit Profile.
+            if (_errorMessage != null)
+              _buildErrorMessage(_errorMessage!, color: _errorColor),
 
             // Old password
             TextField(
@@ -396,18 +424,23 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 ),
               ),
             ),
-            const SizedBox(height: 15),
+            SizedBox(height: _isMobile ? 10 : 15),
 
             // New password
             TextField(
               controller: newPasswordController,
               obscureText: !showNew,
+              // ✅ FIX: password rules now require 8–12 characters (not 64),
+              // so the field's hard character cap matches the max length
+              // the backend and _validatePassword above both enforce.
+              maxLength: 12,
               onChanged: (_) => setState(() => newPasswordError = false),
               decoration: _inputDecoration(
                 "New Password",
                 icon: Icons.lock,
                 hasError: newPasswordError,
               ).copyWith(
+                counterText: '',
                 suffixIcon: IconButton(
                   icon: Icon(
                     showNew ? Icons.visibility_off : Icons.visibility,
@@ -417,7 +450,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 ),
               ),
             ),
-            const SizedBox(height: 15),
+            SizedBox(height: _isMobile ? 10 : 15),
 
             // Confirm password
             TextField(
@@ -438,7 +471,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 ),
               ),
             ),
-            const SizedBox(height: 25),
+            SizedBox(height: _isMobile ? 18 : 25),
 
             // Buttons (Cancel / Save)
             Row(
@@ -452,13 +485,13 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   },
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF046EB8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: _isMobile ? 18 : 24,
+                      vertical: _isMobile ? 10 : 12,
                     ),
-                    textStyle: const TextStyle(
+                    textStyle: TextStyle(
                       fontFamily: 'Poppins',
-                      fontSize: 14,
+                      fontSize: _isMobile ? 12 : 14,
                     ),
                     side: const BorderSide(color: Color(0xFF046EB8), width: 1),
                     shape: RoundedRectangleBorder(
@@ -473,13 +506,13 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFDD000),
                     foregroundColor: const Color(0xFF816A03),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: _isMobile ? 18 : 24,
+                      vertical: _isMobile ? 12 : 14,
                     ),
-                    textStyle: const TextStyle(
+                    textStyle: TextStyle(
                       fontFamily: 'Poppins',
-                      fontSize: 13,
+                      fontSize: _isMobile ? 12 : 13,
                       fontWeight: FontWeight.w600,
                     ),
                     shape: RoundedRectangleBorder(

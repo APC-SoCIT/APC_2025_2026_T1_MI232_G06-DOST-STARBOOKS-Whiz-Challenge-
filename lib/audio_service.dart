@@ -17,7 +17,8 @@ class AudioService {
 
   // For smooth transitions
   bool _isFading = false;
-  double _currentVolume = 0.50; // Default volume
+  double _currentVolume = 0.50; // Default music volume
+  double _sfxVolume = 0.50;     // Default SFX volume
 
   // ── Asset map ────────────────────────────────────────────────────────────
   // IMPORTANT: homepage_music is .wav — everything else is .mp3
@@ -209,12 +210,12 @@ class AudioService {
 
   // ── SFX ──────────────────────────────────────────────────────────────────
   // Spawns a fresh AudioPlayer per sound so concurrent SFX never cut each other off
-  Future<void> _playSfx(String asset, {double volume = 0.5, Duration? startAt}) async {
+  Future<void> _playSfx(String asset, {double? volume, Duration? startAt}) async {
     if (!_isSfxEnabled) return;
     final player = AudioPlayer();
     try {
       await player.setReleaseMode(ReleaseMode.release); // auto-dispose when done
-      await player.play(AssetSource(asset), volume: volume);
+      await player.play(AssetSource(asset), volume: volume ?? _sfxVolume);
       if (startAt != null) {
         await player.seek(startAt);
       }
@@ -247,11 +248,24 @@ class AudioService {
     await _musicPlayer.setVolume(clampedVolume);
   }
 
+  /// Sets the volume applied to every SFX played after this call.
+  /// Also enables/disables SFX based on whether value is 0.
+  Future<void> setSfxVolume(double v) async {
+    _sfxVolume = v.clamp(0.0, 1.0);
+    // Enable SFX when volume > 0, disable when muted
+    if (_sfxVolume == 0 && _isSfxEnabled) {
+      _isSfxEnabled = false;
+    } else if (_sfxVolume > 0 && !_isSfxEnabled) {
+      _isSfxEnabled = true;
+    }
+  }
+
   // ── Getters ───────────────────────────────────────────────────────────────
   bool    get isMusicEnabled => _isMusicEnabled;
   bool    get isSfxEnabled   => _isSfxEnabled;
   String? get currentMusic   => _currentMusic;
   double  get currentVolume  => _currentVolume;
+  double  get sfxVolume      => _sfxVolume;
 
   Future<void> dispose() async {
     _isFading = false;

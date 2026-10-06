@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'audio_service.dart';
 import 'homepage.dart'; // contains UserProfile class
 import 'loading_page.dart'; // ✅ ADDED: Loading screen
+import 'config.dart';
 
 class EditProfileDialog extends StatefulWidget {
   final UserProfile profile;
@@ -16,12 +17,10 @@ class EditProfileDialog extends StatefulWidget {
 }
 
 class _EditProfileDialogState extends State<EditProfileDialog> {
-  final String baseUrl = "http://localhost:8000";
   final _formKey = GlobalKey<FormState>();
 
   // Page control
   int _currentPage = 0;
-  final PageController _pageController = PageController();
 
   late TextEditingController usernameController;
   late TextEditingController schoolController;
@@ -59,41 +58,88 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   double successOpacity = 1.0;
   bool _hasFormChanged = false;
 
+  // ✅ FIX: error now shown inline at the top of the dialog instead of a
+  // SnackBar. A SnackBar posted while this Dialog is open renders on the
+  // page behind it, under the modal barrier — effectively invisible.
+  String? _errorMessage;
+  Color _errorColor = Colors.red;
+
   String? _validateUsername(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Username is required';
-    }
-    if (value.contains(' ')) {
-      return 'Username cannot contain spaces';
-    }
-    if (value.trim().length < 3) {
-      return 'Username must be at least 3 characters';
-    }
-    if (value.trim().length > 20) {
-      return 'Username must not exceed 20 characters';
-    }
-    if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value.trim())) {
-      return 'Username can only contain letters, numbers, and underscores';
-    }
+    if (value == null) return 'Username is required';
+    // ✅ FIX: leading/trailing spaces are now auto-trimmed and accepted
+    // instead of being rejected outright.
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'Username is required';
+    if (trimmed.length < 3) return 'Username must be at least 3 characters';
+    if (trimmed.length > 20) return 'Username must not exceed 20 characters';
+    if (!RegExp(r'^[a-zA-Z]').hasMatch(trimmed))
+      return 'Username must start with a letter';
+    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(trimmed))
+      return 'Username can only contain letters, numbers, underscores, and hyphens';
     return null;
   }
 
   String? _validateSchool(String school) {
-    if (school.length < 3) {
+    final trimmed = school.trim();
+    if (trimmed.isEmpty) {
+      return 'School is required.';
+    }
+    if (trimmed.length < 3) {
       return 'School name must be at least 3 characters';
     }
-    if (school.length > 100) {
+    if (trimmed.length > 100) {
       return 'School name is too long';
     }
     return null;
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
+  void _showError(String message, {Color color = Colors.red}) {
+    setState(() {
+      _errorMessage = message;
+      _errorColor = color;
+    });
+  }
+
+  // ── Error indicator widget ────────────────────────────────────────────────
+  // Matches the "!" inline style used on the Login and Register screens,
+  // instead of the old bordered/tinted banner box this dialog used before.
+  Widget _buildErrorMessage(String message, {Color color = Colors.red}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, top: 4, bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Text(
+                '!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -110,6 +156,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       regionError = false;
       provinceError = false;
       cityError = false;
+      _errorMessage = null;
     });
   }
 
@@ -177,7 +224,6 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   void dispose() {
     usernameController.dispose();
     schoolController.dispose();
-    _pageController.dispose();
     super.dispose();
   }
 
@@ -186,62 +232,54 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       // Validate page 1 fields before proceeding
       _clearErrors();
       bool hasError = false;
+      // ✅ FIX: collect every specific message instead of overwriting them
+      // with one generic "Please fill in all required fields" banner —
+      // that line used to run unconditionally whenever hasError was true,
+      // silently discarding the exact username/school messages set above it.
+      final errorMessages = <String>[];
 
-      if (usernameController.text.trim().isEmpty) {
+      final usernameValidationError = _validateUsername(usernameController.text);
+      if (usernameValidationError != null) {
         setState(() => usernameError = true);
+        errorMessages.add(usernameValidationError);
         hasError = true;
       }
-      if (schoolController.text.trim().isEmpty) {
+
+      final schoolErrorMsg = _validateSchool(schoolController.text);
+      if (schoolErrorMsg != null) {
         setState(() => schoolError = true);
+        errorMessages.add(schoolErrorMsg);
         hasError = true;
       }
+
       if (selectedAge == null) {
         setState(() => ageError = true);
+        errorMessages.add('Age is required.');
         hasError = true;
       }
       if (selectedSex == null) {
         setState(() => sexError = true);
+        errorMessages.add('Sex is required.');
         hasError = true;
       }
       if (selectedAvatar == null) {
         setState(() => avatarError = true);
-        hasError = true;
-      }
-
-      String? usernameValidationError = _validateUsername(usernameController.text);
-      if (usernameValidationError != null) {
-        setState(() => usernameError = true);
-        _showError(usernameValidationError);
-        hasError = true;
-      }
-
-      String? schoolErrorMsg = _validateSchool(schoolController.text);
-      if (schoolErrorMsg != null) {
-        setState(() => schoolError = true);
-        _showError(schoolErrorMsg);
+        errorMessages.add('Avatar selection is required.');
         hasError = true;
       }
 
       if (hasError) {
-        _showError('Please fill in all required fields on this page');
+        _showError(errorMessages.join('\n'));
         return;
       }
 
       AudioService().playClickSound();
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
       setState(() => _currentPage = 1);
     }
   }
 
   void _previousPage() {
     AudioService().playClickSound();
-    _pageController.previousPage(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
     setState(() => _currentPage = 0);
   }
 
@@ -293,6 +331,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     );
   }
 
+  // After
   Widget _buildClickableField(
       String label,
       String? value,
@@ -301,45 +340,38 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: onTap,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: hasError ? Colors.red : Colors.grey,
-                    width: hasError ? 2 : 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      value ?? label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: value != null ? Colors.black : Colors.grey,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, size: 20),
-                  ],
-                ),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: hasError ? Colors.red : Colors.grey,
+                width: hasError ? 2 : 1,
               ),
             ),
-          ),
-          if (hasError)
-            const Padding(
-              padding: EdgeInsets.only(left: 12, top: 4),
-              child: Text('Required', style: TextStyle(color: Colors.red, fontSize: 11)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    value ?? label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: value != null ? Colors.black : Colors.grey,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.arrow_drop_down, size: 20),
+              ],
             ),
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -350,8 +382,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 500,
-          padding: const EdgeInsets.all(24),
+          width: (_isMobile ? MediaQuery.of(context).size.width * 0.88 : 500.0).clamp(260.0, 520.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -378,10 +410,10 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                height: 400,
+                height: _isMobile ? MediaQuery.of(context).size.height * 0.45 : 400,
                 child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _isMobile ? 3 : 4,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                     childAspectRatio: 1,
@@ -422,7 +454,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     LoadingHelper.showLoadingDialog(context, message: 'Loading regions...', width: 300, height: 200);
 
     try {
-      final resp = await http.get(Uri.parse('$baseUrl/api/region'));
+      final resp = await http.get(Uri.parse('${AppConfig.baseUrl}/region'));
       if (resp.statusCode == 200) {
         final List data = jsonDecode(resp.body);
         regions = data
@@ -448,7 +480,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     LoadingHelper.showLoadingDialog(context, message: 'Loading provinces...', width: 300, height: 200);
 
     try {
-      final resp = await http.get(Uri.parse('$baseUrl/api/province/$regionId'));
+      final resp = await http.get(Uri.parse('${AppConfig.baseUrl}/province/$regionId'));
       if (resp.statusCode == 200) {
         final List data = jsonDecode(resp.body);
         provinces = data
@@ -474,7 +506,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     LoadingHelper.showLoadingDialog(context, message: 'Loading cities...', width: 300, height: 200);
 
     try {
-      final resp = await http.get(Uri.parse('$baseUrl/api/city/$provinceId'));
+      final resp = await http.get(Uri.parse('${AppConfig.baseUrl}/city/$provinceId'));
       if (resp.statusCode == 200) {
         final List data = jsonDecode(resp.body);
         cities = data
@@ -500,7 +532,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     try {
       // ── Region ──────────────────────────────────────────────────────────
       if (selectedRegionId == null && selectedRegionName != null) {
-        final resp = await http.get(Uri.parse('$baseUrl/api/region'));
+        final resp = await http.get(Uri.parse('${AppConfig.baseUrl}/region'));
         if (resp.statusCode == 200) {
           final List data = jsonDecode(resp.body);
           final match = data.firstWhere(
@@ -520,7 +552,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
       // ── Province ─────────────────────────────────────────────────────────
       if (selectedProvinceId == null && selectedProvinceName != null && selectedRegionId != null) {
-        final resp = await http.get(Uri.parse('$baseUrl/api/province/$selectedRegionId'));
+        final resp = await http.get(Uri.parse('${AppConfig.baseUrl}/province/$selectedRegionId'));
         if (resp.statusCode == 200) {
           final List data = jsonDecode(resp.body);
           final match = data.firstWhere(
@@ -540,7 +572,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
       // ── City ─────────────────────────────────────────────────────────────
       if (selectedCityId == null && selectedCityName != null && selectedProvinceId != null) {
-        final resp = await http.get(Uri.parse('$baseUrl/api/city/$selectedProvinceId'));
+        final resp = await http.get(Uri.parse('${AppConfig.baseUrl}/city/$selectedProvinceId'));
         if (resp.statusCode == 200) {
           final List data = jsonDecode(resp.body);
           final match = data.firstWhere(
@@ -567,43 +599,46 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
   Future<void> saveProfile() async {
     if (!_hasFormChanged) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No changes have been made'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showError('No changes have been made', color: Colors.orange);
       return;
     }
 
     _clearErrors();
     bool hasError = false;
+    // ✅ Specific message per missing field, same style as page 1, instead
+    // of one generic banner.
+    final errorMessages = <String>[];
 
     // Validate all fields
     if (selectedCategory == null) {
       setState(() => categoryError = true);
       hasError = true;
+      errorMessages.add('Category is required.');
     }
     if (selectedCategory == "Student" && selectedStudentCategory == null) {
       setState(() => studentCategoryError = true);
       hasError = true;
+      errorMessages.add('Student Category is required.');
     }
     // Allow saving if either ID or Name is present (user may not have changed their location)
     if (selectedRegionId == null && (selectedRegionName == null || selectedRegionName!.isEmpty)) {
       setState(() => regionError = true);
       hasError = true;
+      errorMessages.add('Region is required.');
     }
     if (selectedProvinceId == null && (selectedProvinceName == null || selectedProvinceName!.isEmpty)) {
       setState(() => provinceError = true);
       hasError = true;
+      errorMessages.add('Province is required.');
     }
     if (selectedCityId == null && (selectedCityName == null || selectedCityName!.isEmpty)) {
       setState(() => cityError = true);
       hasError = true;
+      errorMessages.add('City is required.');
     }
 
     if (hasError) {
-      _showError('Please fill in all required fields');
+      _showError(errorMessages.join('\n'));
       return;
     }
 
@@ -623,7 +658,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
     try {
       final resp = await http.put(
-        Uri.parse('$baseUrl/api/user/update/${widget.profile.id}'),
+        Uri.parse('${AppConfig.baseUrl}/user/update/${widget.profile.id}'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'username': usernameController.text.trim(),
@@ -647,15 +682,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       if (resp.statusCode == 200 && data['success'] == true) {
         if (data['no_changes'] == true) {
           setState(() => saving = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('No changes were made'),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
+          _showError('No changes were made', color: Colors.orange);
           return;
         }
 
@@ -711,18 +738,42 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     }
   }
 
+  bool get _isMobile => MediaQuery.of(context).size.width < 600;
+
   @override
   Widget build(BuildContext context) {
-    return Dialog(
+    final sw = MediaQuery.of(context).size.width;
+    // On mobile: fill the screen minus the inset padding (auto height).
+    // On desktop: use fixed sizes.
+    final dialogHeight = showSuccess
+        ? (_isMobile ? 300.0 : 360.0)
+        : null; // auto-size to content now that both platforms use AnimatedSize below
+
+    // ✅ FIX (Homepage not updating right away): previously this dialog could
+    // be dismissed early — by pressing Escape, or the back button/gesture —
+    // while the 5-second "Profile Updated!" success screen was showing.
+    // Doing so closed the dialog with a `null` result instead of the real
+    // Navigator.pop(context, updatedProfile) below, so _editProfile() on the
+    // homepage never received the new data and the UI kept showing the old
+    // profile until a full reload/re-login re-fetched it from the backend.
+    // PopScope now blocks any dismissal while saving is in progress or the
+    // success screen is showing, forcing the dialog to close only through
+    // the path that actually returns updatedProfile.
+    return PopScope(
+      canPop: !saving && !showSuccess,
+      child: Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.all(20),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: _isMobile ? 12 : 20,
+        vertical: _isMobile ? 60 : 20,
+      ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
-        width: showSuccess ? 420 : 600,
-        height: showSuccess ? 320 : 370,
-        padding: const EdgeInsets.all(30),
+        width: showSuccess ? (_isMobile ? sw * 0.88 : 420.0) : (_isMobile ? sw * 0.92 : 600.0),
+        height: dialogHeight,
+        padding: EdgeInsets.all(_isMobile ? 18 : 30),
         child: showSuccess
             ? AnimatedOpacity(
           opacity: successOpacity,
@@ -763,6 +814,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
             : Form(
           key: _formKey,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Header
               Row(
@@ -770,14 +822,14 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.edit, color: Colors.black, size: 26),
+                      Icon(Icons.edit, color: Colors.black, size: _isMobile ? 20 : 26),
                       const SizedBox(width: 8),
                       Text(
                         'Edit Profile',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Poppins',
                           fontWeight: FontWeight.bold,
-                          fontSize: 22,
+                          fontSize: _isMobile ? 17 : 22,
                           color: Colors.black,
                         ),
                       ),
@@ -797,11 +849,11 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                       Icons.vpn_key,
                       color: Color(0xFF046EB8),
                     ),
-                    label: const Text(
-                      'Change Password',
+                    label: Text(
+                      _isMobile ? 'Password' : 'Change Password',
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 14,
+                        fontSize: _isMobile ? 11 : 14,
                         color: Color(0xFF046EB8),
                       ),
                     ),
@@ -813,9 +865,9 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: _isMobile ? 10 : 16,
+                        vertical: _isMobile ? 8 : 12,
                       ),
                     ),
                   ),
@@ -823,16 +875,20 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
               ),
               const SizedBox(height: 15),
 
-              // PageView (form content) - NOW FIRST
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _buildPage1(),
-                    _buildPage2(),
-                  ],
-                ),
+              // Error message — top of dialog, above both form pages, always
+              // visible while the dialog is open. Uses the same inline "!"
+              // style as Login/Register instead of a bordered banner box,
+              // for visual consistency across all three forms.
+              if (_errorMessage != null)
+                _buildErrorMessage(_errorMessage!, color: _errorColor),
+
+              // Form content — auto-sizes to whichever page is currently
+              // showing, on both mobile and desktop.
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: _currentPage == 0 ? _buildPage1() : _buildPage2(),
               ),
 
               const SizedBox(height: 20),
@@ -977,127 +1033,141 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
           ),
         ),
       ),
-    );
+      ), // closes Dialog(
+    ); // closes PopScope(
   }
 
   Widget _buildPage1() {
     return SingleChildScrollView(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // LEFT SIDE - Avatar (30%)
-          Expanded(
-            flex: 3,
-            child: Column(
+      child: _isMobile
+          // MOBILE: avatar centered on top, fields below
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
-                    onTap: () => _showAvatarPickerDialog(),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
+                    onTap: _showAvatarPickerDialog,
+                    child: CircleAvatar(
+                      radius: 42,
+                      backgroundColor: avatarError ? Colors.red : const Color(0xFFFDD000),
                       child: CircleAvatar(
-                        radius: 70,
-                        backgroundColor: avatarError ? Colors.red : const Color(0xFFFDD000),
-                        child: CircleAvatar(
-                          radius: 67,
-                          backgroundColor: Colors.white,
-                          backgroundImage: selectedAvatar != null ? AssetImage(selectedAvatar!) : null,
-                          child: selectedAvatar == null ? const Icon(Icons.person, size: 60, color: Colors.grey) : null,
-                        ),
+                        radius: 39,
+                        backgroundColor: Colors.white,
+                        backgroundImage: selectedAvatar != null ? AssetImage(selectedAvatar!) : null,
+                        child: selectedAvatar == null ? const Icon(Icons.person, size: 34, color: Colors.grey) : null,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: ElevatedButton(
-                    onPressed: () => _showAvatarPickerDialog(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFDD000),
-                      foregroundColor: const Color(0xFF816A03),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      elevation: 2,
-                    ),
-                    child: const Text(
-                      "Select Avatar",
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                if (avatarError)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text('Required', style: TextStyle(color: Colors.red, fontSize: 11)),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 20),
-          // RIGHT SIDE - Form fields (70%)
-          Expanded(
-            flex: 7,
-            child: Column(
-              children: [
-                _buildTextField(
-                  Icons.person,
-                  "Username",
-                  controller: usernameController,
-                  hasError: usernameError,
-                  onChanged: (_) => setState(() {
-                    usernameError = false;
-                    _hasFormChanged = true;
-                  }),
-                ),
-                _buildTextField(
-                  Icons.school,
-                  "School",
-                  controller: schoolController,
-                  hasError: schoolError,
-                  onChanged: (_) => setState(() {
-                    schoolError = false;
-                    _hasFormChanged = true;
-                  }),
                 ),
                 const SizedBox(height: 6),
-                // Age and Sex with box selection
+                ElevatedButton(
+                  onPressed: _showAvatarPickerDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFDD000),
+                    foregroundColor: const Color(0xFF816A03),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 2,
+                  ),
+                  child: const Text("Select Avatar",
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(height: 10),
+                _buildTextField(Icons.person, "Username",
+                  controller: usernameController,
+                  hasError: usernameError,
+                  onChanged: (_) => setState(() { usernameError = false; _hasFormChanged = true; }),
+                ),
+                _buildTextField(Icons.school, "School",
+                  controller: schoolController,
+                  hasError: schoolError,
+                  onChanged: (_) => setState(() { schoolError = false; _hasFormChanged = true; }),
+                ),
+                const SizedBox(height: 4),
                 Row(
                   children: [
-                    Expanded(
-                      child: _buildClickableField(
-                        "Age",
-                        selectedAge,
-                            () => _showAgePickerDialog(),
-                        hasError: ageError,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildClickableField(
-                        "Sex",
-                        selectedSex,
-                            () => _showSexPickerDialog(),
-                        hasError: sexError,
-                      ),
-                    ),
+                    Expanded(child: _buildClickableField("Age", selectedAge, _showAgePickerDialog, hasError: ageError)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildClickableField("Sex", selectedSex, _showSexPickerDialog, hasError: sexError)),
                   ],
                 ),
               ],
+            )
+          // DESKTOP: avatar left, fields right
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    children: [
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: _showAvatarPickerDialog,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 2))],
+                            ),
+                            child: CircleAvatar(
+                              radius: 70,
+                              backgroundColor: avatarError ? Colors.red : const Color(0xFFFDD000),
+                              child: CircleAvatar(
+                                radius: 67,
+                                backgroundColor: Colors.white,
+                                backgroundImage: selectedAvatar != null ? AssetImage(selectedAvatar!) : null,
+                                child: selectedAvatar == null ? const Icon(Icons.person, size: 60, color: Colors.grey) : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _showAvatarPickerDialog,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFDD000),
+                          foregroundColor: const Color(0xFF816A03),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          elevation: 2,
+                        ),
+                        child: const Text("Select Avatar",
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  flex: 7,
+                  child: Column(
+                    children: [
+                      _buildTextField(Icons.person, "Username",
+                        controller: usernameController,
+                        hasError: usernameError,
+                        onChanged: (_) => setState(() { usernameError = false; _hasFormChanged = true; }),
+                      ),
+                      _buildTextField(Icons.school, "School",
+                        controller: schoolController,
+                        hasError: schoolError,
+                        onChanged: (_) => setState(() { schoolError = false; _hasFormChanged = true; }),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: _buildClickableField("Age", selectedAge, _showAgePickerDialog, hasError: ageError)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildClickableField("Sex", selectedSex, _showSexPickerDialog, hasError: sexError)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1106,53 +1176,25 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          // Category - full width
-          _buildClickableField(
-            "Category",
-            selectedCategory,
-                () => _showCategoryPickerDialog(),
-            hasError: categoryError,
-          ),
-          // Student Category - conditionally shown
+          _buildClickableField("Category", selectedCategory, _showCategoryPickerDialog, hasError: categoryError),
           if (selectedCategory == "Student")
-            _buildClickableField(
-              "Student Category",
-              selectedStudentCategory,  // This should now display the actual value
-                  () => _showStudentCategoryPickerDialog(),
-              hasError: studentCategoryError,
-            ),
+            _buildClickableField("Student Category", selectedStudentCategory, _showStudentCategoryPickerDialog, hasError: studentCategoryError),
           const SizedBox(height: 6),
-          // Region, Province, City in three columns
-          Row(
-            children: [
-              Expanded(
-                child: _buildClickableField(
-                  "Region",
-                  selectedRegionName,
-                      () => _showRegionPickerDialog(),
-                  hasError: regionError,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildClickableField(
-                  "Province",
-                  selectedProvinceName,
-                      () => _showProvincePickerDialog(),
-                  hasError: provinceError,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildClickableField(
-                  "City",
-                  selectedCityName,
-                      () => _showCityPickerDialog(),
-                  hasError: cityError,
-                ),
-              ),
-            ],
-          ),
+          // On mobile: stack Region/Province/City vertically; desktop: 3 columns
+          if (_isMobile) ...[
+            _buildClickableField("Region", selectedRegionName, _showRegionPickerDialog, hasError: regionError),
+            _buildClickableField("Province", selectedProvinceName, _showProvincePickerDialog, hasError: provinceError),
+            _buildClickableField("City", selectedCityName, _showCityPickerDialog, hasError: cityError),
+          ] else
+            Row(
+              children: [
+                Expanded(child: _buildClickableField("Region", selectedRegionName, _showRegionPickerDialog, hasError: regionError)),
+                const SizedBox(width: 10),
+                Expanded(child: _buildClickableField("Province", selectedProvinceName, _showProvincePickerDialog, hasError: provinceError)),
+                const SizedBox(width: 10),
+                Expanded(child: _buildClickableField("City", selectedCityName, _showCityPickerDialog, hasError: cityError)),
+              ],
+            ),
         ],
       ),
     );
@@ -1166,8 +1208,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: (MediaQuery.of(context).size.width * 0.78).clamp(240.0, 420.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1241,8 +1283,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: (MediaQuery.of(context).size.width * 0.78).clamp(240.0, 420.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1313,8 +1355,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: (MediaQuery.of(context).size.width * 0.78).clamp(240.0, 420.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1375,8 +1417,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: (MediaQuery.of(context).size.width * 0.78).clamp(240.0, 420.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1467,8 +1509,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: (MediaQuery.of(context).size.width * 0.78).clamp(240.0, 420.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1495,7 +1537,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                height: 400,
+                height: MediaQuery.of(context).size.height * 0.45,
                 child: ListView.builder(
                   itemCount: regions.length,
                   itemBuilder: (context, index) {
@@ -1577,8 +1619,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: (MediaQuery.of(context).size.width * 0.78).clamp(240.0, 420.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1605,7 +1647,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                height: 400,
+                height: MediaQuery.of(context).size.height * 0.45,
                 child: ListView.builder(
                   itemCount: provinces.length,
                   itemBuilder: (context, index) {
@@ -1684,8 +1726,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: (MediaQuery.of(context).size.width * 0.78).clamp(240.0, 420.0),
+          padding: EdgeInsets.all(_isMobile ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1712,7 +1754,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                height: 400,
+                height: MediaQuery.of(context).size.height * 0.45,
                 child: ListView.builder(
                   itemCount: cities.length,
                   itemBuilder: (context, index) {

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'admin_dashboard.dart';
+import 'api_service.dart';
+import 'loading_page.dart';
+import 'login.dart';
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -8,49 +11,121 @@ class AdminLoginPage extends StatefulWidget {
   State<AdminLoginPage> createState() => _AdminLoginPageState();
 }
 
-class _AdminLoginPageState extends State<AdminLoginPage>
-    with SingleTickerProviderStateMixin {
+class _AdminLoginPageState extends State<AdminLoginPage> {
   bool _obscurePassword = true;
-  late final AnimationController _controller;
+  bool _isLoading = false;
+  bool usernameError = false;
+  bool passwordError = false;
 
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final ApiService _api = ApiService();
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 50),
-    )..repeat();
-  }
+  // Same 600px breakpoint as the player-side login screen.
+  bool get _isMobile => MediaQuery.of(context).size.width < 600;
 
   @override
   void dispose() {
-    _controller.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _login() {
+  InputDecoration _inputDecoration(String label, IconData icon,
+      {bool hasError = false, Widget? suffixIcon}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 12,
+          color: hasError ? Colors.red : null),
+      prefixIcon: Icon(icon, size: 18, color: hasError ? Colors.red : null),
+      suffixIcon: suffixIcon,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(
+            color: hasError ? Colors.red : const Color(0xFF046EB8),
+            width: 2),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(
+            color: hasError ? Colors.red : Colors.grey,
+            width: hasError ? 2 : 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(
+            color: hasError ? Colors.red : const Color(0xFF046EB8),
+            width: 2),
+      ),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    );
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      usernameError = false;
+      passwordError = false;
+    });
+
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
     if (username.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter both username and password.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() {
+        usernameError = username.isEmpty;
+        passwordError = password.isEmpty;
+      });
+      _showSnackBar('Please enter both username and password.', Colors.red);
       return;
     }
 
-    // Navigate to admin dashboard (no API validation for now)
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const AdminDashboard()),
+    setState(() => _isLoading = true);
+    LoadingHelper.showLoadingPage(context, message: 'Logging in...');
+
+    final result = await _api.login(username, password);
+
+    if (!mounted) return;
+
+    LoadingHelper.hideLoading(context);
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      // Merge the token into adminData so every admin page can use it for auth
+      final adminData = <String, dynamic>{
+        ...?result['admin'] as Map<String, dynamic>?,
+        'token': result['token'],
+      };
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AdminDashboard(
+            adminData: adminData,
+          ),
+        ),
+      );
+    } else {
+      setState(() {
+        usernameError = true;
+        passwordError = true;
+      });
+      _showSnackBar(
+        result['message'] ?? 'Login failed. Please try again.',
+        Colors.red,
+      );
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontFamily: 'Poppins')),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 
@@ -59,46 +134,65 @@ class _AdminLoginPageState extends State<AdminLoginPage>
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
+    // Same proportions as the player-side login screen.
+    final formWidth = _isMobile
+        ? screenWidth * 0.79
+        : (screenWidth * 0.38).clamp(306.0, 414.0);
+
     return Scaffold(
       backgroundColor: const Color(0xFF94D2FD),
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Colors.white,
+        toolbarHeight: 48,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Left side: Logo
             Image.asset(
-              "assets/images-logo/starbookslogo.png",
-              height: 50,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(
-                  Icons.book,
-                  size: 50,
-                  color: Color(0xFF046EB8),
-                );
-              },
+              "assets/images-logo/newhomepagelogo.png",
+              height: 38,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (_, __, ___) =>
+              const Icon(Icons.book, size: 38, color: Color(0xFF046EB8)),
             ),
-
-            // Right side: Player icon + text
-            InkWell(
-              onTap: () {
-                Navigator.pop(context);
-              },
-              child: Row(
-                children: const [
-                  Icon(Icons.person, color: Color(0xFF046EB8)),
-                  SizedBox(width: 5),
-                  Text(
-                    "PLAYER",
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: Color(0xFF046EB8),
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: InkWell(
+                onTap: () {
+                  // Plain pop() assumes LoginScreen is still sitting under us
+                  // on the stack. That's true when you arrived here via the
+                  // normal "ADMIN" button (login.dart pushes AdminAuthGate on
+                  // top of itself). It's NOT true after a page refresh while
+                  // already logged in as admin — main.dart boots straight
+                  // into AdminAuthGate in that case, making this the root
+                  // route with nothing beneath it, and pop() would land on a
+                  // blank screen. Fall back to opening the player login
+                  // directly whenever there's nothing real to pop back to.
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.pop(context);
+                  } else {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                  }
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.person,
+                        color: const Color(0xFF046EB8),
+                        size: _isMobile ? 20 : 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      "PLAYER",
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w700,
+                        fontSize: _isMobile ? 15 : 12,
+                        color: const Color(0xFF046EB8),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -106,201 +200,203 @@ class _AdminLoginPageState extends State<AdminLoginPage>
       ),
       body: Stack(
         children: [
-          // Animated background
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              final offset = (_controller.value * screenWidth);
-              return Stack(
-                children: [
-                  Positioned(
-                    left: offset % screenWidth - screenWidth,
-                    top: 0,
-                    child: Image.asset(
-                      "assets/images-icons/background1.png",
-                      width: screenWidth,
-                      height: screenHeight,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: screenWidth,
-                          height: screenHeight,
-                          color: const Color(0xFF94D2FD),
-                        );
-                      },
-                    ),
-                  ),
-                  Positioned(
-                    left: offset % screenWidth,
-                    top: 0,
-                    child: Image.asset(
-                      "assets/images-icons/background1.png",
-                      width: screenWidth,
-                      height: screenHeight,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: screenWidth,
-                          height: screenHeight,
-                          color: const Color(0xFF94D2FD),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              );
-            },
+          Positioned.fill(
+            child: Image.asset(
+              "assets/images-icons/background1.png",
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
+            ),
           ),
-
-          // Login UI
+          // Centered content
           Align(
-            alignment: Alignment.topCenter,
+            alignment: Alignment.center,
             child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 60),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Starbooks Quiz Logo
-                    Image.asset(
-                      "assets/images-logo/starbookslogin.png",
-                      height: 170,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          height: 170,
-                          width: 200,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'STARBOOKS\nQUIZ',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 32,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF046EB8),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Login Form Container
-                    Container(
-                      width: 380,
-                      padding: const EdgeInsets.all(28.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    "assets/images-logo/newloginlogo.png",
+                    height: (screenHeight * 0.20).clamp(117.0, 216.0),
+                    filterQuality: FilterQuality.high,
+                    isAntiAlias: true,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: (screenHeight * 0.20).clamp(117.0, 216.0),
+                      width: 200,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
+                        color: Colors.white.withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Title
-                          const Text(
-                            "Admin",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF046EB8),
-                            ),
+                      child: const Center(
+                        child: Text(
+                          'STARBOOKS\nQUIZ',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF046EB8),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            "Log In",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.black54,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
 
-                          // Username Field
-                          TextField(
-                            controller: _usernameController,
-                            decoration: InputDecoration(
-                              labelText: "Username",
-                              labelStyle: const TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 12,
-                              ),
-                              prefixIcon: const Icon(Icons.person),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF046EB8),
-                                  width: 2,
+                  // Login form
+                  Container(
+                    width: formWidth,
+                    padding: EdgeInsets.all(_isMobile ? 18 : 25),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Admin",
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: _isMobile ? 18 : 20,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF046EB8),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Log In",
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: _isMobile ? 12 : 13,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        SizedBox(height: _isMobile ? 14 : 18),
+
+                        // Username field
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: _usernameController,
+                              onSubmitted: (_) => _login(),
+                              style: const TextStyle(
+                                  fontFamily: 'Poppins', fontSize: 12),
+                              decoration: _inputDecoration(
+                                  "Username", Icons.person,
+                                  hasError: usernameError),
+                            ),
+                            if (usernameError) _buildErrorMessage('Required'),
+                          ],
+                        ),
+
+                        SizedBox(height: _isMobile ? 10 : 13),
+
+                        // Password field
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: _passwordController,
+                              onSubmitted: (_) => _login(),
+                              obscureText: _obscurePassword,
+                              style: const TextStyle(
+                                  fontFamily: 'Poppins', fontSize: 12),
+                              decoration: _inputDecoration(
+                                "Password", Icons.lock,
+                                hasError: passwordError,
+                                suffixIcon: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                      size: 18,
+                                      color: passwordError ? Colors.red : null,
+                                    ),
+                                    onPressed: () => setState(() =>
+                                        _obscurePassword = !_obscurePassword),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 15),
+                            if (passwordError) _buildErrorMessage('Required'),
+                          ],
+                        ),
 
-                          // Password Field
-                          TextField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            decoration: InputDecoration(
-                              labelText: "Password",
-                              labelStyle: const TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 12,
-                              ),
-                              prefixIcon: const Icon(Icons.lock),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF046EB8),
-                                  width: 2,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 30),
+                        SizedBox(height: _isMobile ? 20 : 26),
 
-                          // Login Button
-                          SizedBox(
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _login,
+                              onPressed: _isLoading ? null : _login,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFDD000),
                                 foregroundColor: const Color(0xFF816A03),
-                                textStyle: const TextStyle(
+                                disabledBackgroundColor:
+                                const Color(0xFFFDD000).withValues(alpha: 0.6),
+                                padding: EdgeInsets.symmetric(
+                                    vertical: _isMobile ? 11 : 13),
+                                textStyle: TextStyle(
                                   fontFamily: 'Poppins',
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 14,
+                                  fontSize: _isMobile ? 13 : 14,
                                 ),
                               ),
                               child: const Text("LOG IN"),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Error indicator widget — same style as the player-side login ─────────
+  Widget _buildErrorMessage(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: const BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Text(
+                '!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
                 ),
               ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Colors.red,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

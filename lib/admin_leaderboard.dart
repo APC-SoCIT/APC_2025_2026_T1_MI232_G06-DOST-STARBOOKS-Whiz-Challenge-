@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:js_interop';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:web/web.dart' as web;
+import 'config.dart';
 
 class AdminLeaderboard extends StatefulWidget {
   const AdminLeaderboard({super.key});
@@ -15,179 +17,130 @@ class AdminLeaderboard extends StatefulWidget {
 
 class _AdminLeaderboardState extends State<AdminLeaderboard> {
   String selectedMode = "challenge";
+  bool _isLoading = true;
+  String? _loadError;
 
-  // Leaderboard data
-  final List<Map<String, dynamic>> challengeData = [
-    {
-      "username": "ronald",
-      "avatar": "assets/images-avatars/Brainy.png",
-      "totalRewards": 12,
-      "easy": 6,
-      "avg": 3,
-      "diff": 3,
-      "last": "05/23/2025 15:45",
-      "status": "claimed",
-    },
-    {
-      "username": "carla",
-      "avatar": "assets/images-avatars/Girl.png",
-      "totalRewards": 11,
-      "easy": 6,
-      "avg": 2,
-      "diff": 1,
-      "last": "05/23/2025 15:45",
-      "status": "pending",
-    },
-    {
-      "username": "clarisse",
-      "avatar": "assets/images-avatars/Twirky.png",
-      "totalRewards": 9,
-      "easy": 3,
-      "avg": 3,
-      "diff": 3,
-      "last": "05/23/2025 15:45",
-      "status": "claimed",
-    },
-    {
-      "username": "robert",
-      "avatar": "assets/images-avatars/Sneaky-Snake.png",
-      "totalRewards": 8,
-      "easy": 4,
-      "avg": 2,
-      "diff": 2,
-      "last": "05/23/2025 15:45",
-      "status": "pending",
-    },
-    {
-      "username": "jerome",
-      "avatar": "assets/images-avatars/Brainy.png",
-      "totalRewards": 7,
-      "easy": 4,
-      "avg": 2,
-      "diff": 1,
-      "last": "05/23/2025 15:45",
-      "status": "claimed",
-    },
-    {
-      "username": "ariel",
-      "avatar": "assets/images-avatars/Twirky.png",
-      "totalRewards": 5,
-      "easy": 3,
-      "avg": 2,
-      "diff": 0,
-      "last": "05/23/2025 15:45",
-      "status": "pending",
-    },
-    {
-      "username": "hannah",
-      "avatar": "assets/images-avatars/Girl.png",
-      "totalRewards": 4,
-      "easy": 2,
-      "avg": 2,
-      "diff": 0,
-      "last": "05/23/2025 15:45",
-      "status": "claimed",
-    },
-    {
-      "username": "rico",
-      "avatar": "assets/images-avatars/Sneaky-Snake.png",
-      "totalRewards": 3,
-      "easy": 2,
-      "avg": 1,
-      "diff": 0,
-      "last": "05/23/2025 15:45",
-      "status": "pending",
-    },
-    {
-      "username": "marie",
-      "avatar": "assets/images-avatars/Astronaut.png",
-      "totalRewards": 3,
-      "easy": 3,
-      "avg": 0,
-      "diff": 0,
-      "last": "05/23/2025 15:45",
-      "status": "claimed",
-    },
-    {
-      "username": "jude",
-      "avatar": "assets/images-avatars/Astronaut.png",
-      "totalRewards": 2,
-      "easy": 1,
-      "avg": 1,
-      "diff": 0,
-      "last": "05/23/2025 15:45",
-      "status": "pending",
-    },
-  ];
+  // Leaderboard data — fetched live from the backend in _fetchLeaderboards().
+  // Badges tab -> GET /api/leaderboard?mode=challenge  (LeaderboardController)
+  // Stars tab  -> GET /api/stars/leaderboard           (StarsController)
+  // These previously were hardcoded mock lists (ronald/carla/clarisse/etc.)
+  // that never talked to the backend at all — _refreshData() even had a
+  // comment admitting "in a real app, you'd fetch from backend."
+  List<Map<String, dynamic>> challengeData = [];
+  List<Map<String, dynamic>> battleData = [];
 
-  final List<Map<String, dynamic>> battleData = [
-    {
-      "username": "leo",
-      "avatar": "assets/images-avatars/Twirky.png",
-      "rewards": 1500,
-      "easy": 7,
-      "avg": 4,
-      "diff": 4,
-      "last": "05/23/2025 15:45",
-      "status": "claimed",
-    },
-    {
-      "username": "mia",
-      "avatar": "assets/images-avatars/Whiz-Busy.png",
-      "rewards": 1200,
-      "easy": 4,
-      "avg": 3,
-      "diff": 3,
-      "last": "05/23/2025 15:45",
-      "status": "pending",
-    },
-    {
-      "username": "alex",
-      "avatar": "assets/images-avatars/Brainy.png",
-      "rewards": 1050,
-      "easy": 5,
-      "avg": 3,
-      "diff": 2,
-      "last": "05/22/2025 18:30",
-      "status": "claimed",
-    },
-    {
-      "username": "sarah",
-      "avatar": "assets/images-avatars/Girl.png",
-      "rewards": 890,
-      "easy": 4,
-      "avg": 2,
-      "diff": 2,
-      "last": "05/22/2025 14:15",
-      "status": "pending",
-    },
-    {
-      "username": "david",
-      "avatar": "assets/images-avatars/Sneaky-Snake.png",
-      "rewards": 750,
-      "easy": 3,
-      "avg": 2,
-      "diff": 1,
-      "last": "05/21/2025 20:45",
-      "status": "claimed",
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchLeaderboards();
+  }
+
+  Future<void> _fetchLeaderboards() async {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        http
+            .get(Uri.parse('${AppConfig.baseUrl}/leaderboard?mode=challenge&limit=100'),
+                headers: {'Accept': 'application/json'})
+            .timeout(const Duration(seconds: 10)),
+        http
+            .get(Uri.parse('${AppConfig.baseUrl}/stars/leaderboard?limit=100'),
+                headers: {'Accept': 'application/json'})
+            .timeout(const Duration(seconds: 10)),
+      ]);
+
+      final badgesRes = results[0];
+      final starsRes = results[1];
+
+      List<Map<String, dynamic>> newChallengeData = [];
+      List<Map<String, dynamic>> newBattleData = [];
+
+      if (badgesRes.statusCode == 200) {
+        final body = json.decode(badgesRes.body) as Map<String, dynamic>;
+        if (body['success'] == true) {
+          final users = (body['users'] as List<dynamic>? ?? []);
+          newChallengeData = users.map((u) {
+            final m = u as Map<String, dynamic>;
+            return {
+              "username": m['username']?.toString() ?? 'Player',
+              "avatar": (m['avatar']?.toString().isNotEmpty ?? false)
+                  ? m['avatar'].toString()
+                  : 'assets/images-avatars/Brainy.png',
+              "totalRewards": m['total_badges'] ?? 0,
+              "easy": m['easy_count'] ?? 0,
+              "avg": m['average_count'] ?? 0,
+              "diff": m['difficult_count'] ?? 0,
+              // Not tracked by this endpoint — badge counts don't carry a
+              // per-claim timestamp on the backend yet.
+              "last": "",
+            };
+          }).toList();
+        }
+      }
+
+      if (starsRes.statusCode == 200) {
+        final body = json.decode(starsRes.body) as Map<String, dynamic>;
+        if (body['success'] == true) {
+          final data = (body['data'] as List<dynamic>? ?? []);
+          newBattleData = data.map((u) {
+            final m = u as Map<String, dynamic>;
+            return {
+              "username": m['username']?.toString() ?? 'Player',
+              "avatar": (m['avatar']?.toString().isNotEmpty ?? false)
+                  ? m['avatar'].toString()
+                  : 'assets/images-avatars/Brainy.png',
+              "rewards": m['stars'] ?? 0,
+              "easy": 0,
+              "avg": 0,
+              "diff": 0,
+              // Not tracked by this endpoint — stars totals don't carry a
+              // last-updated timestamp on the backend yet.
+              "last": "",
+              "status": m['tier']?.toString() ?? '',
+            };
+          }).toList();
+        }
+      }
+
+      if (badgesRes.statusCode != 200 || starsRes.statusCode != 200) {
+        _loadError =
+            'Server error (Badges: HTTP ${badgesRes.statusCode}, Stars: HTTP ${starsRes.statusCode}).';
+      }
+
+      setState(() {
+        challengeData = newChallengeData;
+        battleData = newBattleData;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _loadError =
+            'Could not reach the server. Check that the API is running and reachable at ${AppConfig.baseUrl}.';
+      });
+    }
+  }
 
   List<Map<String, dynamic>> get leaderboardData {
     return selectedMode == "challenge" ? challengeData : battleData;
   }
 
-  void _refreshData() {
-    setState(() {
-      // Reload the data (in a real app, you'd fetch from backend)
-    });
+  void _refreshData() async {
+    await _fetchLeaderboards();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Leaderboard data refreshed'),
+        content: Text(_loadError == null
+            ? 'Leaderboard data refreshed'
+            : 'Refresh failed: $_loadError'),
         duration: const Duration(seconds: 2),
-        backgroundColor: const Color(0xFF27AE60),
+        backgroundColor: _loadError == null ? const Color(0xFF27AE60) : Colors.red,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.4)),
       ),
     );
   }
@@ -206,14 +159,14 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
           return Dialog(
             backgroundColor: Colors.transparent,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12.8),
             ),
             child: Container(
-              width: 400,
-              padding: const EdgeInsets.all(24),
+              width: 320,
+              padding: const EdgeInsets.all(19.2),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12.8),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -224,35 +177,35 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                      fontSize: 14.4,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6.4),
                   const Text(
                     'Select which leaderboard(s) to export',
                     style: TextStyle(
                       fontFamily: 'Poppins',
-                      fontSize: 13,
+                      fontSize: 10.4,
                       color: Colors.black54,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Text(
                     'Select Leaderboard',
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                      fontSize: 11.2,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 9.6),
                   CheckboxListTile(
                     title: const Text(
                       'Select All',
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                        fontSize: 11.2,
                       ),
                     ),
                     value: selectAll,
@@ -269,7 +222,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   CheckboxListTile(
                     title: const Text(
                       'Badges',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.2),
                     ),
                     secondary: const Icon(
                       Icons.emoji_events,
@@ -289,11 +242,11 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   CheckboxListTile(
                     title: const Text(
                       'Stars',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.2),
                     ),
                     secondary: const Icon(
-                      Icons.sports_esports,
-                      color: Color(0xFF046EB8),
+                      Icons.star,
+                      color: Color(0xFFFDD000),
                     ),
                     value: selectedLeaderboards['battle'],
                     onChanged: (value) {
@@ -307,60 +260,60 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                     activeColor: const Color(0xFF046EB8),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Text(
                     'Export Format',
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                      fontSize: 11.2,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 9.6),
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _performExportFromDialog(selectedLeaderboards, 'CSV', context),
-                          icon: const Icon(Icons.table_chart, size: 18),
-                          label: const Text('CSV', style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                          icon: const Icon(Icons.table_chart, size: 14.4),
+                          label: const Text('CSV', style: TextStyle(fontFamily: 'Poppins', fontSize: 10.4)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF046EB8),
                             side: const BorderSide(color: Color(0xFF046EB8)),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(24),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6.4),
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _performExportFromDialog(selectedLeaderboards, 'Excel', context),
-                          icon: const Icon(Icons.grid_on, size: 18),
-                          label: const Text('Excel', style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                          icon: const Icon(Icons.grid_on, size: 14.4),
+                          label: const Text('Excel', style: TextStyle(fontFamily: 'Poppins', fontSize: 10.4)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF046EB8),
                             side: const BorderSide(color: Color(0xFF046EB8)),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(24),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6.4),
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _performExportFromDialog(selectedLeaderboards, 'PDF', context),
-                          icon: const Icon(Icons.picture_as_pdf, size: 18),
-                          label: const Text('PDF', style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                          icon: const Icon(Icons.picture_as_pdf, size: 14.4),
+                          label: const Text('PDF', style: TextStyle(fontFamily: 'Poppins', fontSize: 10.4)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF046EB8),
                             side: const BorderSide(color: Color(0xFF046EB8)),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(24),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
@@ -368,7 +321,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
@@ -378,17 +331,17 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: const BorderSide(
                               color: Color(0xFF046EB8),
-                              width: 1,
+                              width: 0.8,
                             ),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(16),
                             ),
                           ),
                           child: const Text(
                             'Cancel',
                             style: TextStyle(
                               fontFamily: 'Poppins',
-                              fontSize: 14,
+                              fontSize: 11.2,
                               color: Color(0xFF046EB8),
                             ),
                           ),
@@ -420,7 +373,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
           ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.4)),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -446,10 +399,10 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.8)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: 320,
+          padding: const EdgeInsets.all(19.2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,19 +412,19 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                  fontSize: 14.4,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6.4),
               Text(
                 'Exporting ${_getLeaderboardLabel(leaderboardType)}',
                 style: const TextStyle(
                   fontFamily: 'Poppins',
-                  fontSize: 13,
+                  fontSize: 10.4,
                   color: Colors.black54,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Column(
                 children: [
                   ListTile(
@@ -481,7 +434,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                     ),
                     title: const Text(
                       'Export as CSV',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.2),
                     ),
                     onTap: () {
                       _performExport('CSV', leaderboardType);
@@ -494,7 +447,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                     ),
                     title: const Text(
                       'Export as Excel',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.2),
                     ),
                     onTap: () {
                       _performExport('Excel', leaderboardType);
@@ -507,7 +460,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                     ),
                     title: const Text(
                       'Export as PDF',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.2),
                     ),
                     onTap: () {
                       _performExport('PDF', leaderboardType);
@@ -515,7 +468,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
@@ -525,17 +478,17 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         side: const BorderSide(
                           color: Color(0xFF046EB8),
-                          width: 1,
+                          width: 0.8,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                       child: const Text(
                         'Cancel',
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 14,
+                          fontSize: 11.2,
                           color: Color(0xFF046EB8),
                         ),
                       ),
@@ -600,7 +553,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
       content: Text(message, style: const TextStyle(fontFamily: 'Poppins')),
       backgroundColor: const Color(0xFF27AE60),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.4)),
       duration: const Duration(seconds: 3),
     ));
   }
@@ -614,13 +567,12 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
 
     if (leaderboardType == 'challenge' || leaderboardType == 'both') {
       buffer.writeln('"=== BADGES LEADERBOARD ==="');
-      buffer.writeln('"Rank","Username","Total Rewards","Easy","Average","Difficult","Last Claim","Status"');
+      buffer.writeln('"Rank","Username","Total Badges","Easy","Average","Difficult"');
       for (int i = 0; i < challengeData.length; i++) {
         final p = challengeData[i];
         buffer.writeln(
           '"${i + 1}","${p['username']}","${p['totalRewards']}",'
-              '"${p['easy']}","${p['avg']}","${p['diff']}",'
-              '"${p['last']}","${p['status']}"',
+              '"${p['easy']}","${p['avg']}","${p['diff']}"',
         );
       }
       buffer.writeln();
@@ -628,12 +580,12 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
 
     if (leaderboardType == 'battle' || leaderboardType == 'both') {
       buffer.writeln('"=== STARS LEADERBOARD ==="');
-      buffer.writeln('"Rank","Username","Total Stars","Last Updated","Status"');
+      buffer.writeln('"Rank","Username","Total Stars","Status"');
       for (int i = 0; i < battleData.length; i++) {
         final p = battleData[i];
         buffer.writeln(
           '"${i + 1}","${p['username']}","${p['rewards']}",'
-              '"${p['last']}","${p['status']}"',
+              '"${p['status']}"',
         );
       }
       buffer.writeln();
@@ -681,13 +633,12 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
 
     if (leaderboardType == 'challenge' || leaderboardType == 'both') {
       addSectionTitle('BADGES LEADERBOARD');
-      addHeaderRow(['Rank', 'Username', 'Total Rewards', 'Easy', 'Average', 'Difficult', 'Last Claim', 'Status']);
+      addHeaderRow(['Rank', 'Username', 'Total Badges', 'Easy', 'Average', 'Difficult']);
       for (int i = 0; i < challengeData.length; i++) {
         final p = challengeData[i];
         addDataRow([
           '${i + 1}', '${p['username']}', '${p['totalRewards']}',
           '${p['easy']}', '${p['avg']}', '${p['diff']}',
-          '${p['last']}', '${p['status']}',
         ]);
       }
       addBlankRow();
@@ -695,12 +646,12 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
 
     if (leaderboardType == 'battle' || leaderboardType == 'both') {
       addSectionTitle('STARS LEADERBOARD');
-      addHeaderRow(['Rank', 'Username', 'Total Stars', 'Last Updated', 'Status']);
+      addHeaderRow(['Rank', 'Username', 'Total Stars', 'Status']);
       for (int i = 0; i < battleData.length; i++) {
         final p = battleData[i];
         addDataRow([
           '${i + 1}', '${p['username']}', '${p['rewards']}',
-          '${p['last']}', '${p['status']}',
+          '${p['status']}',
         ]);
       }
     }
@@ -757,28 +708,28 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
             padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: pw.BoxDecoration(
               color: primaryColor,
-              borderRadius: pw.BorderRadius.circular(4),
+              borderRadius: pw.BorderRadius.circular(3.2),
             ),
             child: pw.Text(
               title,
               style: pw.TextStyle(
-                fontSize: 10,
+                fontSize: 8,
                 fontWeight: pw.FontWeight.bold,
                 color: PdfColors.white,
               ),
             ),
           ),
-          pw.SizedBox(height: 6),
+          pw.SizedBox(height: 4.8),
           // Table header row
           pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.4),
             columnWidths: {for (int i = 0; i < headers.length; i++) i: const pw.FlexColumnWidth()},
             children: [
               pw.TableRow(
                 decoration: pw.BoxDecoration(color: hexToPdf(0xFFE8F4FD)),
                 children: headers.map((h) => pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-                  child: pw.Text(h, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                  child: pw.Text(h, style: pw.TextStyle(fontSize: 6.4, fontWeight: pw.FontWeight.bold, color: primaryColor)),
                 )).toList(),
               ),
               ...rows.asMap().entries.map((entry) {
@@ -789,7 +740,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   ),
                   children: entry.value.map((cell) => pw.Padding(
                     padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    child: pw.Text(cell, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                    child: pw.Text(cell, style: const pw.TextStyle(fontSize: 6.4, color: PdfColors.grey800)),
                   )).toList(),
                 );
               }),
@@ -801,41 +752,41 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
 
     pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(24),
+      margin: const pw.EdgeInsets.all(19.2),
       build: (ctx) => [
         // Report header
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: pw.BoxDecoration(
             color: primaryColor,
-            borderRadius: pw.BorderRadius.circular(8),
+            borderRadius: pw.BorderRadius.circular(6.4),
           ),
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
                 'Starbooks Whiz Challenge',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                style: pw.TextStyle(fontSize: 11.2, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
               ),
               pw.Text(
                 'Leaderboard Report',
-                style: const pw.TextStyle(fontSize: 10, color: PdfColors.white),
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.white),
               ),
             ],
           ),
         ),
-        pw.SizedBox(height: 4),
+        pw.SizedBox(height: 3.2),
         pw.Text(
           'Generated: ${DateTime.now().toString().substring(0, 19)}',
-          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+          style: const pw.TextStyle(fontSize: 6.4, color: PdfColors.grey),
         ),
-        pw.SizedBox(height: 20),
+        pw.SizedBox(height: 16),
 
         // Badges table
         if (leaderboardType == 'challenge' || leaderboardType == 'both') ...[
           buildTable(
             title: 'BADGES LEADERBOARD',
-            headers: ['Rank', 'Username', 'Total', 'Easy', 'Avg', 'Difficult', 'Last Claim', 'Status'],
+            headers: ['Rank', 'Username', 'Total Badges', 'Easy', 'Avg', 'Difficult'],
             rows: challengeData.asMap().entries.map((e) => [
               '${e.key + 1}',
               '${e.value['username']}',
@@ -843,23 +794,20 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
               '${e.value['easy']}',
               '${e.value['avg']}',
               '${e.value['diff']}',
-              '${e.value['last']}',
-              '${e.value['status']}',
             ]).toList(),
           ),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 16),
         ],
 
         // Stars table
         if (leaderboardType == 'battle' || leaderboardType == 'both')
           buildTable(
             title: 'STARS LEADERBOARD',
-            headers: ['Rank', 'Username', 'Stars', 'Last Updated', 'Status'],
+            headers: ['Rank', 'Username', 'Stars', 'Status'],
             rows: battleData.asMap().entries.map((e) => [
               '${e.key + 1}',
               '${e.value['username']}',
               '${e.value['rewards']}',
-              '${e.value['last']}',
               '${e.value['status']}',
             ]).toList(),
           ),
@@ -879,22 +827,25 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFF94D2FD),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(19.2),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(19.2),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12.8),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
+              blurRadius: 6.4,
               offset: const Offset(0, 2),
             ),
           ],
         ),
-        child: Column(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF046EB8)))
+            : Column(
           children: [
+            if (_loadError != null) _buildLoadErrorBanner(),
             // Top controls with buttons on opposite sides
             LayoutBuilder(builder: (context, topConstraints) {
               final isNarrow = topConstraints.maxWidth < 500;
@@ -907,19 +858,27 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                       children: [
                         Row(children: [
                           _buildModeButton("Badges", "challenge"),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6.4),
                           _buildModeButton("Stars", "battle"),
                         ]),
                         Row(children: [
-                          IconButton(
-                            onPressed: _exportData,
-                            icon: const Icon(Icons.file_upload_outlined, size: 20),
-                            style: IconButton.styleFrom(side: BorderSide(color: Colors.grey.shade300), shape: const CircleBorder()),
-                            tooltip: 'Export Data',
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: TextButton.icon(
+                              onPressed: _exportData,
+                              icon: const Icon(Icons.upload_outlined, size: 12.8, color: Colors.black87),
+                              label: const Text('Export', style: TextStyle(color: Colors.black87, fontSize: 10.4, fontFamily: 'Poppins')),
+                              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8)),
+                            ),
                           ),
+                          const SizedBox(width: 6.4),
                           IconButton(
                             onPressed: _refreshData,
-                            icon: const Icon(Icons.refresh, size: 20),
+                            icon: const Icon(Icons.refresh, size: 16),
                             style: IconButton.styleFrom(side: BorderSide(color: Colors.grey.shade300), shape: const CircleBorder()),
                             tooltip: 'Refresh',
                           ),
@@ -936,26 +895,30 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   Row(
                     children: [
                       _buildModeButton("Badges", "challenge"),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 9.6),
                       _buildModeButton("Stars", "battle"),
                     ],
                   ),
                   // Right side - Action buttons
                   Row(
                     children: [
-                      IconButton(
-                        onPressed: _exportData,
-                        icon: const Icon(Icons.file_upload_outlined, size: 20),
-                        style: IconButton.styleFrom(
-                          side: BorderSide(color: Colors.grey.shade300),
-                          shape: const CircleBorder(),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade300),
                         ),
-                        tooltip: 'Export Data',
+                        child: TextButton.icon(
+                          onPressed: _exportData,
+                          icon: const Icon(Icons.upload_outlined, size: 12.8, color: Colors.black87),
+                          label: const Text('Export', style: TextStyle(color: Colors.black87, fontSize: 10.4, fontFamily: 'Poppins')),
+                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8)),
+                        ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 9.6),
                       IconButton(
                         onPressed: _refreshData,
-                        icon: const Icon(Icons.refresh, size: 20),
+                        icon: const Icon(Icons.refresh, size: 16),
                         style: IconButton.styleFrom(
                           side: BorderSide(color: Colors.grey.shade300),
                           shape: const CircleBorder(),
@@ -967,7 +930,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                 ],
               );
             }),
-            const SizedBox(height: 24),
+            const SizedBox(height: 19.2),
 
             // Table
             Expanded(
@@ -985,31 +948,31 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                         color: Colors.grey.shade100,
                         border: Border.all(color: Colors.grey.shade300),
                         borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(8),
+                          top: Radius.circular(6.4),
                         ),
                       ),
                       child: selectedMode == "challenge"
                           ? Row(
                         children: const [
-                          SizedBox(width: 50),
+                          SizedBox(width: 40),
                           Expanded(
                             flex: 2,
                             child: Text(
                               "Username",
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 11.2,
                                 fontFamily: 'Poppins',
                               ),
                             ),
                           ),
                           Expanded(
                             child: Text(
-                              "Total Rewards",
+                              "Total Badges",
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 11.2,
                                 fontFamily: 'Poppins',
                               ),
                             ),
@@ -1020,7 +983,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 11.2,
                                 fontFamily: 'Poppins',
                                 color: Color(0xFF27AE60),
                               ),
@@ -1032,7 +995,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 11.2,
                                 fontFamily: 'Poppins',
                                 color: Color(0xFF4285F4),
                               ),
@@ -1044,32 +1007,9 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 11.2,
                                 fontFamily: 'Poppins',
                                 color: Color(0xFFE74C3C),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              "Last Claim",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                fontFamily: 'Poppins',
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              "Status",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                fontFamily: 'Poppins',
                               ),
                             ),
                           ),
@@ -1077,14 +1017,14 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                       )
                           : Row(
                         children: const [
-                          SizedBox(width: 50),
+                          SizedBox(width: 40),
                           Expanded(
                             flex: 2,
                             child: Text(
                               "Username",
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 11.2,
                                 fontFamily: 'Poppins',
                               ),
                             ),
@@ -1095,19 +1035,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                fontFamily: 'Poppins',
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              "Last Updated",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 11.2,
                                 fontFamily: 'Poppins',
                               ),
                             ),
@@ -1126,10 +1054,26 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                             bottom: BorderSide(color: Colors.grey.shade300),
                           ),
                           borderRadius: const BorderRadius.vertical(
-                            bottom: Radius.circular(8),
+                            bottom: Radius.circular(6.4),
                           ),
                         ),
-                        child: ListView.builder(
+                        child: leaderboardData.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Text(
+                                    selectedMode == "challenge"
+                                        ? 'No players with badges yet.'
+                                        : 'No star rankings yet.',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 11.2,
+                                      color: Colors.black38,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
                           itemCount: leaderboardData.length,
                           itemBuilder: (context, index) {
                             final player = leaderboardData[index];
@@ -1161,7 +1105,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                 if (isMobile) {
                   return SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    child: SizedBox(width: 680, child: tableContent),
+                    child: SizedBox(width: 544, child: tableContent),
                   );
                 }
                 return tableContent;
@@ -1182,11 +1126,11 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
           child: Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF046EB8), width: 2),
+                  border: Border.all(color: const Color(0xFF046EB8), width: 1.6),
                   color: Colors.grey.shade200,
                 ),
                 child: ClipOval(
@@ -1199,11 +1143,11 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 9.6),
               Text(
                 player["username"],
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 11.2,
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.w500,
                 ),
@@ -1216,7 +1160,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
             "${player["totalRewards"]}",
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 11.2,
               fontFamily: 'Poppins',
               fontWeight: FontWeight.w600,
             ),
@@ -1227,7 +1171,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
             "${player["easy"]}",
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 11.2,
               fontFamily: 'Poppins',
               fontWeight: FontWeight.w600,
             ),
@@ -1238,7 +1182,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
             "${player["avg"]}",
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 11.2,
               fontFamily: 'Poppins',
               fontWeight: FontWeight.w600,
             ),
@@ -1249,40 +1193,9 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
             "${player["diff"]}",
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 11.2,
               fontFamily: 'Poppins',
               fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 2,
-          child: _buildDateTimeCell(player["last"]),
-        ),
-        Expanded(
-          child: Container(
-            alignment: Alignment.center,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: player["status"] == "claimed"
-                    ? const Color(0xFF27AE60).withValues(alpha: 0.1)
-                    : const Color(0xFFF39C12).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                player["status"],
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w600,
-                  color: player["status"] == "claimed"
-                      ? const Color(0xFF27AE60)
-                      : const Color(0xFFF39C12),
-                ),
-              ),
             ),
           ),
         ),
@@ -1299,11 +1212,11 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
           child: Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF046EB8), width: 2),
+                  border: Border.all(color: const Color(0xFF046EB8), width: 1.6),
                   color: Colors.grey.shade200,
                 ),
                 child: ClipOval(
@@ -1316,11 +1229,11 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 9.6),
               Text(
                 player["username"],
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 11.2,
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.w500,
                 ),
@@ -1332,13 +1245,13 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.star, color: Color(0xFFFDD000), size: 18),
-              const SizedBox(width: 4),
+              const Icon(Icons.star, color: Color(0xFFFDD000), size: 14.4),
+              const SizedBox(width: 3.2),
               Text(
                 "${player["rewards"]}",
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 11.2,
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.w600,
                 ),
@@ -1346,11 +1259,39 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
             ],
           ),
         ),
-        Expanded(
-          flex: 2,
-          child: _buildDateTimeCell(player["last"]),
-        ),
       ],
+    );
+  }
+
+  Widget _buildLoadErrorBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFB020).withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFFB25E00), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _loadError ?? '',
+              style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Color(0xFF7A4A00)),
+            ),
+          ),
+          TextButton(
+            onPressed: _fetchLeaderboards,
+            child: const Text(
+              'Retry',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF046EB8)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1363,10 +1304,10 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
         foregroundColor: isSelected ? Colors.white : Colors.black87,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(24),
           side: BorderSide(
             color: isSelected ? const Color(0xFF046EB8) : Colors.grey.shade400,
-            width: 1.5,
+            width: 1.2,
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -1375,7 +1316,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
         label,
         style: const TextStyle(
           fontWeight: FontWeight.w600,
-          fontSize: 14,
+          fontSize: 11.2,
           fontFamily: 'Poppins',
         ),
       ),
@@ -1392,21 +1333,21 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.black87,
         side: BorderSide(color: Colors.grey.shade400),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.4)),
         padding: label != null
             ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
-            : const EdgeInsets.all(10),
+            : const EdgeInsets.all(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18),
+          Icon(icon, size: 14.4),
           if (label != null) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: 4.8),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 10.4,
                 fontWeight: FontWeight.w500,
                 fontFamily: 'Poppins',
               ),
@@ -1446,21 +1387,21 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
             formattedDate,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 10.4,
               fontFamily: 'Poppins',
               fontWeight: FontWeight.w400,
               color: Colors.black87,
             ),
           ),
           if (timePart.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Container(width: 56, height: 1, color: Colors.grey.shade300),
-            const SizedBox(height: 3),
+            const SizedBox(height: 2.4),
+            Container(width: 44.8, height: 0.8, color: Colors.grey.shade300),
+            const SizedBox(height: 2.4),
             Text(
               timePart,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 8.8,
                 fontFamily: 'Poppins',
                 fontWeight: FontWeight.w400,
                 color: Colors.black87,
@@ -1489,17 +1430,17 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
     }
 
     return Container(
-      width: 36,
-      height: 36,
+      width: 28.8,
+      height: 28.8,
       alignment: Alignment.center,
-      margin: const EdgeInsets.only(right: 12),
+      margin: const EdgeInsets.only(right: 9.6),
       decoration: BoxDecoration(
         color: bgColor,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 4,
+            blurRadius: 3.2,
             offset: const Offset(0, 2),
           ),
         ],
@@ -1509,7 +1450,7 @@ class _AdminLeaderboardState extends State<AdminLeaderboard> {
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
-          fontSize: 14,
+          fontSize: 11.2,
           fontFamily: 'Poppins',
         ),
       ),

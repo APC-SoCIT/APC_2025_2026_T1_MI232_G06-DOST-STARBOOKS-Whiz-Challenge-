@@ -1,34 +1,22 @@
 import 'audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
-
-// ─── Brand colours ────────────────────────────────────────────────────────────
-// Homepage blue palette  ↓
-const _navy      = Color(0xFF1560BD);   // main page background – vivid homepage blue
-const _navy2     = Color(0xFF1252A8);   // slightly deeper for headers / profile bar
-const _blue      = Color(0xFF1A6FD4);   // lighter surface accent
-const _gold      = Color(0xFFF7C600);
-const _goldDark  = Color(0xFFE6B400);
-const _easy      = Color(0xFF22C55E);
-const _average   = Color(0xFFF59E0B);
-const _difficult = Color(0xFFEF4444);
-const _purple    = Color(0xFF656BE6);
-const _orange    = Color(0xFFE6833A);
-const _cardBg    = Color(0x18FFFFFF);   // white ~10% — pops more on mid-blue
-const _cardBorder= Color(0x26FFFFFF);   // white ~15%
+import 'leaderboard_constants.dart';
+import 'leaderboard_service.dart';
+import 'leaderboard_widgets.dart';
 
 class Leaderboard extends StatefulWidget {
   final String currentUserId;
   final String userAvatar;
   final String username;
+  final VoidCallback? onBack;
 
   const Leaderboard({
     super.key,
     required this.currentUserId,
     required this.userAvatar,
     required this.username,
+    this.onBack,
   });
 
   @override
@@ -36,437 +24,261 @@ class Leaderboard extends StatefulWidget {
 }
 
 class _LeaderboardState extends State<Leaderboard> {
-  final String baseUrl = "http://localhost:8000";
+  late final LeaderboardService _svc;
 
-  String selectedGame       = "badges";
-  String selectedDifficulty = "EASY";
-  String selectedCategory   = "Solar System";
-  bool   isLoading          = true;
+  // ── Leaderboard table state ─────────────────────────────────────────────────
+  String _selectedGame       = 'badges';
+  String _selectedDifficulty = 'EASY';
+  String _selectedCategory   = 'Solar System';
+  bool   _isLoading          = true;
+  List<Map<String, dynamic>> _rows = [];
 
+  // ── Player stats state ──────────────────────────────────────────────────────
   int    _playerStars    = 0;
   String _playerTier     = 'Beginner';
-  String _playerTierIcon = '⭐';
-
-  Map<String, dynamic>? _memoryMatchStats;
-  Map<String, dynamic>? _puzzleStats;
-
-  List<Map<String, dynamic>> leaderboardData = [];
-
-  int _currentBadgeDifficultyIndex  = 0;
-  int _currentMemoryDifficultyIndex = 0;
-  int _currentPuzzleDifficultyIndex = 0;
-  int _currentPuzzleCategoryIndex   = 0;
-
-  final List<String> _badgeDifficulties        = ['Easy', 'Average', 'Difficult'];
-  final List<String> _gameDifficulties         = ['EASY', 'AVERAGE', 'DIFFICULT'];
-  final List<String> _gameDifficultiesDisplay  = ['Easy', 'Average', 'Difficult'];
-  final List<String> _puzzleCategories = [
-    "Solar System", "Scientists", "The Human Body",
-    "Animals", "Geometry", "Starbooks",
-  ];
-  final List<String> _puzzleCategoriesShort = [
-    'Solar', 'Sci.', 'Body', 'Anim.', 'Geo.', 'Books',
-  ];
 
   Map<String, dynamic> _badgeCounts = {
     'easy_count': 0, 'average_count': 0, 'difficult_count': 0,
   };
 
-  final PageController _badgePageController = PageController();
+  // ── Memory game picker ──────────────────────────────────────────────────────
+  int _memoryDiffIdx = 0;
+  Map<String, dynamic>? _memoryStats;
 
-  // ─── lifecycle ──────────────────────────────────────────────────────────────
+  // ── Puzzle picker ───────────────────────────────────────────────────────────
+  int _puzzleDiffIdx = 0;
+  int _puzzleCatIdx  = 0;
+  Map<String, dynamic>? _puzzleStats;
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _loadLeaderboard();
-    _loadPlayerStars();
-    _loadBadgeData();
-    _loadSidePanelStats();
+    _svc = LeaderboardService(http.Client());
+    _initLoad();
   }
 
   @override
   void dispose() {
-    _badgePageController.dispose();
     super.dispose();
   }
 
-  // ─── data loaders ───────────────────────────────────────────────────────────
-
-  Future<void> _loadPlayerStars() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/players/${widget.currentUserId}/stars'),
-      );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && mounted) {
-          setState(() {
-            _playerStars    = data['data']?['total_stars']             ?? 0;
-            _playerTier     = data['data']?['current_tier']?['tier']   ?? 'Beginner';
-            _playerTierIcon = data['data']?['current_tier']?['icon']   ?? '⭐';
-          });
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error loading player stars: $e');
-    }
+  Future<void> _initLoad() async {
+    await Future.wait([
+      _loadLeaderboard(),
+      _loadPlayerProfile(),
+      _loadMemoryStat(),
+      _loadPuzzleStat(autoSelect: true),
+    ]);
   }
 
-  Future<void> _loadBadgeData() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/players/${widget.currentUserId}/badges'),
-      );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && mounted) {
-          setState(() {
-            _badgeCounts = {
-              'easy_count':      data['easy_count']      ?? 0,
-              'average_count':   data['average_count']   ?? 0,
-              'difficult_count': data['difficult_count'] ?? 0,
-            };
-          });
-        }
+  // ── Data loaders ────────────────────────────────────────────────────────────
+
+  Future<void> _loadPlayerProfile() async {
+    final results = await Future.wait([
+      _svc.fetchPlayerStars(widget.currentUserId),
+      _svc.fetchBadgeCounts(widget.currentUserId),
+    ]);
+
+    final starsData  = results[0];
+    final badgeData  = results[1];
+
+    if (!mounted) return;
+    setState(() {
+      if (starsData != null) {
+        _playerStars = starsData['total_stars']           ?? 0;
+        _playerTier  = starsData['current_tier']?['tier'] ?? 'Beginner';
       }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error loading badge data: $e');
-    }
+      if (badgeData != null) {
+        _badgeCounts = {
+          'easy_count':      badgeData['easy_count']      ?? 0,
+          'average_count':   badgeData['average_count']   ?? 0,
+          'difficult_count': badgeData['difficult_count'] ?? 0,
+        };
+      }
+    });
   }
 
-  Future<void> _loadSidePanelStats() async {
-    await _fetchMemoryMatchStat();
-    await _fetchPuzzleStat();
+  Future<void> _loadMemoryStat() async {
+    final diff = kGameDifficulties[_memoryDiffIdx];
+    final data = await _svc.fetchMemoryMatchStat(widget.currentUserId, diff);
+    if (mounted) setState(() => _memoryStats = data);
   }
 
-  Future<void> _fetchMemoryMatchStat() async {
-    final difficulty = _gameDifficulties[_currentMemoryDifficultyIndex];
-    try {
-      final response = await http.get(Uri.parse(
-        '$baseUrl/api/game/fastest-time/${widget.currentUserId}/memory_match/$difficulty',
-      ));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (mounted) setState(() => _memoryMatchStats = data['data']);
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error loading memory match stat: $e');
-    }
-  }
+  Future<void> _loadPuzzleStat({bool autoSelect = false}) async {
+    final diff = kGameDifficulties[_puzzleDiffIdx];
+    final cat  = kPuzzleCategories[_puzzleCatIdx];
+    final data = await _svc.fetchPuzzleStat(widget.currentUserId, diff, cat);
 
-  Future<void> _fetchPuzzleStat() async {
-    final difficulty = _gameDifficulties[_currentPuzzleDifficultyIndex];
-    final category   = _puzzleCategories[_currentPuzzleCategoryIndex];
-    try {
-      final response = await http.get(Uri.parse(
-        '$baseUrl/api/game/fastest-time/${widget.currentUserId}/puzzle/$difficulty'
-            '?category=${Uri.encodeComponent(category)}',
-      ));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (mounted) setState(() => _puzzleStats = data['data']);
+    if (!mounted) return;
+    setState(() => _puzzleStats = data);
+
+    if (autoSelect && data == null) {
+      // Parallel scan — much faster than the old sequential loop.
+      final best = await _svc.autoFindBestPuzzle(widget.currentUserId);
+      if (best != null && mounted) {
+        setState(() {
+          _puzzleDiffIdx = best.diffIdx;
+          _puzzleCatIdx  = best.catIdx;
+          _puzzleStats   = best.record;
+        });
       }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error loading puzzle stat: $e');
     }
   }
 
   Future<void> _loadLeaderboard() async {
-    setState(() => isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
     try {
-      switch (selectedGame) {
-        case "badges":            await _loadBadgesLeaderboard();      break;
-        case "stars":             await _loadStarsLeaderboard();       break;
-        case "whiz_memory_match":
-        case "whiz_puzzle":       await _loadFastestTimeLeaderboard(); break;
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error loading leaderboard: $e');
+      final data = await _fetchLeaderboardRows();
+      if (mounted) setState(() => _rows = data);
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadBadgesLeaderboard() async {
-    final url = "$baseUrl/api/leaderboard?mode=challenge&limit=20";
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && mounted) {
-          setState(() {
-            leaderboardData =
-                List<Map<String, dynamic>>.from(data['users'] ?? []).take(20).toList();
-          });
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in _loadBadgesLeaderboard: $e');
+  Future<List<Map<String, dynamic>>> _fetchLeaderboardRows() {
+    switch (_selectedGame) {
+      case 'badges': return _svc.fetchBadgesLeaderboard();
+      case 'stars':  return _svc.fetchStarsLeaderboard();
+      default:
+        final gameType = _selectedGame == 'whiz_memory_match'
+            ? 'memory_match'
+            : 'puzzle';
+        return _svc.fetchFastestTimeLeaderboard(
+          gameType:   gameType,
+          difficulty: _selectedDifficulty,
+          category:   gameType == 'puzzle' ? _selectedCategory : null,
+        );
     }
   }
 
-  Future<void> _loadStarsLeaderboard() async {
-    final url = "$baseUrl/api/stars/leaderboard?limit=20";
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && mounted) {
-          setState(() {
-            leaderboardData =
-                List<Map<String, dynamic>>.from(data['data'] ?? []).take(20).toList();
-          });
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in _loadStarsLeaderboard: $e');
-    }
-  }
-
-  Future<void> _loadFastestTimeLeaderboard() async {
-    final gameType = selectedGame == "whiz_memory_match" ? "memory_match" : "puzzle";
-    String url =
-        "$baseUrl/api/game/fastest-times/leaderboard?game_type=$gameType&difficulty=$selectedDifficulty&limit=50";
-    if (gameType == "puzzle") {
-      url += "&category=${Uri.encodeComponent(selectedCategory)}";
-    }
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && mounted) {
-          setState(() {
-            leaderboardData = List<Map<String, dynamic>>.from(data['data'] ?? []);
-          });
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in _loadFastestTimeLeaderboard: $e');
-    }
-  }
-
-  // ─── helpers ────────────────────────────────────────────────────────────────
-
-  String _extractId(dynamic idValue) {
-    if (idValue is Map) {
-      if (idValue.containsKey('\$oid')) return idValue['\$oid'].toString();
-      if (idValue.containsKey('oid'))  return idValue['oid'].toString();
-    }
-    return idValue?.toString() ?? '';
-  }
+  // ── Helpers ─────────────────────────────────────────────────────────────────
 
   String _formatTime(int? seconds) {
     if (seconds == null) return '--:--';
-    final mins = seconds ~/ 60;
-    final secs = seconds % 60;
-    return "${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  Color _getCurrentGameColor() {
-    switch (selectedGame) {
-      case "badges":            return _gold;
-      case "stars":             return _average;
-      case "whiz_memory_match": return _purple;
-      case "whiz_puzzle":       return _orange;
-      default:                  return _gold;
-    }
+  Color _accentColor() => gameColor(_selectedGame);
+
+  Future<void> _playClick() async {
+    try { await AudioService().playClickSound(); } catch (_) {}
   }
 
-  Color _getButtonColor(String gameId) {
-    switch (gameId) {
-      case "badges":            return _gold;
-      case "stars":             return _average;
-      case "whiz_memory_match": return _purple;
-      case "whiz_puzzle":       return _orange;
-      default:                  return _gold;
-    }
-  }
-
-  String _getBadgeImagePath(int _) {
-    switch (_currentBadgeDifficultyIndex) {
-      case 0:  return 'assets/images-badges/whiz-ready.png';
-      case 1:  return 'assets/images-badges/whiz-happy.png';
-      case 2:  return 'assets/images-badges/whiz-achiever.png';
-      default: return 'assets/images-badges/whiz-ready.png';
-    }
-  }
-
-  int _getBadgeCount() {
-    switch (_currentBadgeDifficultyIndex) {
-      case 0:  return _badgeCounts['easy_count']      ?? 0;
-      case 1:  return _badgeCounts['average_count']   ?? 0;
-      case 2:  return _badgeCounts['difficult_count'] ?? 0;
-      default: return 0;
-    }
-  }
-
-  // ─── build ──────────────────────────────────────────────────────────────────
+  // ── Root build ──────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    final isNarrow = w < 600;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF1560BD),   // exact homepage blue
+      backgroundColor: kNavy,
       body: SafeArea(
-        child: Row(
-          children: [
-            Expanded(flex: 7, child: _buildRankingsPanel()),
-            Expanded(flex: 3, child: _buildUserStatsPanel()),
-          ],
-        ),
+        child: isNarrow
+            ? Column(
+                children: [
+                  _buildHeader(),
+                  _buildMobileStatsPanel(),
+                  Expanded(child: _buildRankingsPanel()),
+                ],
+              )
+            : Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _buildRankingsPanel()),
+                        SizedBox(
+                          width: w < 900 ? w * 0.36 : 340,
+                          child: Align(
+                              alignment: Alignment.topCenter,
+                              child: _buildStatsPanel()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Column(children: const [
+            Text('LEADERBOARD',
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.2),
+                textAlign: TextAlign.center),
+            SizedBox(height: 2),
+            Text('See how you rank against other Whiz Champions!',
+                style: TextStyle(fontSize: 11, color: Color(0x99FFFFFF)),
+                textAlign: TextAlign.center),
+          ]),
+          if (isNarrow && widget.onBack != null)
+            Positioned(
+              left: 0,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white),
+                tooltip: 'Back to Home',
+                onPressed: widget.onBack,
+              ),
+            ),
+        ],
       ),
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // LEFT – Rankings panel
+  // Rankings panel (left)
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildRankingsPanel() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Page header ──────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-          child: Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'LEADERBOARD',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  Text(
-                    'See how you rank against other Whiz Champions!',
-                    style: TextStyle(fontSize: 12, color: Color(0x99FFFFFF)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // ── Main card ────────────────────────────────────────────────────────
         Expanded(
           child: Container(
-            margin: const EdgeInsets.fromLTRB(24, 0, 16, 24),
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-            ),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                    color: const Color(0xFFE2E8F0), width: 1.5)),
             child: Column(
               children: [
-                // ── Tabs + refresh ──────────────────────────────────────────
+                _buildRankingsToolbar(),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Wrap(
-                        spacing: 8, runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          _buildGameButton("🏅  Badges", "badges"),
-                          _buildGameButton("⭐  Stars",  "stars"),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          _buildFilterDropdowns(),
-                          const SizedBox(width: 4),
-                          Tooltip(
-                            message: 'Refresh',
-                            child: MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(10),
-                                onTap: () async {
-                                  try { await AudioService().playClickSound(); } catch (_) {}
-                                  _loadLeaderboard();
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Refreshing leaderboard…'),
-                                        duration: Duration(seconds: 1),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: Container(
-                                  width: 36, height: 36,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(Icons.refresh_rounded,
-                                      size: 20, color: Color(0xFF64748B)),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ── Accent line ─────────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Container(
                     height: 2.5,
                     decoration: BoxDecoration(
-                      color: _getCurrentGameColor(),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                        color: _accentColor(),
+                        borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
-
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: _buildTableHeader(),
                 ),
-                const SizedBox(height: 10),
-
-                // ── Rows ────────────────────────────────────────────────────
-                Expanded(
-                  child: isLoading
-                      ? Center(
-                    child: CircularProgressIndicator(
-                      color: _getCurrentGameColor(), strokeWidth: 2.5,
-                    ),
-                  )
-                      : leaderboardData.isEmpty
-                      ? const Center(
-                    child: Text(
-                      'No rankings available yet.',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
-                    ),
-                  )
-                      : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    itemCount: leaderboardData.length,
-                    itemBuilder: (context, index) {
-                      final player   = leaderboardData[index];
-                      final rank     = index + 1;
-                      final playerId = _extractId(
-                        player['player_id'] ?? player['id'] ?? player['_id'],
-                      );
-                      return _buildRankingRow(
-                        player, rank, playerId == widget.currentUserId,
-                      );
-                    },
-                  ),
-                ),
+                const SizedBox(height: 8),
+                Expanded(child: _buildList()),
               ],
             ),
           ),
@@ -475,10 +287,818 @@ class _LeaderboardState extends State<Leaderboard> {
     );
   }
 
-  // ── Tab pill button ──────────────────────────────────────────────────────────
-  Widget _buildGameButton(String label, String gameId) {
+  Widget _buildRankingsToolbar() => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 10, 0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _GameButton(
+                    label: 'Badges',
+                    gameId: 'badges',
+                    selectedGame: _selectedGame,
+                    onTap: _onGameSelected),
+                _GameButton(
+                    label: 'Stars',
+                    gameId: 'stars',
+                    selectedGame: _selectedGame,
+                    onTap: _onGameSelected),
+              ],
+            ),
+            Row(
+              children: [
+                _buildFilterDropdowns(),
+                const SizedBox(width: 4),
+                _RefreshButton(onTap: () async {
+                  await _playClick();
+                  _loadLeaderboard();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Refreshing leaderboard…'),
+                        duration: Duration(seconds: 1)));
+                  }
+                }),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  void _onGameSelected(String gameId) async {
+    await _playClick();
+    setState(() {
+      _selectedGame       = gameId;
+      _rows               = [];
+      _selectedDifficulty = 'EASY';
+      _selectedCategory   = 'Solar System';
+    });
+    _loadLeaderboard();
+  }
+
+  Widget _buildFilterDropdowns() {
+    final color = _accentColor();
+    if (_selectedGame == 'badges' || _selectedGame == 'stars') {
+      return const SizedBox.shrink();
+    }
+    if (_selectedGame == 'whiz_memory_match') {
+      return _Dropdown(
+        value: _selectedDifficulty,
+        items: kGameDifficulties,
+        labels: kGameDifficultiesDisplay,
+        color: color,
+        onChanged: (v) {
+          if (v == null) return;
+          setState(() => _selectedDifficulty = v);
+          _loadLeaderboard();
+        },
+      );
+    }
+    // puzzle
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _Dropdown(
+          value: _selectedCategory,
+          items: const [
+            'Solar System', 'Scientists', 'Human Body',
+            'Animals', 'Geometry', 'Starbooks',
+          ],
+          color: color,
+          width: 130,
+          onChanged: (v) {
+            if (v == null) return;
+            setState(() => _selectedCategory = v);
+            _loadLeaderboard();
+          },
+        ),
+        _Dropdown(
+          value: _selectedDifficulty,
+          items: kGameDifficulties,
+          labels: kGameDifficultiesDisplay,
+          color: color,
+          onChanged: (v) {
+            if (v == null) return;
+            setState(() => _selectedDifficulty = v);
+            _loadLeaderboard();
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableHeader() {
+    final color   = _accentColor();
+    final isLight = color.computeLuminance() > 0.5;
+    final textC   = isLight ? Colors.black87 : Colors.white;
+
+    Widget col(String text, {int flex = 1}) => Expanded(
+          flex: flex,
+          child: Center(
+              child: Text(text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: textC,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10,
+                      letterSpacing: 0.5))),
+        );
+
+    Widget label(String text) => Text(text,
+        style: TextStyle(
+            color: textC,
+            fontWeight: FontWeight.w800,
+            fontSize: 10,
+            letterSpacing: 0.5));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration:
+          BoxDecoration(color: color, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          SizedBox(width: 38, child: Center(child: label('RANK'))),
+          const SizedBox(width: 10),
+          Expanded(flex: 3, child: label('PLAYER')),
+          if (_selectedGame == 'badges') ...[
+            col('TOTAL'), col('EASY'), col('AVG'), col('DIFF'),
+          ] else if (_selectedGame == 'stars') ...[
+            col('STARS'), col('TIER', flex: 2),
+          ] else ...[
+            col('TIME'),
+            SizedBox(width: 60, child: Center(child: label('MOVES'))),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    if (_isLoading) {
+      return Center(
+          child: CircularProgressIndicator(
+              color: _accentColor(), strokeWidth: 2.5));
+    }
+    if (_rows.isEmpty) {
+      return const Center(
+          child: Text('No rankings available yet.',
+              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      itemCount: _rows.length,
+      itemBuilder: (_, i) {
+        final p  = _rows[i];
+        final id = LeaderboardService.extractIdPublic(
+            p['player_id'] ?? p['id'] ?? p['_id']);
+        return RankingRow(
+          key: ValueKey('$id-$i'),
+          player: p,
+          rank: i + 1,
+          isCurrentUser: id == widget.currentUserId,
+          selectedGame: _selectedGame,
+          formatTime: _formatTime,
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Stats panel (right)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildStatsPanel({double marginLeft = 0}) {
+    return Container(
+      margin: EdgeInsets.fromLTRB(marginLeft, 12, 16, 16),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5)),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildUserProfile(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildStarsRow(),
+                  const SizedBox(height: 10),
+                  _buildBadgesGrid(),
+                  const SizedBox(height: 10),
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _buildMemoryCard()),
+                        const SizedBox(width: 8),
+                        Expanded(child: _buildPuzzleCard()),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserProfile() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF0F4FF),
+          borderRadius:
+              BorderRadius.only(topLeft: Radius.circular(22), topRight: Radius.circular(22)),
+          border:
+              Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: kGold, width: 3)),
+              child: ClipOval(
+                child: Image.asset(widget.userAvatar,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.person,
+                        size: 32, color: Color(0xFF85B7EB))),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.username,
+                      style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1E293B)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                        color: kGold.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: kGold.withValues(alpha: 0.5))),
+                    child: Text('Your Stats',
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: kGold,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildStarsRow() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(16),
+            border:
+                Border.all(color: kAverage.withValues(alpha: 0.35), width: 1)),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('STARS',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF94A3B8),
+                          letterSpacing: 0.8)),
+                  const SizedBox(height: 2),
+                  Text('$_playerStars',
+                      style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1E293B),
+                          height: 1)),
+                ],
+              ),
+            ),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                    color: kAverage.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: kAverage.withValues(alpha: 0.5))),
+                child: Text(_playerTier,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: kAverage)),
+              ),
+              const SizedBox(width: 5),
+              const TierInfoButton(average: kAverage),
+            ]),
+          ],
+        ),
+      );
+
+  Widget _buildBadgesGrid() {
+    final easy      = _badgeCounts['easy_count']      ?? 0;
+    final average   = _badgeCounts['average_count']   ?? 0;
+    final difficult = _badgeCounts['difficult_count'] ?? 0;
+    final total     = easy + average + difficult;
+
+    return Container(
+      decoration: BoxDecoration(
+          color: const Color(0xFFFFFDF0),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: kGold.withValues(alpha: 0.35), width: 1)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+            child: Row(
+              children: [
+                const Text('BADGES',
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF94A3B8),
+                        letterSpacing: 0.8)),
+                const Spacer(),
+                Text('$total total',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: kGold)),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+            child: Row(
+              children: [
+                _BadgeTile('Easy',      '$easy',      kEasy,      'assets/images-badges/whiz-ready.png'),
+                _BadgeTile('Average',   '$average',   kAverage,   'assets/images-badges/whiz-happy.png'),
+                _BadgeTile('Difficult', '$difficult', kDifficult, 'assets/images-badges/whiz-achiever.png'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemoryCard() {
+    const accent = kPurple;
+    return _GameStatCard(
+      accent: accent,
+      bgColor: const Color(0xFFF5F3FF),
+      icon: Icons.grid_view_rounded,
+      label: 'MEMORY',
+      timeStr: _formatTime(_memoryStats?['time_seconds']),
+      difficultyPicker: DifficultyPicker(
+        label: kGameDifficultiesDisplay[_memoryDiffIdx],
+        accentColor: accent,
+        onLeft: () {
+          setState(() {
+            _memoryDiffIdx = (_memoryDiffIdx - 1 + kGameDifficulties.length) %
+                kGameDifficulties.length;
+            _memoryStats = null;
+          });
+          _loadMemoryStat();
+        },
+        onRight: () {
+          setState(() {
+            _memoryDiffIdx =
+                (_memoryDiffIdx + 1) % kGameDifficulties.length;
+            _memoryStats = null;
+          });
+          _loadMemoryStat();
+        },
+      ),
+    );
+  }
+
+  Widget _buildPuzzleCard() {
+    const accent = kOrange;
+    final rawTime = _puzzleStats?['time_seconds'];
+    final timeStr =
+        _formatTime(rawTime != null ? (rawTime as num).toInt() : null);
+
+    return _GameStatCard(
+      accent: accent,
+      bgColor: const Color(0xFFFFF7ED),
+      icon: Icons.extension_rounded,
+      label: 'PUZZLE',
+      timeStr: timeStr,
+      extraContent: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 4,
+        runSpacing: 4,
+        children: List.generate(kPuzzleCategories.length, (i) {
+          final selected = i == _puzzleCatIdx;
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _puzzleCatIdx = i;
+                  _puzzleStats  = null;
+                });
+                _loadPuzzleStat();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                    color: selected ? accent : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: selected
+                            ? accent
+                            : const Color(0xFFCBD5E1))),
+                child: Text(kPuzzleCategoriesShort[i],
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? Colors.white
+                            : const Color(0xFF64748B))),
+              ),
+            ),
+          );
+        }),
+      ),
+      difficultyPicker: DifficultyPicker(
+        label: kGameDifficultiesDisplay[_puzzleDiffIdx],
+        accentColor: accent,
+        onLeft: () {
+          setState(() {
+            _puzzleDiffIdx = (_puzzleDiffIdx - 1 + kGameDifficulties.length) %
+                kGameDifficulties.length;
+            _puzzleStats = null;
+          });
+          _loadPuzzleStat();
+        },
+        onRight: () {
+          setState(() {
+            _puzzleDiffIdx =
+                (_puzzleDiffIdx + 1) % kGameDifficulties.length;
+            _puzzleStats = null;
+          });
+          _loadPuzzleStat();
+        },
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Compact stats panel — mobile only (desktop keeps _buildStatsPanel above)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildMobileStatsPanel() {
+    final easy      = _badgeCounts['easy_count']      ?? 0;
+    final average   = _badgeCounts['average_count']   ?? 0;
+    final difficult = _badgeCounts['difficult_count'] ?? 0;
+    final total     = easy + average + difficult;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildMobileProfileStarsRow(),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          const SizedBox(height: 10),
+          _buildMobileBadgesRow(easy, average, difficult, total),
+          const SizedBox(height: 10),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _buildMobileMemoryCard()),
+                const SizedBox(width: 8),
+                Expanded(child: _buildMobilePuzzleCard()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileProfileStarsRow() => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                border: Border.all(color: kGold, width: 2.5)),
+            child: ClipOval(
+              child: Image.asset(widget.userAvatar,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.person,
+                      size: 22, color: Color(0xFF85B7EB))),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(widget.username,
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF1E293B)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 3),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: kAverage.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: kAverage.withValues(alpha: 0.5))),
+                    child: Text(_playerTier,
+                        style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: kAverage)),
+                  ),
+                  const SizedBox(width: 5),
+                  const TierInfoButton(average: kAverage),
+                ]),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('STARS',
+                  style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF94A3B8),
+                      letterSpacing: 0.6)),
+              Text('$_playerStars',
+                  style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1E293B),
+                      height: 1.15)),
+            ],
+          ),
+        ],
+      );
+
+  Widget _buildMobileBadgesRow(int easy, int average, int difficult, int total) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('BADGES',
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF94A3B8),
+                    letterSpacing: 0.8)),
+            const Spacer(),
+            Text('$total total',
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: kGold)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            _BadgeTile('Easy',      '$easy',      kEasy,      'assets/images-badges/whiz-ready.png'),
+            _BadgeTile('Average',   '$average',   kAverage,   'assets/images-badges/whiz-happy.png'),
+            _BadgeTile('Difficult', '$difficult', kDifficult, 'assets/images-badges/whiz-achiever.png'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Smaller variant of _GameStatCard — no "fastest time" caption, tighter
+  /// padding, and (for puzzle) a single scrollable row of category chips
+  /// instead of a two-row wrap, so both cards take noticeably less height.
+  Widget _buildMobileGameCard({
+    required Color accent,
+    required Color bgColor,
+    required IconData icon,
+    required String label,
+    required String timeStr,
+    required Widget difficultyPicker,
+    Widget? extraContent,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: accent.withValues(alpha: 0.35))),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, color: accent, size: 14),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: accent,
+                      letterSpacing: 0.5)),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          Text(timeStr,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF1E293B)),
+              textAlign: TextAlign.center),
+          if (extraContent != null) ...[
+            const SizedBox(height: 6),
+            extraContent,
+          ],
+          const SizedBox(height: 6),
+          difficultyPicker,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileMemoryCard() {
+    const accent = kPurple;
+    return _buildMobileGameCard(
+      accent: accent,
+      bgColor: const Color(0xFFF5F3FF),
+      icon: Icons.grid_view_rounded,
+      label: 'MEMORY',
+      timeStr: _formatTime(_memoryStats?['time_seconds']),
+      difficultyPicker: DifficultyPicker(
+        label: kGameDifficultiesDisplay[_memoryDiffIdx],
+        accentColor: accent,
+        onLeft: () {
+          setState(() {
+            _memoryDiffIdx = (_memoryDiffIdx - 1 + kGameDifficulties.length) %
+                kGameDifficulties.length;
+            _memoryStats = null;
+          });
+          _loadMemoryStat();
+        },
+        onRight: () {
+          setState(() {
+            _memoryDiffIdx =
+                (_memoryDiffIdx + 1) % kGameDifficulties.length;
+            _memoryStats = null;
+          });
+          _loadMemoryStat();
+        },
+      ),
+    );
+  }
+
+  Widget _buildMobilePuzzleCard() {
+    const accent = kOrange;
+    final rawTime = _puzzleStats?['time_seconds'];
+    final timeStr =
+        _formatTime(rawTime != null ? (rawTime as num).toInt() : null);
+
+    return _buildMobileGameCard(
+      accent: accent,
+      bgColor: const Color(0xFFFFF7ED),
+      icon: Icons.extension_rounded,
+      label: 'PUZZLE',
+      timeStr: timeStr,
+      extraContent: SizedBox(
+        height: 22,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: kPuzzleCategories.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 4),
+          itemBuilder: (_, i) {
+            final selected = i == _puzzleCatIdx;
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _puzzleCatIdx = i;
+                  _puzzleStats  = null;
+                });
+                _loadPuzzleStat();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                    color: selected ? accent : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: selected
+                            ? accent
+                            : const Color(0xFFCBD5E1))),
+                child: Text(kPuzzleCategoriesShort[i],
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? Colors.white
+                            : const Color(0xFF64748B))),
+              ),
+            );
+          },
+        ),
+      ),
+      difficultyPicker: DifficultyPicker(
+        label: kGameDifficultiesDisplay[_puzzleDiffIdx],
+        accentColor: accent,
+        onLeft: () {
+          setState(() {
+            _puzzleDiffIdx = (_puzzleDiffIdx - 1 + kGameDifficulties.length) %
+                kGameDifficulties.length;
+            _puzzleStats = null;
+          });
+          _loadPuzzleStat();
+        },
+        onRight: () {
+          setState(() {
+            _puzzleDiffIdx =
+                (_puzzleDiffIdx + 1) % kGameDifficulties.length;
+            _puzzleStats = null;
+          });
+          _loadPuzzleStat();
+        },
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Private widget helpers (file-local, no need to export)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _GameButton extends StatelessWidget {
+  final String label;
+  final String gameId;
+  final String selectedGame;
+  final void Function(String) onTap;
+
+  const _GameButton({
+    required this.label,
+    required this.gameId,
+    required this.selectedGame,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final isSelected = selectedGame == gameId;
-    final color      = _getButtonColor(gameId);
+    final color      = gameColor(gameId);
     final isLight    = color.computeLuminance() > 0.5;
     final textColor  = isSelected
         ? (isLight ? Colors.black87 : Colors.white)
@@ -487,875 +1107,218 @@ class _LeaderboardState extends State<Leaderboard> {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () async {
-          try { await AudioService().playClickSound(); } catch (_) {}
-          setState(() {
-            selectedGame       = gameId;
-            leaderboardData    = [];
-            selectedDifficulty = "EASY";
-            selectedCategory   = "Solar System";
-          });
-          _loadLeaderboard();
-        },
+        onTap: () => onTap(gameId),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? color : const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: isSelected ? color : const Color(0xFFE2E8F0),
-              width: 1.5,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-              fontSize: 13.5,
-              color: textColor,
-            ),
-          ),
+              color: isSelected ? color : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(
+                  color: isSelected ? color : const Color(0xFFE2E8F0),
+                  width: 1.5)),
+          child: Text(label,
+              style: TextStyle(
+                  fontWeight:
+                      isSelected ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: 12,
+                  color: textColor)),
         ),
       ),
     );
   }
+}
 
-  // ── Filter dropdowns ─────────────────────────────────────────────────────────
-  Widget _buildFilterDropdowns() {
-    final color = _getCurrentGameColor();
-    if (selectedGame == "badges" || selectedGame == "stars") {
-      return const SizedBox.shrink();
-    }
-    if (selectedGame == "whiz_memory_match") {
-      return _buildDropdown(
-        value: selectedDifficulty,
-        items: ["EASY", "AVERAGE", "DIFFICULT"],
-        labels: ["Easy", "Average", "Difficult"],
-        onChanged: (v) {
-          if (v != null) { setState(() => selectedDifficulty = v); _loadLeaderboard(); }
-        },
-        color: color,
+class _RefreshButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _RefreshButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: 'Refresh',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onTap,
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.refresh_rounded,
+                  size: 18, color: Color(0xFF64748B)),
+            ),
+          ),
+        ),
       );
-    }
-    if (selectedGame == "whiz_puzzle") {
-      return Wrap(
-        spacing: 8, runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          _buildDropdown(
-            value: selectedCategory,
-            items: ["Solar System", "Scientists", "The Human Body",
-              "Animals", "Geometry", "Starbooks"],
-            onChanged: (v) {
-              if (v != null) { setState(() => selectedCategory = v); _loadLeaderboard(); }
-            },
-            color: color, width: 150,
-          ),
-          _buildDropdown(
-            value: selectedDifficulty,
-            items: ["EASY", "AVERAGE", "DIFFICULT"],
-            labels: ["Easy", "Average", "Difficult"],
-            onChanged: (v) {
-              if (v != null) { setState(() => selectedDifficulty = v); _loadLeaderboard(); }
-            },
-            color: color,
-          ),
-        ],
-      );
-    }
-    return const SizedBox.shrink();
-  }
+}
 
-  Widget _buildDropdown({
-    required String value,
-    required List<String> items,
-    List<String>? labels,
-    required void Function(String?) onChanged,
-    required Color color,
-    double width = 120,
-  }) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color, width: 1.5),
-      ),
-      child: DropdownButton<String>(
-        value: value,
-        isExpanded: true,
-        isDense: true,
-        underline: const SizedBox(),
-        icon: Icon(Icons.keyboard_arrow_down, size: 16, color: color),
-        dropdownColor: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        items: items.asMap().entries.map((e) {
-          final label = labels != null ? labels[e.key] : e.value;
-          return DropdownMenuItem(
-            value: e.value,
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
-          );
-        }).toList(),
-        onChanged: onChanged,
-      ),
-    );
-  }
+class _Dropdown extends StatelessWidget {
+  final String value;
+  final List<String> items;
+  final List<String>? labels;
+  final void Function(String?) onChanged;
+  final Color color;
+  final double width;
 
-  // ── Table header ──────────────────────────────────────────────────────────────
-  Widget _buildTableHeader() {
-    final color   = _getCurrentGameColor();
-    final isLight = color.computeLuminance() > 0.5;
-    final textC   = isLight ? Colors.black87 : Colors.white;
+  const _Dropdown({
+    required this.value,
+    required this.items,
+    this.labels,
+    required this.onChanged,
+    required this.color,
+    this.width = 110,
+  });
 
-    Widget col(String text, {int flex = 1, bool center = true}) => Expanded(
-      flex: flex,
-      child: center
-          ? Center(
-        child: Text(text,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                color: textC, fontWeight: FontWeight.w800,
-                fontSize: 11, letterSpacing: 0.6)),
-      )
-          : Text(text,
-          style: TextStyle(
-              color: textC, fontWeight: FontWeight.w800,
-              fontSize: 11, letterSpacing: 0.6)),
-    );
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          SizedBox(width: 44,
-              child: Center(child: Text("RANK",
-                  style: TextStyle(color: textC, fontWeight: FontWeight.w800,
-                      fontSize: 11, letterSpacing: 0.6)))),
-          const SizedBox(width: 12),
-          Expanded(flex: 3,
-              child: Text("PLAYER",
-                  style: TextStyle(color: textC, fontWeight: FontWeight.w800,
-                      fontSize: 11, letterSpacing: 0.6))),
-          if (selectedGame == "badges") ...[
-            col("TOTAL\nBADGES"),
-            col("EASY"),
-            col("AVERAGE"),
-            col("DIFFICULT"),
-          ] else if (selectedGame == "stars") ...[
-            col("STARS"),
-            col("TIER", flex: 2),
-          ] else ...[
-            col("FASTEST TIME"),
-            SizedBox(width: 80,
-                child: Center(child: Text("MOVES",
-                    style: TextStyle(color: textC, fontWeight: FontWeight.w800,
-                        fontSize: 11, letterSpacing: 0.6)))),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // ── Ranking row ───────────────────────────────────────────────────────────────
-  Widget _buildRankingRow(Map<String, dynamic> player, int rank, bool isCurrentUser) {
-    return StatefulBuilder(
-      builder: (context, setRowState) {
-        bool isHovered = false;
-        return StatefulBuilder(
-          builder: (context, setHover) {
-            return MouseRegion(
-              cursor: SystemMouseCursors.click,
-              onEnter: (_) => setHover(() => isHovered = true),
-              onExit:  (_) => setHover(() => isHovered = false),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isCurrentUser
-                      ? _gold.withValues(alpha: isHovered ? 0.14 : 0.08)
-                      : isHovered
-                      ? const Color(0xFFEFF6FF)
-                      : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isCurrentUser
-                        ? _gold.withValues(alpha: isHovered ? 0.6 : 0.45)
-                        : isHovered
-                        ? const Color(0xFF93C5FD)
-                        : const Color(0xFFE2E8F0),
-                    width: isCurrentUser ? 1.5 : (isHovered ? 1.5 : 0.5),
-                  ),
-                  boxShadow: isHovered
-                      ? [BoxShadow(
-                      color: isCurrentUser
-                          ? _gold.withValues(alpha: 0.12)
-                          : const Color(0xFF3B82F6).withValues(alpha: 0.08),
-                      blurRadius: 8, offset: const Offset(0, 2))]
-                      : null,
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(width: 44, child: _buildRankBadge(rank)),
-                    const SizedBox(width: 12),
-                    // ── Player ────────────────────────────────────────────────────────
-                    Expanded(
-                      flex: 3,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 42, height: 42,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: _getRankColor(rank), width: 2.5),
-                              color: const Color(0xFFE2E8F0),
-                            ),
-                            child: ClipOval(
-                              child: Image.asset(
-                                player['avatar'] ?? "assets/images-avatars/Adventurer.png",
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.person, color: Color(0xFF85B7EB), size: 22),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  player['username'] ?? player['player_username'] ?? 'Unknown',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: isCurrentUser ? _goldDark : const Color(0xFF1E293B),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (isCurrentUser)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 2),
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: _gold,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Text("YOU",
-                                        style: TextStyle(
-                                          fontSize: 9, fontWeight: FontWeight.w900,
-                                          color: _navy, letterSpacing: 0.8,
-                                        )),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // ── Stats ─────────────────────────────────────────────────────────
-                    if (selectedGame == "badges") ...[
-                      Expanded(child: _stat(
-                        "${(player['easy_count'] ?? 0) + (player['average_count'] ?? 0) + (player['difficult_count'] ?? 0)}",
-                        const Color(0xFF1E293B), bold: true,
-                      )),
-                      Expanded(child: _stat("${player['easy_count']      ?? 0}", _easy)),
-                      Expanded(child: _stat("${player['average_count']   ?? 0}", _average)),
-                      Expanded(child: _stat("${player['difficult_count'] ?? 0}", _difficult)),
-
-                    ] else if (selectedGame == "stars") ...[
-                      Expanded(child: _stat("${player['stars'] ?? 0}", _gold, bold: true)),
-                      Expanded(
-                        flex: 2,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _average.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: _average.withValues(alpha: 0.4)),
-                            ),
-                            child: Text(
-                              '${player['tier'] ?? ''}',
-                              style: const TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w700, color: _average),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    ] else ...[
-                      Expanded(child: _stat(_formatTime(player['time_seconds']), const Color(0xFF1E293B))),
-                      SizedBox(
-                        width: 80,
-                        child: _stat("${player['moves'] ?? 0}", const Color(0xFF1E293B)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RIGHT – User stats panel  (vertical scrollable layout)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildUserStatsPanel() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 24, 24, 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-      ),
-      child: Column(
-        children: [
-          _buildCompactUserProfile(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-              child: Column(
-                children: [
-                  _buildStarsSection(),
-                  const SizedBox(height: 10),
-                  _buildBadgesSection(),
-                  const SizedBox(height: 10),
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: _buildMemoryMatchCard()),
-                        const SizedBox(width: 10),
-                        Expanded(child: _buildPuzzleCard()),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactUserProfile() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F4FF),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(22),
-          topRight: Radius.circular(22),
-        ),
-        border: Border(
-          bottom: BorderSide(color: const Color(0xFFE2E8F0), width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _blue,
-              border: Border.all(color: _gold, width: 2.5),
-            ),
-            child: ClipOval(
-              child: Image.asset(
-                widget.userAvatar,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                const Icon(Icons.person, size: 28, color: Color(0xFF85B7EB)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.username,
+  @override
+  Widget build(BuildContext context) => Container(
+        width: width,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color, width: 1.5)),
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          isDense: true,
+          underline: const SizedBox(),
+          icon: Icon(Icons.keyboard_arrow_down, size: 15, color: color),
+          dropdownColor: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          items: items.asMap().entries.map((e) {
+            final lbl = labels != null ? labels![e.key] : e.value;
+            return DropdownMenuItem(
+              value: e.value,
+              child: Text(lbl,
                   style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _gold.withValues(alpha: 0.20),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _gold.withValues(alpha: 0.5)),
-                  ),
-                  child: Text(
-                    'Your Stats',
-                    style: TextStyle(fontSize: 10, color: _gold, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Stars section ─────────────────────────────────────────────────────────────
-  Widget _buildStarsSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _average.withValues(alpha: 0.35), width: 1),
-      ),
-      child: Row(
-        children: [
-          // Icon
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: _average.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('STARS', style: TextStyle(
-                    fontSize: 10, fontWeight: FontWeight.w700,
-                    color: Color(0xFF94A3B8), letterSpacing: 0.8)),
-                const SizedBox(height: 2),
-                Text('$_playerStars', style: const TextStyle(
-                    fontSize: 30, fontWeight: FontWeight.w900, color: Color(0xFF1E293B), height: 1)),
-              ],
-            ),
-          ),
-          // Tier badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: _average.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _average.withValues(alpha: 0.5)),
-            ),
-            child: Text(
-              _playerTier,
-              style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w800, color: _average),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Badges section – shows all 3 difficulty counts ────────────────────────────
-  Widget _buildBadgesSection() {
-    final easy      = _badgeCounts['easy_count']      ?? 0;
-    final average   = _badgeCounts['average_count']   ?? 0;
-    final difficult = _badgeCounts['difficult_count'] ?? 0;
-    final total     = easy + average + difficult;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFDF0),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _gold.withValues(alpha: 0.35), width: 1),
-      ),
-      child: Column(
-        children: [
-          // Header row
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                    color: _gold.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.military_tech_rounded, color: _gold, size: 22),
-                ),
-                const SizedBox(width: 10),
-                const Text('BADGES', style: TextStyle(
-                    fontSize: 10, fontWeight: FontWeight.w700,
-                    color: Color(0xFF94A3B8), letterSpacing: 0.8)),
-                const Spacer(),
-                Text('$total total', style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w800, color: _gold)),
-              ],
-            ),
-          ),
-          // Divider
-          Divider(height: 1, color: const Color(0xFFE2E8F0)),
-          // Three difficulty counts
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-            child: Row(
-              children: [
-                _badgeDiffTile('Easy',     '$easy',     _easy,      'assets/images-badges/whiz-ready.png'),
-                _badgeDiffTile('Average',  '$average',  _average,   'assets/images-badges/whiz-happy.png'),
-                _badgeDiffTile('Difficult','$difficult', _difficult, 'assets/images-badges/whiz-achiever.png'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _badgeDiffTile(String label, String count, Color color, String imagePath) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: 0.12),
-              border: Border.all(color: color.withValues(alpha: 0.35), width: 1.5),
-            ),
-            child: ClipOval(
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Image.asset(imagePath, fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Icon(Icons.military_tech_rounded, color: color, size: 24)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(count, style: TextStyle(
-              fontSize: 22, fontWeight: FontWeight.w900, color: color)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(
-              fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8))),
-        ],
-      ),
-    );
-  }
-
-  // ── Memory Match card ─────────────────────────────────────────────────────────
-  Widget _buildMemoryMatchCard() {
-    const accentColor = _purple;
-    final diff    = _gameDifficultiesDisplay[_currentMemoryDifficultyIndex];
-    final timeStr = _formatTime(_memoryMatchStats?['time_seconds']);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F3FF),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentColor.withValues(alpha: 0.35), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Title row — centered
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 34, height: 34,
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.grid_view_rounded, color: accentColor, size: 18),
-              ),
-              const SizedBox(width: 10),
-              const Flexible(
-                child: Text('MEMORY MATCH', style: TextStyle(
-                    fontSize: 10, fontWeight: FontWeight.w700,
-                    color: Color(0xFF94A3B8), letterSpacing: 0.8)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Time centered
-          Text(timeStr, style: const TextStyle(
-              fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF1E293B), height: 1),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 2),
-          const Text('fastest time', style: TextStyle(
-              fontSize: 11, color: Color(0xFF94A3B8)),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 10),
-          // Difficulty picker right below time
-          Center(
-            child: _difficultyPicker(
-              diff: diff, accentColor: accentColor,
-              onLeft: () {
-                setState(() {
-                  _currentMemoryDifficultyIndex =
-                      (_currentMemoryDifficultyIndex - 1 + _gameDifficulties.length) % _gameDifficulties.length;
-                  _memoryMatchStats = null;
-                });
-                _fetchMemoryMatchStat();
-              },
-              onRight: () {
-                setState(() {
-                  _currentMemoryDifficultyIndex =
-                      (_currentMemoryDifficultyIndex + 1) % _gameDifficulties.length;
-                  _memoryMatchStats = null;
-                });
-                _fetchMemoryMatchStat();
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Puzzle card ───────────────────────────────────────────────────────────────
-  Widget _buildPuzzleCard() {
-    const accentColor = _orange;
-    final diff    = _gameDifficultiesDisplay[_currentPuzzleDifficultyIndex];
-    final timeStr = _formatTime(_puzzleStats?['time_seconds']);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentColor.withValues(alpha: 0.35), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Title row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 34, height: 34,
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.extension_rounded, color: accentColor, size: 18),
-              ),
-              const SizedBox(width: 10),
-              const Text('PUZZLE', style: TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: Color(0xFF94A3B8), letterSpacing: 0.8)),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Time centered
-          Text(timeStr, style: const TextStyle(
-              fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF1E293B), height: 1),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 2),
-          const Text('fastest time', style: TextStyle(
-              fontSize: 11, color: Color(0xFF94A3B8)),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 10),
-          // Category chips centered
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 5, runSpacing: 5,
-            children: List.generate(_puzzleCategories.length, (i) {
-              final isSelected = i == _currentPuzzleCategoryIndex;
-              return MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() { _currentPuzzleCategoryIndex = i; _puzzleStats = null; });
-                    _fetchPuzzleStat();
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isSelected ? accentColor : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: isSelected ? accentColor : const Color(0xFFCBD5E1)),
-                    ),
-                    child: Text(_puzzleCategoriesShort[i],
-                        style: TextStyle(
-                            fontSize: 10, fontWeight: FontWeight.w700,
-                            color: isSelected ? Colors.white : const Color(0xFF64748B))),
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 8),
-          // Difficulty picker centered at bottom
-          Center(
-            child: _difficultyPicker(
-              diff: diff, accentColor: accentColor,
-              onLeft: () {
-                setState(() {
-                  _currentPuzzleDifficultyIndex =
-                      (_currentPuzzleDifficultyIndex - 1 + _gameDifficulties.length) % _gameDifficulties.length;
-                  _puzzleStats = null;
-                });
-                _fetchPuzzleStat();
-              },
-              onRight: () {
-                setState(() {
-                  _currentPuzzleDifficultyIndex =
-                      (_currentPuzzleDifficultyIndex + 1) % _gameDifficulties.length;
-                  _puzzleStats = null;
-                });
-                _fetchPuzzleStat();
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Shared small helpers
-  // ═══════════════════════════════════════════════════════════════════════════
-
-
-
-  /// Left / right chevron button used inside side cards.
-  Widget _arrowBtn(IconData icon, VoidCallback onTap, Color color) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 20, height: 20,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(5)),
-          child: Icon(icon, size: 15, color: Colors.white),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B))),
+            );
+          }).toList(),
+          onChanged: onChanged,
         ),
-      ),
-    );
-  }
+      );
+}
 
-  /// Prev / next difficulty pill for Memory & Puzzle cards.
-  Widget _difficultyPicker({
-    required String diff,
-    required Color accentColor,
-    required VoidCallback onLeft,
-    required VoidCallback onRight,
-  }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(99),
-      child: Row(
+class _BadgeTile extends StatelessWidget {
+  final String label;
+  final String count;
+  final Color color;
+  final String imagePath;
+
+  const _BadgeTile(this.label, this.count, this.color, this.imagePath);
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Column(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.12),
+                  border: Border.all(
+                      color: color.withValues(alpha: 0.35), width: 1.5)),
+              child: ClipOval(
+                child: Padding(
+                  padding: const EdgeInsets.all(5),
+                  child: Image.asset(imagePath,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Icon(
+                          Icons.military_tech_rounded,
+                          color: color,
+                          size: 22)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(count,
+                style: TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+            const SizedBox(height: 2),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF94A3B8))),
+          ],
+        ),
+      );
+}
+
+/// Generic card used for Memory Match & Puzzle personal stats.
+class _GameStatCard extends StatelessWidget {
+  final Color accent;
+  final Color bgColor;
+  final IconData icon;
+  final String label;
+  final String timeStr;
+  final Widget difficultyPicker;
+  final Widget? extraContent; // puzzle category chips
+
+  const _GameStatCard({
+    required this.accent,
+    required this.bgColor,
+    required this.icon,
+    required this.label,
+    required this.timeStr,
+    required this.difficultyPicker,
+    this.extraContent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border:
+              Border.all(color: accent.withValues(alpha: 0.35), width: 1)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: onLeft,
-              child: Container(
-                width: 22, height: 20, color: accentColor,
-                child: const Icon(Icons.chevron_left, size: 14, color: Colors.white),
-              ),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: accent, size: 16),
             ),
-          ),
-          Container(
-            height: 20,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            color: accentColor.withValues(alpha: 0.18),
-            child: Center(
-              child: Text(diff,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: accentColor)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(label,
+                  style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF94A3B8),
+                      letterSpacing: 0.6)),
             ),
-          ),
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: onRight,
-              child: Container(
-                width: 22, height: 20, color: accentColor,
-                child: const Icon(Icons.chevron_right, size: 14, color: Colors.white),
-              ),
-            ),
-          ),
+          ]),
+          const SizedBox(height: 8),
+          Text(timeStr,
+              style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF1E293B),
+                  height: 1),
+              textAlign: TextAlign.center),
+          const Text('fastest time',
+              style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 6),
+          if (extraContent != null) ...[extraContent!, const SizedBox(height: 6)],
+          Center(child: difficultyPicker),
         ],
       ),
     );
-  }
-
-  Widget _stat(String value, Color color, {bool bold = false}) {
-    return Center(
-      child: Text(
-        value,
-        style: TextStyle(
-          fontSize: bold ? 17 : 15,
-          fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRankBadge(int rank) {
-    final bg = _getRankColor(rank);
-
-    if (rank <= 3) {
-      final medals = ['🥇', '🥈', '🥉'];
-      return Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(
-          color: bg.withValues(alpha: 0.20),
-          shape: BoxShape.circle,
-          border: Border.all(color: bg, width: 2),
-        ),
-        child: Center(
-          child: Text(medals[rank - 1], style: const TextStyle(fontSize: 20)),
-        ),
-      );
-    }
-
-    return Container(
-      width: 40, height: 40,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Center(
-        child: Text('$rank',
-            style: const TextStyle(
-                color: Color(0xFF64748B), fontWeight: FontWeight.w800, fontSize: 14)),
-      ),
-    );
-  }
-
-  Color _getRankColor(int rank) {
-    switch (rank) {
-      case 1:  return const Color(0xFFFFD700);
-      case 2:  return const Color(0xFFC0C0C0);
-      case 3:  return const Color(0xFFCD7F32);
-      default: return const Color(0xFFCBD5E1);
-    }
   }
 }

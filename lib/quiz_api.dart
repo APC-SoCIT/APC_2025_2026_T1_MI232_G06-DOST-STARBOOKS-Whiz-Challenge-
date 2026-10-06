@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'config.dart';
 
 class QuizQuestion {
   final String id;
   final String question;
-  final String? questionImage;  // Support for images
+  final String? questionImage;
   final String answer1;
   final String? answer1Image;
   final String answer2;
@@ -17,7 +18,7 @@ class QuizQuestion {
   final String correctAnswer;
   final String category;
   final String difficultyLevel;
-  final String? yearLevel;  // Made optional
+  final String? yearLevel;
   final int hasImages;
 
   QuizQuestion({
@@ -35,7 +36,7 @@ class QuizQuestion {
     required this.correctAnswer,
     required this.category,
     required this.difficultyLevel,
-    this.yearLevel,  // Made optional
+    this.yearLevel,
     this.hasImages = 0,
   });
 
@@ -55,7 +56,7 @@ class QuizQuestion {
       correctAnswer: json['correct_answer'] ?? '',
       category: json['category'] ?? '',
       difficultyLevel: json['difficulty_level'] ?? '',
-      yearLevel: json['year_level'] ?? '',  // NEW!
+      yearLevel: json['year_level'] ?? '',
       hasImages: json['has_images'] ?? 0,
     );
   }
@@ -96,27 +97,28 @@ class GameResultResponse {
 }
 
 class QuizApiService {
-  static const String baseUrl = 'http://localhost:8000/api';
+  static final http.Client _client = http.Client();
 
-  // UPDATED: yearLevel is now optional
   static Future<List<QuizQuestion>> fetchQuestions(
-      String category,
-      String difficulty,
-      {String? yearLevel}  // Made optional with named parameter
-      ) async {
+    String category,
+    String difficulty, {
+    String? yearLevel,
+  }) async {
     try {
-      // UPDATED URL - only include yearLevel if provided
+      final encodedCategory = Uri.encodeComponent(category);
+      final encodedDifficulty = Uri.encodeComponent(difficulty);
       final url = yearLevel != null
-          ? Uri.parse('$baseUrl/quiz/questions/$category/$difficulty/$yearLevel')
-          : Uri.parse('$baseUrl/quiz/questions/$category/$difficulty');
+          ? Uri.parse(
+              '${AppConfig.baseUrl}/quiz/questions/$encodedCategory/$encodedDifficulty/${Uri.encodeComponent(yearLevel)}')
+          : Uri.parse(
+              '${AppConfig.baseUrl}/quiz/questions/$encodedCategory/$encodedDifficulty');
 
       if (kDebugMode) {
         debugPrint('Fetching questions from: $url');
       }
 
-      final response = await http
-          .get(url, headers: {'Accept': 'application/json'})
-          .timeout(
+      final response = await _client
+          .get(url, headers: {'Accept': 'application/json'}).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           throw Exception(
@@ -132,7 +134,6 @@ class QuizApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-
         if (data['success'] == true) {
           final List<dynamic> questionsJson = data['questions'];
           return questionsJson
@@ -142,7 +143,8 @@ class QuizApiService {
           throw Exception(data['message'] ?? 'Failed to load questions');
         }
       } else if (response.statusCode == 404) {
-        throw Exception('No questions found for this category, difficulty, and year level');
+        throw Exception(
+            'No questions found for this category, difficulty, and year level');
       } else {
         throw Exception('Server error: ${response.statusCode}');
       }
@@ -163,7 +165,7 @@ class QuizApiService {
     required int timeTaken,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/game/save-challenge-result');
+      final url = Uri.parse('${AppConfig.baseUrl}/game/save-challenge-result');
 
       final body = {
         'player_id': playerId,
@@ -179,7 +181,7 @@ class QuizApiService {
         debugPrint('📦 Request body: ${json.encode(body)}');
       }
 
-      final response = await http.post(
+      final response = await _client.post(
         url,
         headers: {
           'Content-Type': 'application/json',
@@ -224,9 +226,9 @@ class QuizApiService {
     required String battleId,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/game/save-battle-result');
+      final url = Uri.parse('${AppConfig.baseUrl}/game/save-battle-result');
 
-      final response = await http.post(
+      final response = await _client.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -244,11 +246,9 @@ class QuizApiService {
       if (response.statusCode == 201) {
         final data = json.decode(response.body);
         debugPrint('✅ Battle result saved successfully');
-
         if (data['badge_awarded'] != null) {
           debugPrint('🎯 Badge info: ${data['badge_awarded']}');
         }
-
         return data;
       } else {
         debugPrint('⚠️ Failed to save battle result: ${response.statusCode}');
@@ -262,9 +262,9 @@ class QuizApiService {
 
   static Future<Map<String, dynamic>> getPlayerStats(String userId) async {
     try {
-      final url = Uri.parse('$baseUrl/game/stats/$userId');
+      final url = Uri.parse('${AppConfig.baseUrl}/game/stats/$userId');
 
-      final response = await http.get(
+      final response = await _client.get(
         url,
         headers: {'Accept': 'application/json'},
       );
@@ -286,13 +286,14 @@ class QuizApiService {
 
   static Future<Map<String, dynamic>> getPlayerBadges(String playerId) async {
     try {
-      final url = Uri.parse('$baseUrl/badges/player/$playerId/summary');
+      final url =
+          Uri.parse('${AppConfig.baseUrl}/badges/player/$playerId/summary');
 
       if (kDebugMode) {
         debugPrint('🏆 Fetching badges from: $url');
       }
 
-      final response = await http.get(
+      final response = await _client.get(
         url,
         headers: {'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 10));
@@ -317,11 +318,13 @@ class QuizApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> getBadgeStatistics(String playerId) async {
+  static Future<Map<String, dynamic>> getBadgeStatistics(
+      String playerId) async {
     try {
-      final url = Uri.parse('$baseUrl/badges/player/$playerId/statistics');
+      final url = Uri.parse(
+          '${AppConfig.baseUrl}/badges/player/$playerId/statistics');
 
-      final response = await http.get(
+      final response = await _client.get(
         url,
         headers: {'Accept': 'application/json'},
       );
@@ -343,9 +346,9 @@ class QuizApiService {
 
   static Future<Map<String, dynamic>> fetchStatistics() async {
     try {
-      final url = Uri.parse('$baseUrl/quiz/statistics');
+      final url = Uri.parse('${AppConfig.baseUrl}/quiz/statistics');
 
-      final response = await http.get(
+      final response = await _client.get(
         url,
         headers: {'Accept': 'application/json'},
       );

@@ -1,13 +1,18 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:js_interop';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:web/web.dart' as web;
+import 'admin_sidebar.dart';
 import 'admin_leaderboard.dart';
 import 'admin_login.dart';
 import 'admin_users_players.dart';
@@ -15,6 +20,8 @@ import 'admin_users_admins.dart';
 import 'admin_questions.dart';
 import 'admin_difficulty.dart';
 import 'loading_page.dart';
+import 'api_service.dart';
+import 'config.dart';
 
 class AdminDashboard extends StatefulWidget {
   final Map<String, dynamic>? adminData;
@@ -26,65 +33,141 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
-  bool _usersExpanded = false;
   final Map<String, GlobalKey> _chartKeys = {
     'Total Registered Players': GlobalKey(),
-    'Average Feedback': GlobalKey(),
+    'Average Player Rating': GlobalKey(),
     'Male vs Female Registered Players': GlobalKey(),
     'Age Distribution of Players': GlobalKey(),
     'Registered Players by Region': GlobalKey(),
     'Male vs Female Players Per Game Mode': GlobalKey(),
-    'Rewards Distribution By Gender and Level': GlobalKey(),
+    'Badge Distribution By Gender and Level': GlobalKey(),
     'Most Played Game Mode By Age': GlobalKey(),
   };
-  bool _quizContentExpanded = false;
   final Map<String, bool> _sortAscending = {};
-  bool _isSidebarCollapsed = false;
+
+  // ── Live analytics data from /api/admin/analytics ─────────────────────────
+  Map<String, dynamic>? _analytics;
+  bool _analyticsLoading = true;
+  String? _analyticsError;
+
+  // ── Mutable copy of the logged-in admin's own profile data ────────────────
+  // widget.adminData is just the snapshot from login and never changes, so
+  // if we read straight from it the sidebar/topbar avatar never updates after
+  // editing your own profile picture — you'd have to log out and back in to
+  // see it. Everything that displays "my" avatar/username reads from this
+  // instead, and _showEditMyProfileDialog() updates it in place on success.
+  late Map<String, dynamic> _adminData;
+
+  @override
+  void initState() {
+    super.initState();
+    _adminData = Map<String, dynamic>.from(widget.adminData ?? {});
+    _loadAnalytics();
+  }
+
+  Future<void> _loadAnalytics() async {
+    setState(() {
+      _analyticsLoading = true;
+      _analyticsError = null;
+    });
+    try {
+      final token = widget.adminData?['token'] as String? ?? '';
+      // ✅ FIX: this was hardcoded to 'http://127.0.0.1:8000', which only
+      // works if the admin panel happens to run on the exact same machine
+      // as the Laravel server. Every other screen in the app (login, quiz,
+      // difficulty settings) reads the real server address from
+      // AppConfig.baseUrl — this one just never got wired up, so it was
+      // silently failing (connection refused / no route to host) for
+      // anyone not on localhost, and the dashboard just sat on "—" forever
+      // with nothing visible to say why.
+      final res = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/admin/analytics'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final body = json.decode(res.body) as Map<String, dynamic>;
+        if (body['success'] == true) {
+          final data = body['data'] as Map<String, dynamic>;
+          _rebuildLiveTooltipData(data);
+          setState(() {
+            _analytics = data;
+            _analyticsLoading = false;
+          });
+          return;
+        }
+        setState(() => _analyticsError =
+            body['message']?.toString() ?? 'Server returned success=false.');
+      } else if (res.statusCode == 401) {
+        setState(() => _analyticsError =
+            'Session expired or unauthorized. Please log in again.');
+      } else {
+        setState(() =>
+            _analyticsError = 'Server error (HTTP ${res.statusCode}).');
+      }
+    } catch (e) {
+      debugPrint('Analytics load error: $e');
+      setState(() => _analyticsError =
+          'Could not reach the server. Check that the API is running and reachable at ${AppConfig.baseUrl}.');
+    }
+    setState(() => _analyticsLoading = false);
+  }
+
+  // ── Player comments / feedback ─────────────────────────────────────────────
+  // Pulled from `_analytics['player_comments']`. Each entry is expected to
+  // look like: {player_name, comment, rating, created_at}. If the backend
+  // hasn't added this field to /api/admin/analytics yet, this simply shows
+  // an empty state instead of any placeholder text.
+  List<dynamic> get _playerComments =>
+      (_analytics?['player_comments'] as List<dynamic>?) ?? [];
 
   Future<void> _logoutDialog() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.8)),
         child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: 320,
+          padding: const EdgeInsets.all(19.2),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12.8),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Image.asset(
                 "assets/images-icons/sadlogout.png",
-                width: 80,
-                height: 80,
+                width: 64,
+                height: 64,
                 errorBuilder: (context, error, stackTrace) {
                   return const Icon(
                     Icons.logout,
-                    size: 80,
+                    size: 64,
                     color: Color(0xFF046EB8),
                   );
                 },
               ),
-              const SizedBox(height: 15),
+              const SizedBox(height: 12),
               const Text(
                 "Logout Confirmation",
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.bold,
-                  fontSize: 20,
+                  fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               const Text(
                 "Are you sure you want to log out?",
                 textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 11.2),
               ),
-              const SizedBox(height: 25),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
@@ -94,23 +177,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         side: const BorderSide(
                           color: Color(0xFF046EB8),
-                          width: 1,
+                          width: 0.8,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                       child: const Text(
                         "Cancel",
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 14,
+                          fontSize: 11.2,
                           color: Color(0xFF046EB8),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 15),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context, true),
@@ -119,14 +202,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         foregroundColor: const Color(0xFF816A03),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                       child: const Text(
                         "Logout",
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 14,
+                          fontSize: 11.2,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -140,11 +223,243 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ),
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed == true) {
+      // ✅ FIX: logout was only navigating to AdminLoginPage without ever
+      // clearing the saved admin token. AdminAuthGate (which "ADMIN" on the
+      // player login screen routes through) finds that still-valid token
+      // and silently logs back in — this actually revokes it server-side
+      // and clears it locally first.
+      await ApiService().logout();
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const AdminLoginPage()),
       );
     }
+  }
+
+  // ── My Profile: pick an image file from disk ───────────────────────────────
+  Future<Map<String, dynamic>?> _pickImageFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return null;
+      final file = result.files.first;
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && !kIsWeb && file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
+      }
+      return {'bytes': bytes, 'name': file.name};
+    } catch (e) {
+      debugPrint('FilePicker: $e');
+      return null;
+    }
+  }
+
+  Widget _buildMyProfileImageCircle(Uint8List? newBytes, String? existingImageUrl) {
+    ImageProvider? provider;
+    if (newBytes != null) {
+      provider = MemoryImage(newBytes);
+    } else if (existingImageUrl != null && existingImageUrl.isNotEmpty) {
+      provider = NetworkImage(existingImageUrl);
+    }
+    return CircleAvatar(
+      radius: 38.4,
+      backgroundColor: const Color(0xFFFDD000),
+      child: CircleAvatar(
+        radius: 36,
+        backgroundColor: Colors.white,
+        backgroundImage: provider,
+        child: provider == null
+            ? ClipOval(child: Image.asset(
+                'assets/images-badges/whiz-happy.png',
+                width: 72, height: 72, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 32, color: Colors.grey),
+              ))
+            : null,
+      ),
+    );
+  }
+
+  /// Lets the logged-in admin change their own username / picture. On
+  /// success this updates `_adminData` directly (see field above) so the
+  /// sidebar and topbar avatar refresh immediately — no re-login needed.
+  void _showEditMyProfileDialog() {
+    final usernameCtrl = TextEditingController(text: _adminData['username'] ?? '');
+    String? selectedSex = _adminData['sex'];
+    final String? existingImage = _adminData['image'] as String?;
+    Uint8List? newImageBytes;
+    String? newImageName;
+    bool saving = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDS) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.8)),
+        child: Container(
+          width: 336,
+          padding: const EdgeInsets.all(19.2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(children: [
+                Icon(Icons.edit, size: 16),
+                SizedBox(width: 6.4),
+                Text('Edit Profile', style: TextStyle(fontSize: 12.8, fontWeight: FontWeight.bold, fontFamily: 'Poppins')),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                Column(children: [
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () async {
+                        final picked = await _pickImageFile();
+                        if (picked != null) {
+                          setDS(() {
+                            newImageBytes = picked['bytes'] as Uint8List?;
+                            newImageName = picked['name'] as String?;
+                          });
+                        }
+                      },
+                      child: _buildMyProfileImageCircle(newImageBytes, existingImage),
+                    ),
+                  ),
+                  const SizedBox(height: 6.4),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final picked = await _pickImageFile();
+                      if (picked != null) {
+                        setDS(() {
+                          newImageBytes = picked['bytes'] as Uint8List?;
+                          newImageName = picked['name'] as String?;
+                        });
+                      }
+                    },
+                    icon: const Icon(Icons.upload, size: 9.6),
+                    label: const Text("Upload Photo", style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600, fontFamily: 'Poppins')),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFDD000),
+                      foregroundColor: const Color(0xFF816A03),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 1,
+                    ),
+                  ),
+                  if (newImageName != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3.2),
+                      child: SizedBox(
+                        width: 80,
+                        child: Text(newImageName!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 7.2, color: Colors.black54, fontFamily: 'Poppins'),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                ]),
+                const SizedBox(width: 12.8),
+                Expanded(
+                  child: Column(children: [
+                    TextField(
+                      controller: usernameCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Username',
+                        prefixIcon: const Icon(Icons.person),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(9.6)),
+                      ),
+                    ),
+                    const SizedBox(height: 9.6),
+                    DropdownButtonFormField<String>(
+                      value: selectedSex,
+                      hint: const Text('Sex', style: TextStyle(fontFamily: 'Poppins', fontSize: 10.4, color: Colors.black38)),
+                      decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(9.6))),
+                      isExpanded: true,
+                      items: ['Male', 'Female', 'Prefer not to say']
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontFamily: 'Poppins', fontSize: 10.4))))
+                          .toList(),
+                      onChanged: (v) => setDS(() => selectedSex = v),
+                    ),
+                  ]),
+                ),
+              ]),
+              const SizedBox(height: 19.2),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      side: const BorderSide(color: Colors.black54),
+                    ),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.black, fontFamily: 'Poppins', fontSize: 10.4)),
+                  ),
+                  ElevatedButton(
+                    onPressed: saving ? null : () async {
+                      final newUsername = usernameCtrl.text.trim();
+                      if (newUsername.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Username cannot be empty.'), backgroundColor: Colors.red),
+                        );
+                        return;
+                      }
+                      setDS(() => saving = true);
+                      final result = await ApiService().updateAdmin(
+                        _adminData['id'].toString(),
+                        {
+                          'username': newUsername,
+                          if (selectedSex != null) 'sex': selectedSex!,
+                        },
+                        imageBytes: newImageBytes,
+                      );
+                      if (!mounted) return;
+                      setDS(() => saving = false);
+                      if (result['success'] == true) {
+                        final updated = result['admin'] as Map<String, dynamic>?;
+                        setState(() {
+                          if (updated != null) {
+                            _adminData['username'] = updated['username'] ?? _adminData['username'];
+                            _adminData['sex'] = updated['sex'] ?? _adminData['sex'];
+                            _adminData['image'] = updated['image'] ?? _adminData['image'];
+                          } else {
+                            _adminData['username'] = newUsername;
+                            _adminData['sex'] = selectedSex ?? _adminData['sex'];
+                          }
+                        });
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Profile updated!'), backgroundColor: Color(0xFF27AE60)),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text(result['message'] ?? 'Failed to update profile.'), backgroundColor: Colors.red),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFDD000),
+                      foregroundColor: const Color(0xFF816A03),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: saving
+                        ? const SizedBox(width: 14.4, height: 14.4, child: CircularProgressIndicator(strokeWidth: 1.6, color: Color(0xFF816A03)))
+                        : const Text('SAVE CHANGES', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Poppins', fontSize: 10.4)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      )),
+    );
   }
 
   @override
@@ -155,7 +470,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         children: [
           Row(
             children: [
-              _buildSidebar(),
+              AdminSidebar(
+                selectedIndex: _selectedIndex,
+                adminData: _adminData,
+                onSelect: (i) => setState(() => _selectedIndex = i),
+              ),
               Expanded(
                 child: Column(
                   children: [
@@ -173,517 +492,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildSidebar() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              width: _isSidebarCollapsed ? 70 : 230,
-              color: const Color(0xFF1C2736),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Hamburger + logo row
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() {
-                        _isSidebarCollapsed = !_isSidebarCollapsed;
-                        if (_isSidebarCollapsed) {
-                          _usersExpanded = false;
-                          _quizContentExpanded = false;
-                        }
-                      }),
-                      child: SizedBox(
-                        height: 60,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: _isSidebarCollapsed
-                              ? Center(child: _buildHamburger())
-                              : Row(
-                            children: [
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeInOut,
-                                child: SizedBox(
-                                  width: 140,
-                                  child: Image.asset(
-                                    'assets/images-logo/newhomepagelogo.png',
-                                    fit: BoxFit.contain,
-                                    alignment: Alignment.centerLeft,
-                                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                                  ),
-                                ),
-                              ),
-                              const Spacer(),
-                              _buildHamburger(),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Menu items
-                  _buildMenuItem(Icons.analytics_outlined, 'Analytics', 0),
-                  const SizedBox(height: 4),
-                  _buildMenuItem(Icons.leaderboard_outlined, 'Leaderboard', 1),
-
-                  const SizedBox(height: 4),
-                  // Users
-                  _isSidebarCollapsed
-                      ? _buildCollapsedDropdownMenu(
-                    Icons.people_outline,
-                    'Users',
-                    [
-                      {
-                        'icon': Icons.person_outline,
-                        'title': 'Players',
-                        'index': 3,
-                      },
-                      {
-                        'icon': Icons.admin_panel_settings_outlined,
-                        'title': 'Admins',
-                        'index': 4,
-                      },
-                    ],
-                  )
-                      : _buildExpandableMenuItem(
-                    Icons.people_outline,
-                    'Users',
-                    2,
-                    _usersExpanded,
-                        () {
-                      setState(() {
-                        _usersExpanded = !_usersExpanded;
-                      });
-                    },
-                  ),
-
-                  ClipRect(
-                    child: AnimatedAlign(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeInOut,
-                      alignment: Alignment.topCenter,
-                      heightFactor: _usersExpanded && !_isSidebarCollapsed
-                          ? 1.0
-                          : 0.0,
-                      child: Column(
-                        children: [
-                          _buildSubMenuItem(Icons.person_outline, 'Players', 3),
-                          _buildSubMenuItem(
-                            Icons.admin_panel_settings_outlined,
-                            'Admins',
-                            4,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 4),
-                  // Quiz Content
-                  _isSidebarCollapsed
-                      ? _buildCollapsedDropdownMenu(
-                    Icons.quiz_outlined,
-                    'Quiz Content',
-                    [
-                      {
-                        'icon': Icons.question_answer_outlined,
-                        'title': 'Questions',
-                        'index': 6,
-                      },
-                      {
-                        'icon': Icons.speed_outlined,
-                        'title': 'Difficulty',
-                        'index': 7,
-                      },
-                    ],
-                  )
-                      : _buildExpandableMenuItem(
-                    Icons.quiz_outlined,
-                    'Quiz Content',
-                    5,
-                    _quizContentExpanded,
-                        () {
-                      setState(() {
-                        _quizContentExpanded = !_quizContentExpanded;
-                      });
-                    },
-                  ),
-
-                  ClipRect(
-                    child: AnimatedAlign(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeInOut,
-                      alignment: Alignment.topCenter,
-                      heightFactor: _quizContentExpanded && !_isSidebarCollapsed
-                          ? 1.0
-                          : 0.0,
-                      child: Column(
-                        children: [
-                          _buildSubMenuItem(
-                            Icons.question_answer_outlined,
-                            'Questions',
-                            6,
-                          ),
-                          _buildSubMenuItem(
-                            Icons.speed_outlined,
-                            'Difficulty',
-                            7,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const Spacer(),
-
-                  // Profile section at bottom
-                  Container(
-                    decoration: !_isSidebarCollapsed
-                        ? const BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: Color(0xFF2A3A52),
-                          width: 1,
-                        ),
-                      ),
-                    )
-                        : null,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFFFDD000),
-                              width: 2.5,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: widget.adminData?['image'] != null
-                                ? Image.network(
-                              widget.adminData!['image'],
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.person,
-                                color: Color(0xFF046EB8),
-                                size: 24,
-                              ),
-                            )
-                                : const Icon(
-                              Icons.person,
-                              color: Color(0xFF046EB8),
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                          child: !_isSidebarCollapsed
-                              ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(width: 12),
-                              AnimatedOpacity(
-                                duration: const Duration(
-                                  milliseconds: 250,
-                                ),
-                                opacity: _isSidebarCollapsed ? 0.0 : 1.0,
-                                child: Text(
-                                  widget.adminData?['username'] ?? 'Admin',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'Poppins',
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          )
-                              : const SizedBox.shrink(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildHamburger() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(width: 16, height: 2, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.80), borderRadius: BorderRadius.circular(2))),
-        const SizedBox(height: 4),
-        Container(width: 16, height: 2, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.80), borderRadius: BorderRadius.circular(2))),
-        const SizedBox(height: 4),
-        Container(width: 16, height: 2, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.80), borderRadius: BorderRadius.circular(2))),
-      ],
-    );
-  }
-
-  Widget _buildCollapsedDropdownMenu(
-      IconData icon,
-      String title,
-      List<Map<String, dynamic>> items,
-      ) {
-    return PopupMenuButton<int>(
-      tooltip: title,
-      offset: const Offset(70, 0),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topRight: Radius.circular(8),
-          bottomRight: Radius.circular(8),
-        ),
-      ),
-      color: const Color(0xFF1C2736),
-      itemBuilder: (context) {
-        return items.map((item) {
-          return PopupMenuItem<int>(
-            value: item['index'],
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(item['icon'], size: 20, color: Colors.white),
-                const SizedBox(width: 12),
-                Text(
-                  item['title'],
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 13,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList();
-      },
-      onSelected: (index) {
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Center(
-          child: Icon(icon, color: const Color(0xFFFFFFFF), size: 20),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(IconData icon, String title, int index) {
-    final isSelected = _selectedIndex == index;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedIndex = index;
-          if (index == 0 || index == 1) {
-            _usersExpanded = false;
-            _quizContentExpanded = false;
-          }
-        });
-      },
-      child: Tooltip(
-        message: _isSidebarCollapsed ? title : '',
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF046EB8) : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: _isSidebarCollapsed
-              ? Center(child: Icon(icon, color: const Color(0xFFFFFFFF), size: 20))
-              : Row(
-            children: [
-              SizedBox(
-                width: 20,
-                child: Icon(icon, color: const Color(0xFFFFFFFF), size: 20),
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(width: 12),
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 250),
-                      opacity: 1.0,
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Color(0xFFFFFFFF),
-                          fontSize: 13,
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExpandableMenuItem(
-      IconData icon,
-      String title,
-      int index,
-      bool isExpanded,
-      VoidCallback onTap,
-      ) {
-    return InkWell(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              child: Icon(icon, color: const Color(0xFFFFFFFF), size: 20),
-            ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child: !_isSidebarCollapsed
-                  ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(width: 12),
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 250),
-                    opacity: _isSidebarCollapsed ? 0.0 : 1.0,
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Color(0xFFFFFFFF),
-                        fontSize: 13,
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                  ),
-                ],
-              )
-                  : const SizedBox.shrink(),
-            ),
-            const Spacer(),
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: _isSidebarCollapsed ? 0.0 : 1.0,
-              child: AnimatedRotation(
-                duration: const Duration(milliseconds: 300),
-                turns: isExpanded ? 0.5 : 0,
-                child: const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Color(0xFFFFFFFF),
-                  size: 18,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubMenuItem(IconData icon, String title, int index) {
-    final isSelected = _selectedIndex == index;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        margin: const EdgeInsets.only(left: 24, right: 8, top: 2, bottom: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF046EB8) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 250),
-              opacity: 1.0,
-              child: Icon(icon, color: const Color(0xFFFFFFFF), size: 18),
-            ),
-            const SizedBox(width: 12),
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 250),
-              opacity: 1.0,
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFFFFFFFF),
-                  fontSize: 12,
-                  fontFamily: 'Poppins',
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildTopBar() {
     return Container(
-      height: 70,
+      height: 56,
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Stack(
@@ -715,21 +527,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: TextButton.icon(
                       onPressed: _showExportDialog,
                       icon: const Icon(
                         Icons.upload_outlined,
-                        size: 16,
+                        size: 12.8,
                         color: Colors.black87,
                       ),
                       label: const Text(
                         'Export',
                         style: TextStyle(
                           color: Colors.black87,
-                          fontSize: 13,
+                          fontSize: 10.4,
                           fontFamily: 'Poppins',
                         ),
                       ),
@@ -741,29 +553,64 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12.8),
                 ],
 
-                // Profile circle with logout functionality
+                // Profile circle — tap goes straight to Log Out confirmation.
+                // Editing your own picture/username is still available via the
+                // pencil icon on your own card in List of Admins.
                 MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
                     onTap: _logoutDialog,
                     child: Container(
-                      width: 40,
-                      height: 40,
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: const Color(0xFFFDD000),
-                          width: 2.5,
+                          width: 2,
                         ),
                       ),
-                      child: const Icon(
-                        Icons.person,
-                        color: Color(0xFF046EB8),
-                        size: 24,
+                      child: ClipOval(
+                        child: () {
+                          final img = _adminData['image'];
+                          if (img != null && (img as String).isNotEmpty) {
+                            final imageUrl = (img.startsWith('http://') || img.startsWith('https://'))
+                                ? img
+                                : '${AppConfig.baseUrl}/$img';
+                            return Image.network(
+                              imageUrl,
+                              width: 32,
+                              height: 32,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Image.asset(
+                                'assets/images-badges/whiz-happy.png',
+                                width: 32,
+                                height: 32,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.person,
+                                  color: Color(0xFF046EB8),
+                                  size: 19.2,
+                                ),
+                              ),
+                            );
+                          }
+                          return Image.asset(
+                            'assets/images-badges/whiz-happy.png',
+                            width: 32,
+                            height: 32,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.person,
+                              color: Color(0xFF046EB8),
+                              size: 19.2,
+                            ),
+                          );
+                        }(),
                       ),
                     ),
                   ),
@@ -789,7 +636,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     // Show admins list when index is 4
     if (_selectedIndex == 4) {
-      return const AdminUsersAdminsPage();
+      return AdminUsersAdminsPage(
+        currentAdminId: _adminData['id']?.toString(),
+      );
     }
 
     // Questions (index 6)
@@ -803,29 +652,39 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
 
     // Show analytics for all other cases (index 0 or others)
+    if (_analyticsLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF046EB8)));
+    }
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       child: Column(
         children: [
+          if (_analyticsError != null) _buildAnalyticsErrorBanner(),
           // Top stat cards
           Row(
             children: [
               Expanded(
                 child: RepaintBoundary(
                   key: _chartKeys['Total Registered Players'],
-                  child: _buildStatCard('2,348', 'Total Registered Players'),
+                  child: _buildStatCard(
+                    _analytics?['total_players']?.toString() ?? '—',
+                    'Total Registered Players',
+                  ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 13),
               Expanded(
                 child: RepaintBoundary(
-                  key: _chartKeys['Average Feedback'],
-                  child: _buildStatCard('3.9', 'Average Feedback'),
+                  key: _chartKeys['Average Player Rating'],
+                  child: _buildRatingStatCard(
+                    _analytics?['average_rating']?.toString() ?? '—',
+                    'Average Player Rating',
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           // First row of charts
           Row(
@@ -858,7 +717,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 13),
               Expanded(
                 child: RepaintBoundary(
                   key: _chartKeys['Age Distribution of Players'],
@@ -887,7 +746,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           // Second row of charts
           Row(
@@ -897,26 +756,41 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   key: _chartKeys['Registered Players by Region'],
                   child: _buildChartCard(
                     'Registered Players by Region',
-                    _buildHorizontalBarChart(isAscending: _sortAscending.containsKey('Registered Players by Region')
+                    _buildRegionBarChart(isAscending: _sortAscending.containsKey('Registered Players by Region')
                         ? _sortAscending['Registered Players by Region']!
                         : null),
                     legends: [
-                      {'color': const Color(0xFF5B6FE8), 'label': 'Players per Region'},
+                      {'color': const Color(0xFF046EB8), 'label': 'Players per Region'},
                     ],
                     sortable: true,
-                    // 10 horizontal bars: barHeight = height/(10*1.5), row i at y=i*bh*1.5
+                    // Uses the painter's own geometry so hover always lines up,
+                    // and maps the hovered column back to the original data
+                    // index so tooltips stay right after sorting.
                     hitTest: (pos, size) {
-                      final bh = size.height / 15;
-                      for (int i = 0; i < 10; i++) {
-                        final y = i * bh * 1.5;
-                        if (pos.dy >= y && pos.dy <= y + bh) return i;
+                      final regions =
+                          (_analytics?['players_by_region'] as List<dynamic>?) ?? [];
+                      if (regions.isEmpty) return -1;
+                      if (pos.dy >
+                          size.height - RegionBarChartPainter.labelAreaHeight) {
+                        return -1;
+                      }
+
+                      final order = RegionBarChartPainter.orderedIndices(
+                          regions, _sortAscending['Registered Players by Region']);
+
+                      for (int i = 0; i < order.length; i++) {
+                        final r = RegionBarChartPainter.barRect(
+                            size, order.length, i, 1.0);
+                        if (pos.dx >= r.left && pos.dx <= r.right) {
+                          return order[i];
+                        }
                       }
                       return -1;
                     },
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 13),
               Expanded(
                 child: RepaintBoundary(
                   key: _chartKeys['Male vs Female Players Per Game Mode'],
@@ -948,42 +822,78 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           // Third row of charts
           Row(
             children: [
               Expanded(
                 child: RepaintBoundary(
-                  key: _chartKeys['Rewards Distribution By Gender and Level'],
+                  key: _chartKeys['Badge Distribution By Gender and Level'],
                   child: _buildChartCard(
-                    'Rewards Distribution By Gender and Level',
-                    _buildStackedBarChart(isAscending: _sortAscending.containsKey('Rewards Distribution By Gender and Level')
-                        ? _sortAscending['Rewards Distribution By Gender and Level']
+                    'Badge Distribution By Gender and Level',
+                    _buildStackedBarChart(isAscending: _sortAscending.containsKey('Badge Distribution By Gender and Level')
+                        ? _sortAscending['Badge Distribution By Gender and Level']
                         : null),
                     legends: [
                       {'color': const Color(0xFF046EB8), 'label': 'Male'},
                       {'color': const Color(0xFF9B59B6), 'label': 'Female'},
                     ],
                     sortable: true,
-                    // 3 groups, barWidth = width/(3*2), bar at x=i*bw*2+bw/2
-                    // Male fills full height, Female overlaid on top portion
-                    // maleFracs=[0.7,0.55,0.4], femaleFracs=[0.4,0.3,0.2]
+                    // ✅ FIX: hitTest used to hard-code maleFracs/femaleFracs
+                    // as placeholder numbers ([0.7,0.55,0.4]/[0.4,0.3,0.2])
+                    // that never got wired up to real data. The bars
+                    // themselves were always drawn correctly from
+                    // _analytics (via StackedBarChartPainter), but hovering
+                    // used these fake proportions to decide the male/female
+                    // boundary — so the tooltip could report the wrong
+                    // segment (or wrong level) whenever real data didn't
+                    // happen to match [0.7,0.55,0.4]/[0.4,0.3,0.2]. This now
+                    // computes the same fractions, from the same source
+                    // data and the same optional sort, that the painter
+                    // actually draws with.
                     hitTest: (pos, size) {
                       const labelH = 18.0;
                       final chartH = size.height - labelH;
                       if (pos.dy > chartH) return -1;
-                      final bw = size.width / 6;
-                      const maleFracs = [0.7, 0.55, 0.4];
-                      const femaleFracs = [0.4, 0.3, 0.2];
-                      for (int i = 0; i < 3; i++) {
+
+                      final badges =
+                          (_analytics?['badges_by_gender_level'] as List<dynamic>?) ?? [];
+                      final source = badges.isNotEmpty ? badges : [
+                        {'level': 'Easy', 'male': 0, 'female': 0},
+                        {'level': 'Average', 'male': 0, 'female': 0},
+                        {'level': 'Difficult', 'male': 0, 'female': 0},
+                      ];
+
+                      final maxVal = source.fold<double>(1, (m, e) =>
+                        math.max(m, ((e['male'] ?? 0) as num).toDouble() + ((e['female'] ?? 0) as num).toDouble()));
+
+                      final groups = List<Map<String, dynamic>>.from(source.asMap().entries.map((entry) => {
+                        'originalIndex': entry.key,
+                        'male':   ((entry.value['male']   ?? 0) as num).toDouble() / maxVal,
+                        'female': ((entry.value['female'] ?? 0) as num).toDouble() / maxVal,
+                      }));
+
+                      final isAsc = _sortAscending['Badge Distribution By Gender and Level'];
+                      if (isAsc != null) {
+                        groups.sort((a, b) {
+                          final aT = a['male'] as double;
+                          final bT = b['male'] as double;
+                          return isAsc ? aT.compareTo(bT) : bT.compareTo(aT);
+                        });
+                      }
+
+                      final bw = size.width / (groups.length * 2);
+                      for (int i = 0; i < groups.length; i++) {
                         final x = i * bw * 2 + bw / 2;
                         if (pos.dx >= x && pos.dx < x + bw) {
-                          // Female overlay sits at top of male bar
-                          final femaleTop = chartH - chartH * maleFracs[i];
-                          final femaleBot = femaleTop + chartH * femaleFracs[i];
-                          if (pos.dy >= femaleTop && pos.dy <= femaleBot) return i * 2 + 1;
-                          return i * 2; // Male base
+                          final maleFrac   = groups[i]['male'] as double;
+                          final femaleFrac = groups[i]['female'] as double;
+                          final maleTop = chartH - chartH * maleFrac;
+                          final femaleTop = maleTop - chartH * femaleFrac;
+                          final origI = groups[i]['originalIndex'] as int;
+                          if (pos.dy >= femaleTop && pos.dy < maleTop) return origI * 2 + 1; // Female
+                          return origI * 2; // Male
                         }
                       }
                       return -1;
@@ -991,7 +901,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 13),
               Expanded(
                 child: RepaintBoundary(
                   key: _chartKeys['Most Played Game Mode By Age'],
@@ -1001,10 +911,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         ? _sortAscending['Most Played Game Mode By Age']
                         : null),
                     legends: [
-                      {'color': const Color(0xFFFDD000), 'label': 'Easy'},
-                      {'color': const Color(0xFF4A90D9), 'label': 'Average'},
-                      {'color': const Color(0xFF9B59B6), 'label': 'Difficult'},
+                      {'color': const Color(0xFFFDD000), 'label': 'Memory Match'},
+                      {'color': const Color(0xFF4A90D9), 'label': 'Challenge'},
                       {'color': const Color(0xFFE67E22), 'label': 'Battle'},
+                      {'color': const Color(0xFF9B59B6), 'label': 'Puzzle'},
                     ],
                     sortable: true,
                     // 4 age groups × 4 mode bars: groupWidth=width/4, barWidth=gw/5
@@ -1027,6 +937,198 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+
+          // Player comments / feedback — real data from _analytics['player_comments']
+          _buildCommentsCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsErrorBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFB020).withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFFB25E00), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _analyticsError ?? '',
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12,
+                color: Color(0xFF7A4A00),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _loadAnalytics,
+            child: const Text(
+              'Retry',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: Color(0xFF046EB8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentsCard() {
+    final comments = _playerComments;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Player Comments & Feedback',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+              Text(
+                '${comments.length} comment${comments.length == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Colors.black45,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (comments.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  'No player comments yet.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.black38,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 260),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: comments.length,
+                separatorBuilder: (_, __) => const Divider(height: 13),
+                itemBuilder: (context, i) {
+                  final c = comments[i] as Map<String, dynamic>;
+                  final name = c['player_name']?.toString() ?? 'Player';
+                  final text = c['comment']?.toString() ?? '';
+                  final rating = (c['rating'] as num?)?.toInt() ?? 0;
+                  final date = c['created_at']?.toString() ?? '';
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 13,
+                        backgroundColor: const Color(0xFF046EB8).withValues(alpha: 0.1),
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF046EB8),
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  name,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black87,
+                                    fontFamily: 'Poppins',
+                                  ),
+                                ),
+                                if (rating > 0) ...[
+                                  const SizedBox(width: 6),
+                                  Row(
+                                    children: List.generate(5, (s) => Icon(
+                                      s < rating ? Icons.star_rounded : Icons.star_border_rounded,
+                                      size: 10,
+                                      color: const Color(0xFFFDD000),
+                                    )),
+                                  ),
+                                ],
+                                const Spacer(),
+                                if (date.isNotEmpty)
+                                  Text(
+                                    date,
+                                    style: const TextStyle(
+                                      fontSize: 8,
+                                      color: Colors.black38,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              text,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.black54,
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -1034,7 +1136,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Widget _buildStatCard(String value, String label) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -1051,18 +1153,65 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 28,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
               fontFamily: 'Poppins',
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
             label,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 10,
+              color: Colors.black54,
+              fontFamily: 'Poppins',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRatingStatCard(String value, String label) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.star_rounded, color: Color(0xFFFDD000), size: 26),
+              const SizedBox(width: 5),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 10,
               color: Colors.black54,
               fontFamily: 'Poppins',
             ),
@@ -1077,14 +1226,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 10,
-          height: 10,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 3),
         Text(label,
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 8,
               color: Colors.black54,
               fontFamily: 'Poppins',
             )),
@@ -1097,7 +1246,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final isAscending = _sortAscending[title] ?? false;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -1119,7 +1268,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: Colors.black87,
                     fontFamily: 'Poppins',
@@ -1137,7 +1286,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         borderRadius: BorderRadius.circular(6),
                         onTap: () => _toggleSort(title),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1145,13 +1294,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 isSorted
                                     ? (isAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)
                                     : Icons.swap_vert_rounded,
-                                size: 18,
+                                size: 14,
                                 color: isSorted ? const Color(0xFF046EB8) : Colors.black45,
                               ),
                               if (isSorted) ...[
                                 const SizedBox(width: 3),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF046EB8).withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
@@ -1159,7 +1308,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   child: Text(
                                     isAscending ? 'ASC' : 'DESC',
                                     style: const TextStyle(
-                                      fontSize: 9,
+                                      fontSize: 8,
                                       fontWeight: FontWeight.w700,
                                       color: Color(0xFF046EB8),
                                       fontFamily: 'Poppins',
@@ -1180,10 +1329,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       borderRadius: BorderRadius.circular(6),
                       onTap: () => _exportChart(title),
                       child: const Padding(
-                        padding: EdgeInsets.all(5),
+                        padding: EdgeInsets.all(4),
                         child: Icon(
                           Icons.upload_outlined,
-                          size: 18,
+                          size: 14,
                           color: Colors.black45,
                         ),
                       ),
@@ -1193,16 +1342,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 13),
           SizedBox(
-            height: 180,
+            height: 144,
             child: InteractiveChart(title: title, chart: chart, hitTest: hitTest),
           ),
           if (legends != null && legends.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Wrap(
-              spacing: 12,
-              runSpacing: 6,
+              spacing: 10,
+              runSpacing: 5,
               children: legends.map((l) =>
                   _buildLegendDot(l['color'] as Color, l['label'] as String)
               ).toList(),
@@ -1222,12 +1371,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void _showExportDialog() {
     final List<String> chartTitles = [
       'Total Registered Players',
-      'Average Feedback',
+      'Average Player Rating',
       'Male vs Female Registered Players',
       'Age Distribution of Players',
       'Registered Players by Region',
       'Male vs Female Players Per Game Mode',
-      'Rewards Distribution By Gender and Level',
+      'Badge Distribution By Gender and Level',
       'Most Played Game Mode By Age',
     ];
 
@@ -1904,13 +2053,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     if (selected.contains('Total Registered Players')) {
       buffer.writeln('"=== Total Registered Players ==="');
       buffer.writeln('"Metric","Value"');
-      buffer.writeln('"Total Registered Players","2,348"');
+      buffer.writeln('"Total Registered Players","${_analytics?['total_players'] ?? '—'}"');
       buffer.writeln();
     }
     if (selected.contains('Average Feedback')) {
       buffer.writeln('"=== Average Feedback ==="');
       buffer.writeln('"Metric","Value"');
-      buffer.writeln('"Average Feedback","3.9"');
+      buffer.writeln('"Average Feedback","${_analytics?['average_rating'] ?? '—'}"');
       buffer.writeln();
     }
 
@@ -1920,7 +2069,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       'Age Distribution of Players',
       'Registered Players by Region',
       'Male vs Female Players Per Game Mode',
-      'Rewards Distribution By Gender and Level',
+      'Badge Distribution By Gender and Level',
       'Most Played Game Mode By Age',
     ];
 
@@ -2089,101 +2238,191 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildPieChart({bool? isAscending}) {
-    return CustomPaint(painter: PieChartPainter(isAscending: isAscending), child: Container());
-  }
-
-  Widget _buildBarChart({bool? isAscending}) {
-    return CustomPaint(painter: BarChartPainter(isAscending: isAscending), child: Container());
-  }
-
-  Widget _buildHorizontalBarChart({bool? isAscending}) {
+    final gender = (_analytics?['gender_distribution'] as List<dynamic>?) ?? [];
+    final male   = (gender.firstWhere((g) => g['label'] == 'Male',   orElse: () => {'count': 0})['count'] as num).toDouble();
+    final female = (gender.firstWhere((g) => g['label'] == 'Female', orElse: () => {'count': 0})['count'] as num).toDouble();
     return CustomPaint(
-      painter: HorizontalBarChartPainter(isAscending: isAscending),
+      painter: PieChartPainter(isAscending: isAscending, male: male, female: female),
       child: Container(),
     );
   }
 
+  Widget _buildBarChart({bool? isAscending}) {
+    final ages = (_analytics?['age_distribution'] as List<dynamic>?) ?? [];
+    return CustomPaint(
+      painter: BarChartPainter(isAscending: isAscending, data: ages),
+      child: Container(),
+    );
+  }
+
+  Widget _buildRegionBarChart({bool? isAscending}) {
+    final regions = (_analytics?['players_by_region'] as List<dynamic>?) ?? [];
+    return CustomPaint(
+      painter: RegionBarChartPainter(isAscending: isAscending, data: regions),
+      child: Container(),
+    );
+  }
+
+  // ── Empty-state overlay ─────────────────────────────────────────────────
+  // Without this, a chart with zero counts across the board renders as a
+  // totally blank white box — axis labels and legend show, but there's no
+  // visual cue for *why* there are no bars, so it just looks broken. This
+  // makes "there's genuinely no data yet" explicit instead of silent.
+  bool _allCountsZero(List<dynamic> data, List<String> keys) {
+    if (data.isEmpty) return true;
+    for (final e in data) {
+      for (final k in keys) {
+        final v = e[k];
+        if (v is num && v > 0) return false;
+      }
+    }
+    return true;
+  }
+
+  Widget _withEmptyOverlay(Widget chart, bool isEmpty, {required String message}) {
+    if (!isEmpty) return chart;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        chart,
+        Center(
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 9.6,
+              fontFamily: 'Poppins',
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade400,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildGroupedBarChart({bool? isAscending}) {
-    return CustomPaint(painter: GroupedBarChartPainter(isAscending: isAscending), child: Container());
+    final modes = (_analytics?['gender_by_game_mode'] as List<dynamic>?) ?? [];
+    return _withEmptyOverlay(
+      CustomPaint(
+        painter: GroupedBarChartPainter(isAscending: isAscending, data: modes),
+        child: Container(),
+      ),
+      _allCountsZero(modes, ['male', 'female']),
+      message: 'No game sessions recorded yet',
+    );
   }
 
   Widget _buildStackedBarChart({bool? isAscending}) {
-    return CustomPaint(painter: StackedBarChartPainter(isAscending: isAscending), child: Container());
+    final badges = (_analytics?['badges_by_gender_level'] as List<dynamic>?) ?? [];
+    return _withEmptyOverlay(
+      CustomPaint(
+        painter: StackedBarChartPainter(isAscending: isAscending, data: badges),
+        child: Container(),
+      ),
+      _allCountsZero(badges, ['male', 'female']),
+      message: 'No badges earned yet',
+    );
   }
 
   Widget _buildMultiColorBarChart({bool? isAscending}) {
-    return CustomPaint(
-      painter: MultiColorBarChartPainter(isAscending: isAscending),
-      child: Container(),
+    final byAge = (_analytics?['game_mode_by_age'] as List<dynamic>?) ?? [];
+    return _withEmptyOverlay(
+      CustomPaint(
+        painter: MultiColorBarChartPainter(isAscending: isAscending, data: byAge),
+        child: Container(),
+      ),
+      _allCountsZero(byAge, ['memory_match', 'challenge', 'battle', 'puzzle']),
+      message: 'No game sessions recorded yet',
     );
   }
 }
 
 // ── Tooltip data definitions ─────────────────────────────────────────────────
+// NOTE: this used to be a `const` map of hand-typed numbers, which is why the
+// tooltips/exports could show values that had nothing to do with the actual
+// bars on screen (bars are painted from live `_analytics`, but the tooltip
+// text was pulling from this separate fake map). It is now a plain mutable
+// map that gets rebuilt from the same `_analytics` payload every time
+// analytics is (re)loaded, so hovering, PNG/PDF export, and CSV export all
+// show the same real numbers as the bars.
+Map<String, List<_TooltipEntry>> _chartTooltipData = {};
 
-const _chartTooltipData = {
-  'Male vs Female Registered Players': [
-    _TooltipEntry(label: 'Male', value: '1,200 players', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Female', value: '1,148 players', color: Color(0xFF00C9B1)),
-  ],
-  'Age Distribution of Players': [
-    _TooltipEntry(label: '7–9',   value: '280 players',  color: Color(0xFF046EB8)),
-    _TooltipEntry(label: '10–12', value: '470 players',  color: Color(0xFF27AE60)),
-    _TooltipEntry(label: '13–15', value: '850 players',  color: Color(0xFFE67E22)),
-    _TooltipEntry(label: '16–18', value: '380 players',  color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: '19–21', value: '200 players',  color: Color(0xFFFDD000)),
-    _TooltipEntry(label: '22–25', value: '110 players',  color: Color(0xFF4A90D9)),
-    _TooltipEntry(label: '26+',   value: '58 players',   color: Color(0xFF00C9B1)),
-  ],
-  'Registered Players by Region': [
-    _TooltipEntry(label: 'NCR',        value: '520 players', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'CAR',        value: '384 players', color: Color(0xFF27AE60)),
-    _TooltipEntry(label: 'Region I',   value: '329 players', color: Color(0xFFE67E22)),
-    _TooltipEntry(label: 'Region II',  value: '302 players', color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: 'Region III', value: '275 players', color: Color(0xFF4A90D9)),
-    _TooltipEntry(label: 'Region IV-A', value: '247 players', color: Color(0xFFFDD000)),
-    _TooltipEntry(label: 'Region V',   value: '220 players', color: Color(0xFF5B6FE8)),
-    _TooltipEntry(label: 'Region VI',  value: '192 players', color: Color(0xFF00C9B1)),
-    _TooltipEntry(label: 'Region VII', value: '165 players', color: Color(0xFFE67E22)),
-    _TooltipEntry(label: 'Region VIII', value: '55 players',  color: Color(0xFF046EB8)),
-  ],
-  'Male vs Female Players Per Game Mode': [
-    _TooltipEntry(label: 'Easy — Male',       value: '480 players', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Easy — Female',     value: '620 players', color: Color(0xFF27AE60)),
-    _TooltipEntry(label: 'Average — Male',    value: '570 players', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Average — Female',  value: '525 players', color: Color(0xFF27AE60)),
-    _TooltipEntry(label: 'Difficult — Male',  value: '380 players', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Difficult — Female', value: '430 players', color: Color(0xFF27AE60)),
-    _TooltipEntry(label: 'Battle — Male',     value: '335 players', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Battle — Female',   value: '286 players', color: Color(0xFF27AE60)),
-  ],
-  'Rewards Distribution By Gender and Level': [
-    _TooltipEntry(label: 'Easy — Male',       value: '350 rewards', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Easy — Female',     value: '200 rewards', color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: 'Average — Male',    value: '275 rewards', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Average — Female',  value: '150 rewards', color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: 'Difficult — Male',  value: '200 rewards', color: Color(0xFF046EB8)),
-    _TooltipEntry(label: 'Difficult — Female', value: '100 rewards', color: Color(0xFF9B59B6)),
-  ],
-  'Most Played Game Mode By Age': [
-    _TooltipEntry(label: '7–10  • Easy',      value: '400 plays', color: Color(0xFFFDD000)),
-    _TooltipEntry(label: '7–10  • Average',   value: '300 plays', color: Color(0xFF4A90D9)),
-    _TooltipEntry(label: '7–10  • Difficult', value: '200 plays', color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: '7–10  • Battle',    value: '150 plays', color: Color(0xFFE67E22)),
-    _TooltipEntry(label: '11–13 • Easy',      value: '500 plays', color: Color(0xFFFDD000)),
-    _TooltipEntry(label: '11–13 • Average',   value: '550 plays', color: Color(0xFF4A90D9)),
-    _TooltipEntry(label: '11–13 • Difficult', value: '300 plays', color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: '11–13 • Battle',    value: '250 plays', color: Color(0xFFE67E22)),
-    _TooltipEntry(label: '14–18 • Easy',      value: '350 plays', color: Color(0xFFFDD000)),
-    _TooltipEntry(label: '14–18 • Average',   value: '600 plays', color: Color(0xFF4A90D9)),
-    _TooltipEntry(label: '14–18 • Difficult', value: '650 plays', color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: '14–18 • Battle',    value: '400 plays', color: Color(0xFFE67E22)),
-    _TooltipEntry(label: '19+   • Easy',      value: '200 plays', color: Color(0xFFFDD000)),
-    _TooltipEntry(label: '19+   • Average',   value: '350 plays', color: Color(0xFF4A90D9)),
-    _TooltipEntry(label: '19+   • Difficult', value: '500 plays', color: Color(0xFF9B59B6)),
-    _TooltipEntry(label: '19+   • Battle',    value: '550 plays', color: Color(0xFFE67E22)),
-  ],
-};
+/// Rebuilds [_chartTooltipData] from the live `/api/admin/analytics` payload.
+/// Keeps the exact same keys/shape the UI already expects, just fed by real
+/// numbers instead of hardcoded ones. Any field missing from the API simply
+/// renders an empty tooltip list for that chart instead of fake data.
+void _rebuildLiveTooltipData(Map<String, dynamic>? analytics) {
+  const genderColor = {'Male': Color(0xFF046EB8), 'Female': Color(0xFF00C9B1)};
+
+  final gender = (analytics?['gender_distribution'] as List<dynamic>?) ?? [];
+  final ages = (analytics?['age_distribution'] as List<dynamic>?) ?? [];
+  final regions = (analytics?['players_by_region'] as List<dynamic>?) ?? [];
+  final modes = (analytics?['gender_by_game_mode'] as List<dynamic>?) ?? [];
+  final badges = (analytics?['badges_by_gender_level'] as List<dynamic>?) ?? [];
+  final byAge = (analytics?['game_mode_by_age'] as List<dynamic>?) ?? [];
+
+  const ageColors = [
+    Color(0xFF046EB8), Color(0xFF27AE60), Color(0xFFE67E22),
+    Color(0xFF9B59B6), Color(0xFFFDD000), Color(0xFF4A90D9), Color(0xFF00C9B1),
+  ];
+  const regionColors = [
+    Color(0xFF046EB8), Color(0xFF27AE60), Color(0xFFE67E22),
+    Color(0xFF9B59B6), Color(0xFF4A90D9), Color(0xFFFDD000),
+    Color(0xFF5B6FE8), Color(0xFF00C9B1), Color(0xFFE67E22), Color(0xFF046EB8),
+  ];
+  // ✅ FIX: same swap as MultiColorBarChartPainter — battle=orange, puzzle=purple, matching the legend.
+  const modeColors = [Color(0xFFFDD000), Color(0xFF4A90D9), Color(0xFFE67E22), Color(0xFF9B59B6)];
+
+  _chartTooltipData = {
+    'Male vs Female Registered Players': gender.map((g) => _TooltipEntry(
+      label: (g['label'] as String? ?? ''),
+      value: '${g['count'] ?? 0} players',
+      color: genderColor[g['label']] ?? const Color(0xFF046EB8),
+    )).toList(),
+
+    'Age Distribution of Players': [
+      for (int i = 0; i < ages.length; i++)
+        _TooltipEntry(
+          label: ages[i]['range'] as String? ?? '',
+          value: '${ages[i]['count'] ?? 0} players',
+          color: ageColors[i % ageColors.length],
+        ),
+    ],
+
+    'Registered Players by Region': [
+      for (int i = 0; i < regions.length; i++)
+        _TooltipEntry(
+          label: regions[i]['region'] as String? ?? '',
+          value: '${regions[i]['count'] ?? 0} players',
+          color: regionColors[i % regionColors.length],
+        ),
+    ],
+
+    'Male vs Female Players Per Game Mode': [
+      for (final m in modes) ...[
+        _TooltipEntry(label: '${m['mode'] ?? ''} — Male', value: '${m['male'] ?? 0} players', color: const Color(0xFF046EB8)),
+        _TooltipEntry(label: '${m['mode'] ?? ''} — Female', value: '${m['female'] ?? 0} players', color: const Color(0xFF27AE60)),
+      ],
+    ],
+
+    'Badge Distribution By Gender and Level': [
+      for (final b in badges) ...[
+        _TooltipEntry(label: '${b['level'] ?? ''} — Male', value: '${b['male'] ?? 0} badges', color: const Color(0xFF046EB8)),
+        _TooltipEntry(label: '${b['level'] ?? ''} — Female', value: '${b['female'] ?? 0} badges', color: const Color(0xFF9B59B6)),
+      ],
+    ],
+
+    'Most Played Game Mode By Age': [
+      for (final a in byAge) ...[
+        _TooltipEntry(label: '${a['age_range'] ?? ''} • Memory Match', value: '${a['memory_match'] ?? 0} plays', color: modeColors[0]),
+        _TooltipEntry(label: '${a['age_range'] ?? ''} • Challenge', value: '${a['challenge'] ?? 0} plays', color: modeColors[1]),
+        _TooltipEntry(label: '${a['age_range'] ?? ''} • Battle', value: '${a['battle'] ?? 0} plays', color: modeColors[2]),
+        _TooltipEntry(label: '${a['age_range'] ?? ''} • Puzzle', value: '${a['puzzle'] ?? 0} plays', color: modeColors[3]),
+      ],
+    ],
+  };
+}
 
 class _TooltipEntry {
   final String label;
@@ -2317,7 +2556,9 @@ class _InteractiveChartState extends State<InteractiveChart> {
 
 class PieChartPainter extends CustomPainter {
   final bool? isAscending;
-  const PieChartPainter({this.isAscending});
+  final double male;
+  final double female;
+  const PieChartPainter({this.isAscending, this.male = 0, this.female = 0});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2325,10 +2566,21 @@ class PieChartPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.height / 2 * 0.7;
 
-    // Male=0.75 sweep, Female=0.25 sweep by default
-    // ASC = Female (smaller) first/larger shown first; DESC = Male (larger) dominant
-    final maleValue = 0.75;
-    final femaleValue = 0.25;
+    final total = male + female;
+    // Previously this defaulted to a fake 75/25 split when there was no real
+    // data, which drew a convincing-looking pie even with zero players — the
+    // exact "still hardcoded?" issue. Now: no data = no fake slices, just an
+    // empty outline so it's visually obvious there's nothing to show yet.
+    if (total <= 0) {
+      final emptyPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Colors.grey.shade300;
+      canvas.drawCircle(center, radius, emptyPaint);
+      return;
+    }
+    final maleValue  = male / total;
+    final femaleValue = female / total;
 
     final sorted = isAscending == null
         ? [
@@ -2364,7 +2616,8 @@ class PieChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant PieChartPainter old) => old.isAscending != isAscending;
+  bool shouldRepaint(covariant PieChartPainter old) =>
+      old.isAscending != isAscending || old.male != male || old.female != female;
 }
 
 // Custom painter for the upload icon
@@ -2412,29 +2665,30 @@ class UploadIconPainter extends CustomPainter {
 
 class BarChartPainter extends CustomPainter {
   final bool? isAscending;
-  const BarChartPainter({this.isAscending});
+  final List<dynamic> data; // age_distribution from API
+  const BarChartPainter({this.isAscending, this.data = const []});
 
   @override
   void paint(Canvas canvas, Size size) {
     const allColors = [
-      Color(0xFF046EB8),
-      Color(0xFF27AE60),
-      Color(0xFFE67E22),
-      Color(0xFF9B59B6),
-      Color(0xFFFDD000),
-      Color(0xFF4A90D9),
-      Color(0xFF00C9B1),
+      Color(0xFF046EB8), Color(0xFF27AE60), Color(0xFFE67E22),
+      Color(0xFF9B59B6), Color(0xFFFDD000), Color(0xFF4A90D9), Color(0xFF00C9B1),
     ];
-    const allLabels = ['7–9', '10–12', '13–15', '16–18', '19–21', '22–25', '26+'];
-    const allValues = [0.18, 0.42, 0.78, 0.65, 0.48, 0.28, 0.10];
 
-    final items = List.generate(allValues.length, (i) => {
-      'label': allLabels[i],
-      'value': allValues[i],
-      'color': allColors[i % allColors.length],
-    });
+    final source = data.isNotEmpty ? data : [
+      {'range': '0-12', 'count': 0}, {'range': '13-17', 'count': 0},
+      {'range': '18-22', 'count': 0}, {'range': '23-29', 'count': 0},
+      {'range': '30-39', 'count': 0}, {'range': '40+', 'count': 0},
+    ];
 
-    // Only sort when sort has been explicitly triggered
+    final maxCount = source.fold<double>(1, (m, e) => math.max(m, ((e['count'] ?? 0) as num).toDouble()));
+
+    final items = source.asMap().entries.map((entry) => {
+      'label': entry.value['range'] as String? ?? '',
+      'value': ((entry.value['count'] ?? 0) as num).toDouble() / maxCount,
+      'color': allColors[entry.key % allColors.length],
+    }).toList();
+
     if (isAscending != null) {
       items.sort((a, b) => isAscending!
           ? (a['value'] as double).compareTo(b['value'] as double)
@@ -2461,118 +2715,176 @@ class BarChartPainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: items[i]['label'] as String,
-          style: const TextStyle(
-            color: Color(0xFF555555),
-            fontSize: 8.5,
-            fontFamily: 'Poppins',
-          ),
+          style: const TextStyle(color: Color(0xFF555555), fontSize: 8.5, fontFamily: 'Poppins'),
         ),
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: barWidth * 2);
-
       tp.paint(canvas, Offset(x + barWidth / 2 - tp.width / 2, chartHeight + 3));
     }
   }
 
   @override
-  bool shouldRepaint(covariant BarChartPainter old) => old.isAscending != isAscending;
+  bool shouldRepaint(covariant BarChartPainter old) =>
+      old.isAscending != isAscending || old.data != data;
 }
 
-class HorizontalBarChartPainter extends CustomPainter {
+class RegionBarChartPainter extends CustomPainter {
   final bool? isAscending;
-  const HorizontalBarChartPainter({this.isAscending});
+  final List<dynamic> data; // players_by_region from API
+  const RegionBarChartPainter({this.isAscending, this.data = const []});
+
+  // Layout constants shared with the chart card's hitTest so hover lines up.
+  static const double labelAreaHeight = 52.0; // room for the rotated region name
+  static const double topPadding      = 18.0; // room for the count above the bar
+  static const double maxBarWidth     = 56.0; // stops 1-2 regions going full-bleed
+  static const double minBarWidth     = 8.0;  // stops 20+ regions vanishing
+
+  static const List<Color> palette = [
+    Color(0xFF046EB8), Color(0xFF27AE60), Color(0xFFE67E22),
+    Color(0xFF9B59B6), Color(0xFF4A90D9), Color(0xFFFDD000),
+    Color(0xFF5B6FE8), Color(0xFF00C9B1), Color(0xFFE67E22), Color(0xFF046EB8),
+  ];
+
+  /// Original data indices in the order they are drawn left to right.
+  /// hitTest uses this too, so tooltips stay correct after sorting.
+  static List<int> orderedIndices(List<dynamic> data, bool? isAscending) {
+    final idx = List<int>.generate(data.length, (i) => i);
+    if (isAscending == null) return idx;
+    double c(int i) => ((data[i]['count'] ?? 0) as num).toDouble();
+    idx.sort((a, b) =>
+        isAscending ? c(a).compareTo(c(b)) : c(b).compareTo(c(a)));
+    return idx;
+  }
+
+  /// Single source of truth for bar geometry. [fraction] is 0..1 of the plot
+  /// height; pass 1.0 to get the full hoverable column.
+  static Rect barRect(Size size, int count, int position, double fraction) {
+    final chartBottom = size.height - labelAreaHeight;
+    final chartHeight = math.max(1.0, chartBottom - topPadding);
+    final slotWidth   = size.width / math.max(1, count);
+    final barWidth    =
+        math.max(minBarWidth, math.min(maxBarWidth, slotWidth * 0.6));
+    final left   = slotWidth * position + (slotWidth - barWidth) / 2;
+    final height = chartHeight * fraction.clamp(0.0, 1.0);
+    return Rect.fromLTWH(left, chartBottom - height, barWidth, height);
+  }
+
+  /// "CALABARZON (Region IV-A)" -> "CALABARZON". The parenthetical never fits
+  /// under a narrow column and the name alone identifies the region.
+  static String shortLabel(String raw) {
+    final i = raw.indexOf('(');
+    final head = i > 0 ? raw.substring(0, i).trim() : raw.trim();
+    return head.isEmpty ? raw.trim() : head;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    const allColors = [
-      Color(0xFF046EB8),
-      Color(0xFF27AE60),
-      Color(0xFFE67E22),
-      Color(0xFF9B59B6),
-      Color(0xFF4A90D9),
-      Color(0xFFFDD000),
-      Color(0xFF5B6FE8),
-      Color(0xFF00C9B1),
-      Color(0xFFE67E22),
-      Color(0xFF046EB8),
-    ];
-    const allLabels = [
-      'NCR', 'CAR', 'Region I', 'Region II', 'Region III',
-      'Region IV-A', 'Region V', 'Region VI', 'Region VII', 'Region VIII',
-    ];
-    // Natural geographic order, values are NOT pre-sorted by count
-    const allValues = [0.95, 0.28, 0.52, 0.38, 0.65, 0.72, 0.44, 0.31, 0.57, 0.22];
+    if (data.isEmpty) return;
 
-    final items = List.generate(allValues.length, (i) => {
-      'label': allLabels[i],
-      'value': allValues[i],
-      'color': allColors[i % allColors.length],
-    });
+    final order = orderedIndices(data, isAscending);
+    final maxCount = data.fold<double>(
+        1, (m, e) => math.max(m, ((e['count'] ?? 0) as num).toDouble()));
 
-    // Only sort when explicitly triggered
-    if (isAscending != null) {
-      items.sort((a, b) => isAscending!
-          ? (a['value'] as double).compareTo(b['value'] as double)
-          : (b['value'] as double).compareTo(a['value'] as double));
-    }
+    final chartBottom = size.height - labelAreaHeight;
 
-    const labelWidth = 68.0;
-    final chartWidth = size.width - labelWidth;
-    final barHeight = size.height / (items.length * 1.5);
+    // Baseline, so one short bar still reads as a chart.
+    canvas.drawLine(
+      Offset(0, chartBottom),
+      Offset(size.width, chartBottom),
+      Paint()
+        ..color = const Color(0xFFE0E0E0)
+        ..strokeWidth = 1,
+    );
 
-    for (int i = 0; i < items.length; i++) {
-      final y = i * barHeight * 1.5;
+    for (int pos = 0; pos < order.length; pos++) {
+      final src   = order[pos];
+      final count = ((data[src]['count'] ?? 0) as num).toDouble();
+      final rect  = barRect(size, order.length, pos, count / maxCount);
 
-      final tp = TextPainter(
+      canvas.drawRRect(
+        RRect.fromRectAndCorners(
+          rect,
+          topLeft: const Radius.circular(4),
+          topRight: const Radius.circular(4),
+        ),
+        Paint()..color = palette[src % palette.length],
+      );
+
+      final centerX = rect.left + rect.width / 2;
+
+      // Count above the bar.
+      final vp = TextPainter(
         text: TextSpan(
-          text: items[i]['label'] as String,
+          text: count.toInt().toString(),
           style: const TextStyle(
-            color: Color(0xFF555555),
-            fontSize: 8.0,
+            color: Color(0xFF444444),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
             fontFamily: 'Poppins',
           ),
         ),
         textDirection: TextDirection.ltr,
-      )..layout(maxWidth: labelWidth - 4);
+      )..layout();
+      vp.paint(canvas, Offset(centerX - vp.width / 2, rect.top - vp.height - 3));
 
-      tp.paint(canvas, Offset(0, y + barHeight / 2 - tp.height / 2));
-
-      final paint = Paint()..color = items[i]['color'] as Color;
-      final barW = chartWidth * (items[i]['value'] as double);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(labelWidth, y, barW, barHeight),
-          const Radius.circular(4),
+      // Rotated region name under the baseline, anchored by its right edge and
+      // running down-left (the usual axis-label convention). The old version
+      // painted outward from the anchor, which pushed text into the plot area.
+      final tp = TextPainter(
+        text: TextSpan(
+          text: shortLabel(data[src]['region'] as String? ?? ''),
+          style: const TextStyle(
+            color: Color(0xFF555555),
+            fontSize: 8,
+            fontFamily: 'Poppins',
+          ),
         ),
-        paint,
-      );
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '\u2026',
+      )..layout(maxWidth: 58);
+
+      canvas.save();
+      canvas.translate(centerX, chartBottom + 6);
+      canvas.rotate(-45 * math.pi / 180);
+      tp.paint(canvas, Offset(-tp.width, -tp.height / 2));
+      canvas.restore();
     }
   }
 
   @override
-  bool shouldRepaint(covariant HorizontalBarChartPainter old) => old.isAscending != isAscending;
+  bool shouldRepaint(covariant RegionBarChartPainter old) =>
+      old.isAscending != isAscending || old.data != data;
 }
 
 class GroupedBarChartPainter extends CustomPainter {
   final bool? isAscending;
-  const GroupedBarChartPainter({this.isAscending});
+  final List<dynamic> data; // gender_by_game_mode from API
+  const GroupedBarChartPainter({this.isAscending, this.data = const []});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Each group: [label, maleHeight, femaleHeight]
-    final allGroups = [
-      {'label': 'Easy',      'male': 0.5, 'female': 0.65},
-      {'label': 'Average',   'male': 0.6, 'female': 0.55},
-      {'label': 'Difficult', 'male': 0.4, 'female': 0.45},
-      {'label': 'Battle',    'male': 0.35, 'female': 0.3},
+    final source = data.isNotEmpty ? data : [
+      {'mode': 'Memory Match', 'male': 0, 'female': 0},
+      {'mode': 'Challenge', 'male': 0, 'female': 0},
+      {'mode': 'Battle', 'male': 0, 'female': 0},
+      {'mode': 'Puzzle', 'male': 0, 'female': 0},
     ];
 
-    final groups = List<Map<String, dynamic>>.from(allGroups);
+    final maxVal = source.fold<double>(1, (m, e) =>
+      math.max(m, math.max(((e['male'] ?? 0) as num).toDouble(), ((e['female'] ?? 0) as num).toDouble())));
+
+    final groups = source.map((e) => {
+      'label': e['mode'] as String? ?? '',
+      'male':  ((e['male']   ?? 0) as num).toDouble() / maxVal,
+      'female':((e['female'] ?? 0) as num).toDouble() / maxVal,
+    }).toList();
+
     if (isAscending != null) {
       groups.sort((a, b) {
-        final aTotal = (a['male'] as double) + (a['female'] as double);
-        final bTotal = (b['male'] as double) + (b['female'] as double);
-        return isAscending! ? aTotal.compareTo(bTotal) : bTotal.compareTo(aTotal);
+        final aT = (a['male'] as double) + (a['female'] as double);
+        final bT = (b['male'] as double) + (b['female'] as double);
+        return isAscending! ? aT.compareTo(bT) : bT.compareTo(aT);
       });
     }
 
@@ -2588,20 +2900,13 @@ class GroupedBarChartPainter extends CustomPainter {
       final fH = chartHeight * (groups[i]['female'] as double);
 
       canvas.drawRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, chartHeight - mH, barWidth, mH),
-        const Radius.circular(4),
-      ), paint1);
-
+        Rect.fromLTWH(x, chartHeight - mH, barWidth, mH), const Radius.circular(4)), paint1);
       canvas.drawRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(x + barWidth, chartHeight - fH, barWidth, fH),
-        const Radius.circular(4),
-      ), paint2);
+        Rect.fromLTWH(x + barWidth, chartHeight - fH, barWidth, fH), const Radius.circular(4)), paint2);
 
       final tp = TextPainter(
-        text: TextSpan(
-          text: groups[i]['label'] as String,
-          style: const TextStyle(color: Color(0xFF555555), fontSize: 8.5, fontFamily: 'Poppins'),
-        ),
+        text: TextSpan(text: groups[i]['label'] as String,
+          style: const TextStyle(color: Color(0xFF555555), fontSize: 8.5, fontFamily: 'Poppins')),
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: barWidth * 3);
       tp.paint(canvas, Offset(x + barWidth - tp.width / 2, chartHeight + 3));
@@ -2609,27 +2914,37 @@ class GroupedBarChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant GroupedBarChartPainter old) => old.isAscending != isAscending;
+  bool shouldRepaint(covariant GroupedBarChartPainter old) =>
+      old.isAscending != isAscending || old.data != data;
 }
 
 class StackedBarChartPainter extends CustomPainter {
   final bool? isAscending;
-  const StackedBarChartPainter({this.isAscending});
+  final List<dynamic> data; // badges_by_gender_level from API
+  const StackedBarChartPainter({this.isAscending, this.data = const []});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final allGroups = [
-      {'label': 'Easy',      'male': 0.7, 'female': 0.4},
-      {'label': 'Average',   'male': 0.55, 'female': 0.3},
-      {'label': 'Difficult', 'male': 0.4, 'female': 0.2},
+    final source = data.isNotEmpty ? data : [
+      {'level': 'Easy', 'male': 0, 'female': 0},
+      {'level': 'Average', 'male': 0, 'female': 0},
+      {'level': 'Difficult', 'male': 0, 'female': 0},
     ];
 
-    final groups = List<Map<String, dynamic>>.from(allGroups);
+    final maxVal = source.fold<double>(1, (m, e) =>
+      math.max(m, ((e['male'] ?? 0) as num).toDouble() + ((e['female'] ?? 0) as num).toDouble()));
+
+    final groups = source.map((e) => {
+      'label':  e['level'] as String? ?? '',
+      'male':   ((e['male']   ?? 0) as num).toDouble() / maxVal,
+      'female': ((e['female'] ?? 0) as num).toDouble() / maxVal,
+    }).toList();
+
     if (isAscending != null) {
       groups.sort((a, b) {
-        final aTotal = (a['male'] as double);
-        final bTotal = (b['male'] as double);
-        return isAscending! ? aTotal.compareTo(bTotal) : bTotal.compareTo(aTotal);
+        final aT = (a['male'] as double);
+        final bT = (b['male'] as double);
+        return isAscending! ? aT.compareTo(bT) : bT.compareTo(aT);
       });
     }
 
@@ -2644,23 +2959,17 @@ class StackedBarChartPainter extends CustomPainter {
       final mH = chartHeight * (groups[i]['male'] as double);
       final fH = chartHeight * (groups[i]['female'] as double);
 
-      // Base (male)
+      // ✅ FIX: female segment was drawn at the SAME y as the male segment
+      // (chartHeight - mH), so it overlapped/hid behind the male bar instead
+      // of stacking above it. It now starts above the male segment's top.
       canvas.drawRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, chartHeight - mH, barWidth, mH),
-        const Radius.circular(4),
-      ), paint1);
-
-      // Top overlay (female)
+        Rect.fromLTWH(x, chartHeight - mH, barWidth, mH), const Radius.circular(4)), paint1);
       canvas.drawRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, chartHeight - mH, barWidth, fH),
-        const Radius.circular(4),
-      ), paint2);
+        Rect.fromLTWH(x, chartHeight - mH - fH, barWidth, fH), const Radius.circular(4)), paint2);
 
       final tp = TextPainter(
-        text: TextSpan(
-          text: groups[i]['label'] as String,
-          style: const TextStyle(color: Color(0xFF555555), fontSize: 8.5, fontFamily: 'Poppins'),
-        ),
+        text: TextSpan(text: groups[i]['label'] as String,
+          style: const TextStyle(color: Color(0xFF555555), fontSize: 8.5, fontFamily: 'Poppins')),
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: barWidth * 2);
       tp.paint(canvas, Offset(x + barWidth / 2 - tp.width / 2, chartHeight + 3));
@@ -2668,37 +2977,48 @@ class StackedBarChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant StackedBarChartPainter old) => old.isAscending != isAscending;
+  bool shouldRepaint(covariant StackedBarChartPainter old) =>
+      old.isAscending != isAscending || old.data != data;
 }
 
 class MultiColorBarChartPainter extends CustomPainter {
   final bool? isAscending;
-  const MultiColorBarChartPainter({this.isAscending});
+  final List<dynamic> data; // game_mode_by_age from API
+  const MultiColorBarChartPainter({this.isAscending, this.data = const []});
 
   @override
   void paint(Canvas canvas, Size size) {
+    // ✅ FIX: was [Yellow, Blue, Purple, Orange] paired against
+    // [memory_match, challenge, battle, puzzle] — that put Battle in
+    // purple and Puzzle in orange, backwards from the legend below
+    // (which says Battle=orange, Puzzle=purple). Swapped to match.
     const colors = [
-      Color(0xFFFDD000),
-      Color(0xFF4A90D9),
-      Color(0xFF9B59B6),
-      Color(0xFFE67E22),
-    ];
-    const modeLabels = ['Easy', 'Average', 'Difficult', 'Battle'];
-
-    // Each age group has 4 mode values
-    final allGroups = [
-      {'label': '7–10',  'values': [0.4, 0.3, 0.2, 0.15]},
-      {'label': '11–13', 'values': [0.5, 0.55, 0.3, 0.25]},
-      {'label': '14–18', 'values': [0.35, 0.6, 0.65, 0.4]},
-      {'label': '19+',   'values': [0.2, 0.35, 0.5, 0.55]},
+      Color(0xFFFDD000), Color(0xFF4A90D9), Color(0xFFE67E22), Color(0xFF9B59B6),
     ];
 
-    final groups = List<Map<String, dynamic>>.from(allGroups);
+    final source = data.isNotEmpty ? data : <dynamic>[];
+    if (source.isEmpty) return;
+
+    final maxVal = source.fold<double>(1, (m, e) {
+      final vals = [(e['memory_match'] ?? 0), (e['challenge'] ?? 0), (e['battle'] ?? 0), (e['puzzle'] ?? 0)];
+      return math.max(m, vals.fold<double>(0, (s, v) => s + (v as num).toDouble()));
+    });
+
+    final groups = source.map((e) => {
+      'label': e['age_range'] as String? ?? '',
+      'values': [
+        ((e['memory_match'] ?? 0) as num).toDouble() / maxVal,
+        ((e['challenge']    ?? 0) as num).toDouble() / maxVal,
+        ((e['battle']       ?? 0) as num).toDouble() / maxVal,
+        ((e['puzzle']       ?? 0) as num).toDouble() / maxVal,
+      ],
+    }).toList();
+
     if (isAscending != null) {
       groups.sort((a, b) {
-        final aTotal = (a['values'] as List<double>).reduce((s, v) => s + v);
-        final bTotal = (b['values'] as List<double>).reduce((s, v) => s + v);
-        return isAscending! ? aTotal.compareTo(bTotal) : bTotal.compareTo(aTotal);
+        final aT = (a['values'] as List<double>).reduce((s, v) => s + v);
+        final bT = (b['values'] as List<double>).reduce((s, v) => s + v);
+        return isAscending! ? aT.compareTo(bT) : bT.compareTo(aT);
       });
     }
 
@@ -2723,12 +3043,9 @@ class MultiColorBarChartPainter extends CustomPainter {
         );
       }
 
-      // Age group label
       final tp = TextPainter(
-        text: TextSpan(
-          text: groups[i]['label'] as String,
-          style: const TextStyle(color: Color(0xFF555555), fontSize: 8.5, fontFamily: 'Poppins'),
-        ),
+        text: TextSpan(text: groups[i]['label'] as String,
+          style: const TextStyle(color: Color(0xFF555555), fontSize: 8.5, fontFamily: 'Poppins')),
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: groupWidth);
       tp.paint(canvas, Offset(groupX + groupWidth / 2 - tp.width / 2, chartHeight + 3));
@@ -2736,5 +3053,6 @@ class MultiColorBarChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant MultiColorBarChartPainter old) => old.isAscending != isAscending;
+  bool shouldRepaint(covariant MultiColorBarChartPainter old) =>
+      old.isAscending != isAscending || old.data != data;
 }

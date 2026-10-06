@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'config.dart';
 
 /// Centralised API service for all Admin calls.
 /// Update [baseUrl] to match your Laravel server address.
@@ -12,7 +13,7 @@ class ApiService {
   ApiService._internal();
 
   // ── Change this to your server URL ──────────────────────────────────────
-  static const String baseUrl = 'http://localhost:8000/api';
+  static String baseUrl = AppConfig.baseUrl;
   // ────────────────────────────────────────────────────────────────────────
 
   static const String _tokenKey = 'admin_session_token';
@@ -57,7 +58,17 @@ class ApiService {
   }
 
   Future<Map<String, String>> _headers({bool auth = true}) async {
-    final headers = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+    // ✅ FIX: explicitly disable caching. Without this, some browsers/proxies
+    // can serve a cached GET response for admin/players (or other admin
+    // list endpoints) after a delete/update, so the table looked like it
+    // "didn't reflect changes" even though the server-side delete succeeded
+    // and the refetch was correctly triggered.
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+    };
     if (auth) {
       final token = await getToken();
       if (token != null) headers['Authorization'] = 'Bearer $token';
@@ -67,9 +78,21 @@ class ApiService {
 
   Map<String, dynamic> _decode(http.Response res) {
     try {
-      return jsonDecode(res.body) as Map<String, dynamic>;
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      // Carry the HTTP status code through so callers can tell a 401 (session
+      // expired) from a 404 (record gone) from a 500 (server blew up) and show
+      // a specific message instead of one generic "Action failed."
+      body['status'] = res.statusCode;
+      body['success'] ??= res.statusCode >= 200 && res.statusCode < 300;
+      return body;
     } catch (_) {
-      return {'success': false, 'message': 'Invalid server response.'};
+      return {
+        'success': false,
+        'status': res.statusCode,
+        'message': res.statusCode >= 500
+            ? 'The server returned an error page instead of data (HTTP ${res.statusCode}). Check the Laravel log.'
+            : 'Invalid server response.',
+      };
     }
   }
 
@@ -266,6 +289,10 @@ class ApiService {
       'sort_dir': sortDir,
       'page': page.toString(),
       'per_page': perPage.toString(),
+      // ✅ FIX: cache-busting param — guarantees this GET is never served
+      // from a cached response (browser/proxy) after a delete or edit, which
+      // was the "table not reflecting changes" bug in Player Management.
+      '_ts': DateTime.now().millisecondsSinceEpoch.toString(),
     };
     if (category != null && category.isNotEmpty) params['category'] = category;
     if (sex != null && sex.isNotEmpty) params['sex'] = sex;
@@ -431,16 +458,73 @@ class ApiService {
 
 
 
-  /// Reset a player's password (admin action — no old password required).
+  /// Change a player's password (admin action).
+  // ✅ FIX: the admin dialog already shows and validates a "Current
+  // Password" field (per QA test cases TC_ADMIN_CHANGE_PWD_007/014), but it
+  // was never actually sent to the backend, and changePlayerPassword() had
+  // no old_password param to receive it — so a wrong "current password" was
+  // silently accepted and a same-as-old new password went through with no
+  // error. Wired old_password through end to end.
   Future<Map<String, dynamic>> changePlayerPassword(
       String id, {
+        required String oldPassword,
         required String newPassword,
       }) async {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/admin/players/$id/change-password'),
         headers: await _headers(),
-        body: jsonEncode({'new_password': newPassword}),
+        body: jsonEncode({'old_password': oldPassword, 'new_password': newPassword}),
+      );
+      return _decode(res);
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  LEADERBOARD
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Fetch badge (challenge) leaderboard — sorted by total badges descending.
+  Future<Map<String, dynamic>> getChallengLeaderboard() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/leaderboard/challenge'),
+        headers: await _headers(),
+      );
+      return _decode(res);
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Fetch battle (stars) leaderboard — sorted by total stars descending.
+  Future<Map<String, dynamic>> getBattleLeaderboard() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/leaderboard/battle'),
+        headers: await _headers(),
+      );
+      return _decode(res);
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  ANALYTICS / DASHBOARD STATS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Fetch all analytics data in one call.
+  /// Returns data.total_players, data.average_rating, data.gender_distribution,
+  /// data.age_distribution, data.players_by_region, data.gender_by_game_mode,
+  /// data.badges_by_gender_level, data.game_mode_by_age.
+  Future<Map<String, dynamic>> getAnalytics() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/admin/analytics'),
+        headers: await _headers(),
       );
       return _decode(res);
     } catch (e) {

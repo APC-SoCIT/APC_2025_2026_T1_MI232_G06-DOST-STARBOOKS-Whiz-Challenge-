@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'config.dart';
 
 /// Singleton that fetches difficulty settings from the admin API
 /// and caches them so quiz_game.dart reads dynamic time/points/questions.
@@ -8,7 +9,12 @@ class DifficultySettingsService {
   DifficultySettingsService._();
   static final DifficultySettingsService instance = DifficultySettingsService._();
 
-  static const String _baseUrl = 'http://localhost:8000/api';
+  // ✅ FIX: Replace localhost with your server's actual local IP address.
+  // Must match the IP you set in quiz_api.dart.
+  // Example: 'http://192.168.1.5:8000/api'
+
+  static String get _baseUrl => '${AppConfig.baseUrl}';
+
 
   // Cached settings — defaults match admin panel defaults
   Map<String, Map<String, int>> _settings = {

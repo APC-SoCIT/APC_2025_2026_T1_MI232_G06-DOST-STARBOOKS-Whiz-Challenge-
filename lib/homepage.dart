@@ -10,12 +10,13 @@ import 'whiz_challenge.dart';
 import 'whiz_puzzle.dart';
 import 'whiz_memory_match.dart';
 import 'leaderboard.dart';
-
+import 'config.dart';
 import 'tutorial_overlay.dart';
-import 'loading_page.dart';  // ✅ ADDED: Loading screen
+import 'loading_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'audio_service.dart';  // ✅ ADDED: Audio service for music continuity
-import 'session_manager.dart'; // ✅ ADDED: Session persistence (skip splash on refresh)
+import 'audio_service.dart';
+import 'session_manager.dart';
+import 'whiz_battle.dart';
 
 // ✅ USER PROFILE MODEL
 class UserProfile {
@@ -30,7 +31,7 @@ class UserProfile {
   String province;
   String city;
   String avatar;
-  int stars; // ← ADD THIS LINE
+  int stars;
 
   UserProfile({
     required this.id,
@@ -44,7 +45,7 @@ class UserProfile {
     required this.province,
     required this.city,
     required this.avatar,
-    this.stars = 0, // ← ADD THIS LINE
+    this.stars = 0,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -65,7 +66,7 @@ class UserProfile {
       province: json['province']?.toString() ?? '',
       city: json['city']?.toString() ?? '',
       avatar: json['avatar'] ?? "assets/images-avatars/Adventurer.png",
-      stars: json['stars'] ?? 0, // ← ADD THIS LINE
+      stars: json['stars'] ?? 0,
     );
   }
 
@@ -80,7 +81,7 @@ class UserProfile {
     String? province,
     String? city,
     String? avatar,
-    int? stars, // ← ADD THIS LINE
+    int? stars,
   }) {
     return UserProfile(
       id: id,
@@ -94,7 +95,7 @@ class UserProfile {
       province: province ?? this.province,
       city: city ?? this.city,
       avatar: avatar ?? this.avatar,
-      stars: stars ?? this.stars, // ← ADD THIS LINE
+      stars: stars ?? this.stars,
     );
   }
 }
@@ -103,13 +104,13 @@ class UserProfile {
 class HomePage extends StatefulWidget {
   final UserProfile profile;
   final String initialTab;
-  final bool isNewUser; // Added for tutorial trigger
+  final bool isNewUser;
 
   const HomePage({
     super.key,
     required this.profile,
     this.initialTab = "Home",
-    this.isNewUser = false, // Default to false for existing users
+    this.isNewUser = false,
   });
 
   @override
@@ -130,13 +131,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   late UserProfile _currentProfile;
   late String _selectedTab;
   bool _loadingProfile = true;
-  final String baseUrl = "http://localhost:8000";
   bool _showStarTooltip = false;
-  bool _showTutorial = false;  // ← ADD THIS LINE
+  bool _showTutorial = false;
 
   late AnimationController _flashController;
   bool _isFlashing = false;
-  final AudioService _audioService = AudioService();  // ✅ ADDED: Audio service instance
+  final AudioService _audioService = AudioService();
 
   @override
   void initState() {
@@ -149,15 +149,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 200),
     );
 
-    // ✅ UPDATED: Ensure homepage music continues playing (no fade-in since already playing from splash)
     _audioService.playHomepageMusic(fadeIn: false);
 
-    // THIS IS THE KEY CHANGE - Load data first, then check tutorial
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserWithLocationNames().then((_) {
         if (mounted) {
-          // ✅ Session already saved in login.dart on successful login.
-          // Re-save here to keep stored profile data fresh (stars, avatar, etc.)
           SessionManager.saveSession(_currentProfile);
           _checkAndShowTutorial();
         }
@@ -174,19 +170,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<void> _checkAndShowTutorial() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final tutorialCompleted = prefs.getBool('main_tutorial_completed_${_currentProfile.id}') ?? false;
-
-      if (tutorialCompleted) {
-        debugPrint('Tutorial already completed - skipping');
-        return;
-      }
-
-      // Show tutorial for any user who hasn't completed it yet
+      final tutorialCompleted =
+          prefs.getBool('main_tutorial_completed_${_currentProfile.id}') ?? false;
+      if (tutorialCompleted) return;
       if (mounted) {
         await Future.delayed(const Duration(milliseconds: 800));
-        if (mounted) {
-          setState(() => _showTutorial = true);
-        }
+        if (mounted) setState(() => _showTutorial = true);
       }
     } catch (e) {
       debugPrint('Error checking tutorial status: $e');
@@ -196,7 +185,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<void> _loadUserWithLocationNames({bool loadLocationData = true}) async {
     setState(() => _loadingProfile = true);
     try {
-      final res = await http.get(Uri.parse("$baseUrl/api/homepage/${_currentProfile.id}"));
+      // ✅ FIX: TC_HOMEPAGE_018 — this raw http.get() bypassed ApiService
+      // entirely, so it never got the Cache-Control/Pragma no-cache headers
+      // added there. A cache-busting query param is more bulletproof than
+      // request headers anyway (works regardless of what the browser/proxy
+      // honors), so using that here directly.
+      final res = await http.get(Uri.parse(
+        "${AppConfig.baseUrl}/homepage/${_currentProfile.id}?_ts=${DateTime.now().millisecondsSinceEpoch}",
+      ));
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data['success'] == true) {
@@ -204,7 +200,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           if (mounted) {
             setState(() {
               if (loadLocationData) {
-                // Load everything including location data (initial load or after profile edit)
                 _currentProfile = _currentProfile.copyWith(
                   region: user['region'] ?? '',
                   province: user['province'] ?? '',
@@ -214,10 +209,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   studentCategory: user['student_category'],
                 );
               } else {
-                // Only update stars (after returning from games)
-                _currentProfile = _currentProfile.copyWith(
-                  stars: user['stars'] ?? 0,
-                );
+                _currentProfile = _currentProfile.copyWith(stars: user['stars'] ?? 0);
               }
               _loadingProfile = false;
             });
@@ -231,66 +223,54 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
   }
 
-  // Lightweight method to update only stars without showing loading screen
   Future<void> _updateStarsOnly() async {
     try {
-      final res = await http.get(Uri.parse("$baseUrl/api/homepage/${_currentProfile.id}"));
+      // ✅ FIX: same stale-cache issue as _loadUserWithLocationNames above.
+      final res = await http.get(
+        Uri.parse("${AppConfig.baseUrl}/players/${_currentProfile.id}/stars?_ts=${DateTime.now().millisecondsSinceEpoch}"),
+      );
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         if (data['success'] == true && mounted) {
-          final user = data['user'];
           setState(() {
             _currentProfile = _currentProfile.copyWith(
-              stars: user['stars'] ?? _currentProfile.stars,
+              stars: data['data']?['total_stars'] ?? _currentProfile.stars,
             );
           });
+          await SessionManager.saveSession(_currentProfile);
         }
       }
     } catch (e) {
       debugPrint('Error updating stars: $e');
-      // Silently fail - not critical
     }
   }
 
-  String get regionName => _currentProfile.region.isNotEmpty ? _currentProfile.region : "Unknown Region";
-  String get provinceName => _currentProfile.province.isNotEmpty ? _currentProfile.province : "Unknown Province";
-  String get cityName => _currentProfile.city.isNotEmpty ? _currentProfile.city : "Unknown City";
+  String get cityName =>
+      _currentProfile.city.isNotEmpty ? _currentProfile.city : "Unknown City";
 
   Future<void> _logout() async {
     try {
-      // Show loading screen
       if (mounted) {
         Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const LoadingPage(),
-          ),
+          MaterialPageRoute(builder: (context) => const LoadingPage()),
         );
       }
-
       await Future.delayed(const Duration(milliseconds: 500));
-
-      // ✅ Clear session FIRST — so if the user refreshes after logout
-      // they see SplashScreen (no session = splash, by design in main.dart)
       await SessionManager.clearSession();
-
-      // Clear any other runtime prefs (games_played, rating prompts, etc.)
-      // but keep tutorial completion flags so they survive logout
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys().toList();
       for (final key in allKeys) {
         if (key.startsWith('main_tutorial_completed_') ||
             key.startsWith('game_tutorial_completed_') ||
             key.startsWith('session_')) {
-          continue; // preserve these
+          continue;
         }
         await prefs.remove(key);
       }
-
-      // Navigate to login screen (in-app logout goes to Login, not Splash)
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const LoginScreen()),
-              (route) => false,
+          (route) => false,
         );
       }
     } catch (e) {
@@ -308,19 +288,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _editProfile() async {
+    // ✅ FIX: barrierDismissible was left at its default (true), so tapping
+    // outside the dialog could close it early with a null result — see the
+    // PopScope fix in edit_profile.dart for the full explanation.
     final updatedProfile = await showDialog<UserProfile>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => EditProfileDialog(profile: _currentProfile),
     );
     if (updatedProfile != null && mounted) {
       setState(() => _currentProfile = updatedProfile);
-      // Reload location data since user may have changed their address
+      // ✅ FIX: without this, a page reload right after editing would
+      // restore the OLD cached session (SessionManager only saved once, on
+      // initial homepage load) for username/avatar/school/age/sex, since
+      // the location refresh below doesn't touch those fields.
+      await SessionManager.saveSession(_currentProfile);
       await _loadUserWithLocationNames(loadLocationData: true);
     }
   }
 
-
-  // ✅ NEW: Show rating dialog
   Future<void> _showRatingDialog() async {
     return showDialog(
       context: context,
@@ -328,24 +314,37 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       builder: (BuildContext context) {
         return _RatingDialog(
           userId: _currentProfile.id,
-          baseUrl: baseUrl,
+          baseUrl: AppConfig.baseUrl,
           onRatingSubmitted: _markUserAsRated,
         );
       },
     );
   }
 
-  // ✅ NEW: Show profile menu with Logout and Rate options
   void _showSettingsDialog() {
+    final isNarrow = _isNarrow(context);
+    final homeContext = context; // stable context, survives the dialog's own pop
     showDialog(
       context: context,
       builder: (context) => _SettingsDialog(
         userId: _currentProfile.id,
-        baseUrl: baseUrl,
+        baseUrl: AppConfig.baseUrl,
         onLogout: _logout,
-        onEditProfile: _editProfile, // ✅ NEW
+        onEditProfile: _editProfile,
+        showLeaderboardButton: isNarrow,
+        leaderboardKey: isNarrow ? _leaderboardKey : null,
+        onLeaderboard: () {
+          setState(() => _selectedTab = "Leaderboard");
+        },
+        homeContext: homeContext,
       ),
     );
+  }
+
+  // ── Responsive helper ───────────────────────────────────────────────────
+  bool _isNarrow(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    return size.height >= size.width;
   }
 
   Widget _buildTopNavButton(String label, IconData icon) {
@@ -354,29 +353,34 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       onTap: () async {
         try {
           await _audioService.playClickSound();
-        } catch (e) {
-          debugPrint('Click sound not found: $e');
-        }
+        } catch (_) {}
         setState(() => _selectedTab = label);
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700]),
+            Icon(icon,
+                color: isActive ? const Color(0xFFFFD13B) : Colors.grey[700],
+                size: 20),
             const SizedBox(width: 6),
             Text(label,
                 style: TextStyle(
                   color: isActive ? const Color(0xFFFFD13B) : Colors.black,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: 13,
                 )),
           ]),
           const SizedBox(height: 3),
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             height: 3,
-            width: isActive ? 70 : 0,
-            color: isActive ? const Color(0xFFFFD13B) : Colors.transparent,
+            width: isActive ? (label == 'Home' ? 60 : 120) : 0,
+            decoration: BoxDecoration(
+              color: isActive ? const Color(0xFFFFD13B) : Colors.transparent,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
         ],
       ),
@@ -390,16 +394,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     await _flashController.forward();
 
     if (mounted) {
-      // ✅ Show loading page before navigating to game
       LoadingHelper.showLoadingPage(context, message: 'Loading game...');
-
-      // Give proper time for loading animation (1.5 seconds for smooth experience)
       await Future.delayed(const Duration(milliseconds: 1500));
 
       if (mounted) {
-        LoadingHelper.hideLoading(context); // Hide loading page
-
-        // Small delay to ensure loading is fully hidden before navigation
+        LoadingHelper.hideLoading(context);
         await Future.delayed(const Duration(milliseconds: 100));
 
         if (mounted) {
@@ -407,7 +406,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             context,
             PageRouteBuilder(
               opaque: true,
-              barrierColor: const Color(0xFF87CEEB), // Prevent white flash during transition
+              barrierColor: const Color(0xFF87CEEB),
               pageBuilder: (_, _, _) => page,
               transitionDuration: const Duration(milliseconds: 600),
               transitionsBuilder: (_, animation, _, child) {
@@ -416,10 +415,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           );
 
-          // Update stars silently without loading screen (games may have changed star count)
           if (mounted) {
             _updateStarsOnly();
-            _incrementGameCounterAndCheckRating(); // Check if we should prompt for rating
+            _incrementGameCounterAndCheckRating();
           }
         }
       }
@@ -432,54 +430,39 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Color _getStarColor() {
-    if (_currentProfile.stars >= 1000) return const Color(0xFFB9F2FF); // Diamond (light blue)
-    if (_currentProfile.stars >= 500) return const Color(0xFFE5E4E2); // Platinum (silver-white)
-    if (_currentProfile.stars >= 250) return const Color(0xFFFFD700); // Gold
-    if (_currentProfile.stars >= 100) return const Color(0xFFC0C0C0); // Silver
-    if (_currentProfile.stars >= 50) return const Color(0xFFCD7F32); // Bronze
-    return Colors.white; // Default white
+    if (_currentProfile.stars >= 1000) return const Color(0xFFB9F2FF);
+    if (_currentProfile.stars >= 500) return const Color(0xFFE5E4E2);
+    if (_currentProfile.stars >= 250) return const Color(0xFFFFD700);
+    if (_currentProfile.stars >= 100) return const Color(0xFFC0C0C0);
+    if (_currentProfile.stars >= 50) return const Color(0xFFCD7F32);
+    return Colors.white;
   }
 
-  // ✅ Track games played and prompt for rating strategically
   Future<void> _incrementGameCounterAndCheckRating() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userKey = 'games_played_${_currentProfile.id}';
       final hasRatedKey = 'has_rated_${_currentProfile.id}';
       final lastPromptKey = 'last_rating_prompt_${_currentProfile.id}';
-
       final gamesPlayed = (prefs.getInt(userKey) ?? 0) + 1;
       final hasRated = prefs.getBool(hasRatedKey) ?? false;
       final lastPromptTime = prefs.getInt(lastPromptKey) ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
-      final dayInMs = 86400000; // 24 hours in milliseconds
-
+      const dayInMs = 86400000;
       await prefs.setInt(userKey, gamesPlayed);
-
-      // Show rating prompt if:
-      // 1. User has played 5, 15, or 30 games
-      // 2. User hasn't rated yet
-      // 3. Haven't prompted in the last 3 days (to avoid annoyance)
       final shouldPrompt = !hasRated &&
           (now - lastPromptTime) > (dayInMs * 3) &&
           (gamesPlayed == 5 || gamesPlayed == 15 || gamesPlayed == 30);
-
       if (shouldPrompt && mounted) {
         await prefs.setInt(lastPromptKey, now);
-
-        // Wait a moment for smooth transition
         await Future.delayed(const Duration(milliseconds: 800));
-
-        if (mounted) {
-          _showRatingDialog();
-        }
+        if (mounted) _showRatingDialog();
       }
     } catch (e) {
       debugPrint('Error checking rating prompt: $e');
     }
   }
 
-  // ✅ Mark user as having rated (called after successful rating submission)
   Future<void> _markUserAsRated() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -493,10 +476,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final mainContent = _selectedTab == "Leaderboard"
         ? Leaderboard(
-      currentUserId: _currentProfile.id,
-      userAvatar: _currentProfile.avatar,
-      username: _currentProfile.username,
-    )
+            currentUserId: _currentProfile.id,
+            userAvatar: _currentProfile.avatar,
+            username: _currentProfile.username,
+            onBack: () => setState(() => _selectedTab = "Home"),
+          )
         : _buildHomeContent();
 
     return Stack(
@@ -508,9 +492,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               body: _loadingProfile
                   ? const LoadingPage(message: 'Loading your profile...')
                   : Column(children: [
-                _buildTopBar(),
-                Expanded(child: mainContent),
-              ]),
+                      _buildTopBar(),
+                      Expanded(child: mainContent),
+                    ]),
             ),
             AnimatedBuilder(
               animation: _flashController,
@@ -519,21 +503,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ignoring: true,
                   child: Opacity(
                     opacity: _flashController.value,
-                    child: Container(color: const Color(0xFF87CEEB)), // Changed from white to sky blue
+                    child: Container(color: const Color(0xFF87CEEB)),
                   ),
                 );
               },
             ),
           ],
         ),
-        // ← ADD TUTORIAL OVERLAY HERE
         if (_showTutorial)
           TutorialOverlay(
             userId: _currentProfile.id,
             onComplete: () async {
-              if (mounted) {
-                setState(() => _showTutorial = false);
-              }
+              if (mounted) setState(() => _showTutorial = false);
             },
             elementKeys: {
               'profile_avatar': _profileAvatarKey,
@@ -545,42 +526,58 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               'whiz_puzzle': _whizPuzzleKey,
               'leaderboard': _leaderboardKey,
             },
+            onStepActivate: (step) {
+              // On mobile (narrow/portrait) the Leaderboard nav tab is hidden.
+              // Auto-open the Settings dialog so its Leaderboard button —
+              // which carries _leaderboardKey — is rendered and highlightable.
+              if (step.highlightKey == 'leaderboard' && _isNarrow(context)) {
+                _showSettingsDialog();
+              }
+            },
           ),
       ],
     );
   }
 
   Widget _buildTopBar() {
+    final isNarrow = _isNarrow(context);
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          Image.asset("assets/images-logo/newhomepagelogo.png", width: 150, height: 50, fit: BoxFit.contain),
-          Expanded(
-            child: Align(
-              alignment: Alignment.center,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                _buildTopNavButton("Home", Icons.home),
-                const SizedBox(width: 40),
-                Container(
-                  key: _leaderboardKey,  // ← ADD THIS
-                  child: _buildTopNavButton("Leaderboard", Icons.leaderboard),
-                ),
-              ]),
-            ),
-          ),
+          Image.asset("assets/images-logo/newhomepagelogo.png",
+              width: 130, height: 46, fit: BoxFit.contain),
+          // On narrow/mobile screens, hide the nav tabs (they move into the settings dialog)
+          if (!isNarrow)
+            Expanded(
+              child: Align(
+                alignment: Alignment.center,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  _buildTopNavButton("Home", Icons.home),
+                  const SizedBox(width: 28),
+                  Container(
+                    key: _leaderboardKey,
+                    child: _buildTopNavButton("Leaderboard", Icons.leaderboard),
+                  ),
+                ]),
+              ),
+            )
+          else
+            const Spacer(),
           MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
               onTap: _showSettingsDialog,
               child: Container(
-                key: _profileAvatarKey,  // ← ADD THIS LINE
-                width: 44,
-                height: 44,
+                key: _profileAvatarKey,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                    shape: BoxShape.circle, border: Border.all(color: const Color(0xFF046EB8), width: 3)),
-                child: ClipOval(child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover)),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF046EB8), width: 3)),
+                child: ClipOval(
+                    child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover)),
               ),
             ),
           ),
@@ -590,28 +587,27 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildProfileCard() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Cap card width so it doesn't stretch too wide on large screens
+    final cardWidth = min(screenWidth - 40, 700.0);
+
     return Container(
       key: _profileCardKey,
-      height: 90,
-      width: 850,
-      margin: const EdgeInsets.only(top: 60),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      width: cardWidth,
+      margin: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
         color: const Color(0xFF4A90BE),
         borderRadius: BorderRadius.circular(12),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          )
+          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 66,
-            height: 66,
+            width: 60,
+            height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white,
@@ -621,7 +617,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               child: Image.asset(_currentProfile.avatar, fit: BoxFit.cover),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -633,50 +629,46 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       child: Text(
                         _currentProfile.username,
                         style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
                         onTap: () async {
                           try {
                             await _audioService.playClickSound();
-                          } catch (e) {
-                            debugPrint('Click sound not found: $e');
-                          }
+                          } catch (_) {}
                           _editProfile();
                         },
-                        child: const Icon(
-                          Icons.edit,
-                          size: 14,
-                          color: Color(0xFF046EB8),
-                        ),
+                        child: const Icon(Icons.edit,
+                            size: 13, color: Color(0xFF046EB8)),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _currentProfile.category,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
+                const SizedBox(height: 2),
+                Text(_currentProfile.category,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
                 const SizedBox(height: 2),
                 Text(
-                  "$cityName, ${_currentProfile.region}",
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  [
+                    cityName,
+                    if (_currentProfile.province.isNotEmpty) _currentProfile.province,
+                    _currentProfile.region,
+                  ].join(', '),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          // ✅ HOVER-ACTIVATED STAR WITH TOOLTIP
+          const SizedBox(width: 8),
+          // Stars
           MouseRegion(
             cursor: SystemMouseCursors.click,
             onEnter: (_) => setState(() => _showStarTooltip = true),
@@ -688,63 +680,53 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.star, color: _getStarColor(), size: 24),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${_currentProfile.stars}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                    Icon(Icons.star, color: _getStarColor(), size: 22),
+                    const SizedBox(width: 4),
+                    Text('${_currentProfile.stars}',
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
                   ],
                 ),
-                // TOOLTIP
                 if (_showStarTooltip)
                   Positioned(
                     left: -20,
-                    top: -75,
+                    top: -70,
                     child: Container(
-                      width: 290,
-                      padding: const EdgeInsets.all(14),
+                      width: 240,
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: const [
                           BoxShadow(
-                            color: Colors.black26,
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
+                              color: Colors.black26,
+                              blurRadius: 8,
+                              offset: Offset(0, 4))
                         ],
                       ),
                       child: RichText(
                         textAlign: TextAlign.center,
                         text: const TextSpan(
                           style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 12,
-                            color: Colors.black87,
-                            height: 1.4,
-                          ),
+                              fontFamily: 'Poppins',
+                              fontSize: 11,
+                              color: Colors.black87,
+                              height: 1.4),
                           children: [
                             TextSpan(text: 'Your total stars! Earn more by completing '),
                             TextSpan(
-                              text: 'Memory Match',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF656BE6),
-                              ),
-                            ),
+                                text: 'Memory Match',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF656BE6))),
                             TextSpan(text: ' and '),
                             TextSpan(
-                              text: 'Puzzle',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFE6833A),
-                              ),
-                            ),
+                                text: 'Puzzle',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFE6833A))),
                             TextSpan(text: ' games quickly.'),
                           ],
                         ),
@@ -754,37 +736,37 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
+          // Badges button
           MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
               onTap: () async {
                 try {
                   await _audioService.playClickSound();
-                } catch (e) {
-                  debugPrint('Click sound not found: $e');
-                }
+                } catch (_) {}
                 if (!mounted) return;
                 showDialog(
                   context: context,
-                  builder: (_) => PlayerBadgesDialog(playerId: _currentProfile.id),
+                  builder: (_) =>
+                      PlayerBadgesDialog(playerId: _currentProfile.id, baseUrl: AppConfig.baseUrl),
                 );
               },
               child: Container(
                 key: _badgesButtonKey,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFDD000),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: const Color(0xFFFDD000), width: 2),
                 ),
                 child: const Text(
-                  'Your Badges',
+                  'Badges',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFB8860B),
-                  ),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFB8860B)),
                 ),
               ),
             ),
@@ -794,91 +776,128 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-
   Widget _buildHomeContent() {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: Align(alignment: Alignment.topCenter, child: _buildProfileCard()),
-        ),
-        Positioned.fill(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 180, left: 70, right: 70), // ← CHANGED from 200 to 180
-            child: LayoutBuilder(builder: (context, constraints) {
-              final crossAxisCount = constraints.maxWidth < 800 ? 2 : 4;
-              return GridView.count(
-                crossAxisCount: crossAxisCount,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                crossAxisSpacing: 24,
-                mainAxisSpacing: 24,
-                childAspectRatio: 0.73,
-                children: [
-                  _GameBox(
-                    key: _memoryMatchKey,
-                    title: "Whiz Memory Match",
-                    imagePath: "assets/images-gamecards/whizmemorymatch.png",
-                    backgroundColor: const Color(0xFF656BE6),
-                    onTapNavigate: () => _triggerFlashAndNavigate(
-                      WhizMemoryMatch(
-                        userAvatar: _currentProfile.avatar,
-                        playerId: _currentProfile.id,
-                        username: _currentProfile.username,
-                      ),
-                    ),
+    final size = MediaQuery.of(context).size;
+    final screenWidth = size.width;
+    final screenHeight = size.height;
+    final isPortrait = screenHeight >= screenWidth;
+
+    // Landscape: single row of 4; Portrait: 2x2 grid
+    final crossAxisCount = isPortrait ? 2 : 4;
+
+    // Landscape/web: cards fill most of the screen width, big and bold
+    final maxGridWidth = isPortrait ? 500.0 : min(screenWidth - 40, 1280.0);
+
+    // Lower ratio = taller/bigger cards
+    final childAspect = isPortrait ? 0.72 : 0.68;
+    final hPad = isPortrait ? 16.0 : 20.0;
+    final crossSpacing = isPortrait ? 14.0 : 16.0;
+    final mainSpacing = isPortrait ? 14.0 : 16.0;
+
+    final gameGrid = Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxGridWidth),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 0),
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: crossSpacing,
+            mainAxisSpacing: mainSpacing,
+            childAspectRatio: childAspect,
+            children: [
+              _GameBox(
+                key: _memoryMatchKey,
+                title: "Whiz Memory Match",
+                imagePath: "assets/images-gamecards/whizmemorymatch.png",
+                backgroundColor: const Color(0xFF656BE6),
+                onTapNavigate: () => _triggerFlashAndNavigate(
+                  WhizMemoryMatch(
+                    userAvatar: _currentProfile.avatar,
+                    playerId: _currentProfile.id,
+                    username: _currentProfile.username,
                   ),
-                  _GameBox(
-                    key: _whizChallengeKey,
-                    title: "Whiz Challenge",
-                    imagePath: "assets/images-gamecards/whizchallenge.png",
-                    backgroundColor: const Color(0xFFFDD000),
-                    onTapNavigate: () => _triggerFlashAndNavigate(
-                      WhizChallenge(
-                        userAvatar: _currentProfile.avatar,
-                        userId: _currentProfile.id,
-                        username: _currentProfile.username,
-                      ),
-                    ),
+                ),
+              ),
+              _GameBox(
+                key: _whizChallengeKey,
+                title: "Whiz Challenge",
+                imagePath: "assets/images-gamecards/whizchallenge.png",
+                backgroundColor: const Color(0xFFFDD000),
+                onTapNavigate: () => _triggerFlashAndNavigate(
+                  WhizChallenge(
+                    userAvatar: _currentProfile.avatar,
+                    userId: _currentProfile.id,
+                    username: _currentProfile.username,
                   ),
-                  _GameBox(
-                    key: _whizBattleKey,
-                    title: "Whiz Battle",
-                    imagePath: "assets/images-gamecards/whizbattle.png",
-                    backgroundColor: const Color(0xFFC571E2),
-                    onTapNavigate: () => _triggerFlashAndNavigate(
-                      WhizBattle(
-                        userAvatar: _currentProfile.avatar,
-                        userId: _currentProfile.id,
-                        username: _currentProfile.username,
-                      ),
-                    ),
+                ),
+              ),
+              _GameBox(
+                key: _whizBattleKey,
+                title: "Whiz Battle",
+                imagePath: "assets/images-gamecards/whizbattle.png",
+                backgroundColor: const Color(0xFFC571E2),
+                onTapNavigate: () => _triggerFlashAndNavigate(
+                  WhizBattle(
+                    userAvatar: _currentProfile.avatar,
+                    userId: _currentProfile.id,
+                    username: _currentProfile.username,
                   ),
-                  _GameBox(
-                    key: _whizPuzzleKey,
-                    title: "Whiz Puzzle",
-                    imagePath: "assets/images-gamecards/whizpuzzle.png",
-                    backgroundColor: const Color(0xFFE6833A),
-                    onTapNavigate: () => _triggerFlashAndNavigate(
-                      WhizPuzzle(
-                        userAvatar: _currentProfile.avatar,
-                        playerId: _currentProfile.id,
-                      ),
-                    ),
+                ),
+              ),
+              _GameBox(
+                key: _whizPuzzleKey,
+                title: "Whiz Puzzle",
+                imagePath: "assets/images-gamecards/whizpuzzle.png",
+                backgroundColor: const Color(0xFFE6833A),
+                onTapNavigate: () => _triggerFlashAndNavigate(
+                  WhizPuzzle(
+                    userAvatar: _currentProfile.avatar,
+                    playerId: _currentProfile.id,
                   ),
-                ],
-              );
-            }),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
+    );
+
+    // Use LayoutBuilder so we know exactly how tall the available area is,
+    // then vertically center the profile card + game grid inside it.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableHeight = constraints.maxHeight;
+
+        final inner = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildProfileCard(),
+            SizedBox(height: isPortrait ? 14 : 56),
+            gameGrid,
+          ],
+        );
+
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: availableHeight),
+            child: Align(
+              alignment: const Alignment(0, -0.35),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: isPortrait ? 12 : 0),
+                child: inner,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
-// ✅ GameBox with upward hover, smooth return, fade, and bounce when hover ends
+// ✅ GameBox widget (unchanged logic, just responsive sizing)
 class _GameBox extends StatefulWidget {
   final String title;
   final String imagePath;
@@ -886,7 +905,7 @@ class _GameBox extends StatefulWidget {
   final VoidCallback onTapNavigate;
 
   const _GameBox({
-    super.key,  // Change to Key? key
+    super.key,
     required this.title,
     required this.imagePath,
     required this.backgroundColor,
@@ -918,48 +937,26 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
     super.initState();
 
     _hoverController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
-
+        vsync: this, duration: const Duration(milliseconds: 2000));
     _floatController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-
+        vsync: this, duration: const Duration(seconds: 2));
     _fadeOutController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-
+        vsync: this, duration: const Duration(milliseconds: 200));
     _bounceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
+        vsync: this, duration: const Duration(milliseconds: 250));
 
     _rotationAnimation = Tween<double>(begin: 0, end: 2 * pi).animate(
-      CurvedAnimation(parent: _hoverController, curve: Curves.easeOutBack),
-    );
-
-    _liftAnimation = Tween<double>(begin: 0, end: -50).animate(
-      CurvedAnimation(parent: _hoverController, curve: Curves.easeOutBack),
-    );
-
+        CurvedAnimation(parent: _hoverController, curve: Curves.easeOutBack));
+    _liftAnimation = Tween<double>(begin: 0, end: -40).animate(
+        CurvedAnimation(parent: _hoverController, curve: Curves.easeOutBack));
     _shadowAnimation = Tween<double>(begin: 1.0, end: 1.8).animate(
-      CurvedAnimation(parent: _hoverController, curve: Curves.easeOut),
-    );
-
+        CurvedAnimation(parent: _hoverController, curve: Curves.easeOut));
     _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _hoverController, curve: Curves.easeOut),
-    );
-
+        CurvedAnimation(parent: _hoverController, curve: Curves.easeOut));
     _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _fadeOutController, curve: Curves.easeIn),
-    );
-
+        CurvedAnimation(parent: _fadeOutController, curve: Curves.easeIn));
     _bounceAnimation = Tween<double>(begin: 0, end: 10).animate(
-      CurvedAnimation(parent: _bounceController, curve: Curves.easeOut),
-    );
+        CurvedAnimation(parent: _bounceController, curve: Curves.easeOut));
   }
 
   @override
@@ -980,12 +977,9 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
 
   Future<void> _onExit(PointerEvent details) async {
     setState(() => _hovering = false);
-
     _floatController.stop();
     _floatController.reset();
-
     await _hoverController.reverse();
-
     _bounceController.forward();
     await Future.delayed(const Duration(milliseconds: 120));
     _bounceController.reverse();
@@ -994,16 +988,13 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
   Future<void> _onTap() async {
     try {
       await _audioService.playClickSound();
-    } catch (e) {
-      debugPrint('Click sound not found: $e');
-    }
+    } catch (_) {}
 
     _floatController.stop();
     setState(() => _hovering = false);
 
     _hoverController.duration = const Duration(milliseconds: 150);
     await _hoverController.reverse();
-
     await _fadeOutController.forward();
 
     widget.onTapNavigate();
@@ -1016,6 +1007,12 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final isPortrait = size.height >= size.width;
+    // Portrait (2-col): fill width of grid cell; Landscape (4-col): fill width too
+    // Both use double.infinity so the GridView cell dictates the size
+    const titleSize = 15.0;
+
     return MouseRegion(
       onEnter: _onEnter,
       onExit: _onExit,
@@ -1030,111 +1027,110 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
             _bounceController
           ]),
           builder: (context, child) {
-            final floatOffset = _hovering ? sin(_floatController.value * 2 * pi) * 8 : 0;
-            final totalOffset = _liftAnimation.value + floatOffset + _bounceAnimation.value;
+            final floatOffset =
+                _hovering ? sin(_floatController.value * 2 * pi) * 6 : 0;
+            final totalOffset =
+                _liftAnimation.value + floatOffset + _bounceAnimation.value;
 
             return Opacity(
               opacity: _fadeAnimation.value,
-              child: Transform.translate(
-                offset: Offset(0, totalOffset),
-                child: Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (_hovering)
-                      Container(
-                        width: 320,
-                        height: 400,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.yellow.withValues(alpha: 0.4 * _glowAnimation.value),
-                              blurRadius: 50,
-                              spreadRadius: 20,
-                            ),
-                          ],
+              // Wrap in Padding to give shadow room so it is never clipped
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 10),
+                child: Transform.translate(
+                  offset: Offset(0, totalOffset),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (_hovering)
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.yellow.withValues(
+                                    alpha: 0.4 * _glowAnimation.value),
+                                blurRadius: 40,
+                                spreadRadius: 15,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    Positioned(
-                      bottom: -30,
-                      child: Container(
-                        width: 180 * _shadowAnimation.value,
-                        height: 35,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(100),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.001)
-                        ..rotateY(_hovering ? _rotationAnimation.value : 0),
-                      child: Container(
-                        width: 280,
-                        height: 360,
-                        decoration: BoxDecoration(
-                          color: widget.backgroundColor,
-                          borderRadius: BorderRadius.circular(25),
-                          border: Border.all(color: Colors.white, width: 5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: widget.backgroundColor.withValues(alpha: 0.7),
-                              blurRadius: 30,
-                              spreadRadius: 5,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(20),
-                                  topRight: Radius.circular(20),
-                                ),
-                                child: Image.asset(
-                                  widget.imagePath,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: double.infinity,
+                      Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..setEntry(3, 2, 0.001)
+                          ..rotateY(
+                              _hovering ? _rotationAnimation.value : 0),
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: widget.backgroundColor,
+                            borderRadius: BorderRadius.circular(20),
+                            border:
+                                Border.all(color: Colors.white, width: 4),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black
+                                    .withValues(alpha: 0.30),
+                                blurRadius: 18,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 8),
+                              ),
+                              BoxShadow(
+                                color: widget.backgroundColor
+                                    .withValues(alpha: 0.45),
+                                blurRadius: 14,
+                                spreadRadius: 0,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    topRight: Radius.circular(16),
+                                  ),
+                                  child: Image.asset(
+                                    widget.imagePath,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 22),
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.only(
-                                  bottomLeft: Radius.circular(20),
-                                  bottomRight: Radius.circular(20),
+                              Container(
+                                width: double.infinity,
+                                padding: EdgeInsets.symmetric(
+                                    vertical: isPortrait ? 14 : 10),
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.only(
+                                    bottomLeft: Radius.circular(16),
+                                    bottomRight: Radius.circular(16),
+                                  ),
+                                ),
+                                child: Text(
+                                  widget.title,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: titleSize,
+                                    fontWeight: FontWeight.bold,
+                                    color: widget.backgroundColor,
+                                  ),
                                 ),
                               ),
-                              child: Text(
-                                widget.title,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 23,
-                                  fontWeight: FontWeight.bold,
-                                  color: widget.backgroundColor,
-                                ),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -1145,18 +1141,30 @@ class _GameBoxState extends State<_GameBox> with TickerProviderStateMixin {
   }
 }
 
-// ✅ Settings Dialog Widget - UPDATED WITH AUDIO SERVICE INTEGRATION
+// ✅ Settings Dialog (unchanged from original)
 class _SettingsDialog extends StatefulWidget {
   final String userId;
   final String baseUrl;
   final VoidCallback onLogout;
-  final VoidCallback onEditProfile; // ✅ NEW
+  final VoidCallback onEditProfile;
+  final bool showLeaderboardButton;
+  final VoidCallback? onLeaderboard;
+  /// When provided, this key is assigned to the Leaderboard button so the
+  /// tutorial overlay can highlight it on mobile.
+  final GlobalKey? leaderboardKey;
+  /// Stable context from HomePage, used for showDialog calls that need to
+  /// outlive this dialog (e.g. showing the rating dialog after popping).
+  final BuildContext homeContext;
 
   const _SettingsDialog({
     required this.userId,
     required this.baseUrl,
     required this.onLogout,
-    required this.onEditProfile, // ✅ NEW
+    required this.onEditProfile,
+    required this.homeContext,
+    this.showLeaderboardButton = false,
+    this.onLeaderboard,
+    this.leaderboardKey,
   });
 
   @override
@@ -1164,8 +1172,8 @@ class _SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<_SettingsDialog> {
-  double _volumeLevel = 50;  // Music volume
-  double _sfxLevel = 50;     // SFX volume
+  double _volumeLevel = 50;
+  double _sfxLevel = 50;
   final AudioService _audioService = AudioService();
 
   @override
@@ -1177,28 +1185,16 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      // Load from SharedPreferences
       _volumeLevel = prefs.getDouble('music_volume_${widget.userId}') ?? 50.0;
       _sfxLevel = prefs.getDouble('sfx_volume_${widget.userId}') ?? 50.0;
     });
-
-    // Apply to AudioService
     await _audioService.setMusicVolume(_volumeLevel / 100.0);
-    // Note: We'll need to add setSfxVolume to AudioService if it doesn't exist
-    // For now, if volume is 0, disable; otherwise enable
+    await _audioService.setSfxVolume(_sfxLevel / 100.0);
     bool shouldEnableMusic = _volumeLevel > 0;
-    bool shouldEnableSfx = _sfxLevel > 0;
-
     if (!shouldEnableMusic && _audioService.isMusicEnabled) {
       _audioService.toggleMusic();
     } else if (shouldEnableMusic && !_audioService.isMusicEnabled) {
       _audioService.toggleMusic();
-    }
-
-    if (!shouldEnableSfx && _audioService.isSfxEnabled) {
-      _audioService.toggleSfx();
-    } else if (shouldEnableSfx && !_audioService.isSfxEnabled) {
-      _audioService.toggleSfx();
     }
   }
 
@@ -1211,65 +1207,44 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   void _onVolumeChanged(double value) {
     setState(() => _volumeLevel = value);
     _audioService.setMusicVolume(value / 100.0);
-
-    // If volume is 0, disable music; otherwise enable it
-    bool shouldEnableMusic = value > 0;
-    if (!shouldEnableMusic && _audioService.isMusicEnabled) {
+    if (value == 0 && _audioService.isMusicEnabled) {
       _audioService.toggleMusic();
-    } else if (shouldEnableMusic && !_audioService.isMusicEnabled) {
+    } else if (value > 0 && !_audioService.isMusicEnabled) {
       _audioService.toggleMusic();
     }
-
     _saveSettings();
   }
 
   void _onSfxVolumeChanged(double value) {
     setState(() => _sfxLevel = value);
-
-    // If volume is 0, disable SFX; otherwise enable it
-    bool shouldEnableSfx = value > 0;
-    if (!shouldEnableSfx && _audioService.isSfxEnabled) {
-      _audioService.toggleSfx();
-    } else if (shouldEnableSfx && !_audioService.isSfxEnabled) {
-      _audioService.toggleSfx();
-    }
-
+    _audioService.setSfxVolume(value / 100.0);
     _saveSettings();
   }
 
   Future<void> _handleRateGame() async {
-    // Check rating status first
     final prefs = await SharedPreferences.getInstance();
-    final hasRated = prefs.getBool('hasRated_${widget.userId}') ?? false;
+    final hasRated = prefs.getBool('has_rated_${widget.userId}') ?? false;
+    final homeContext = widget.homeContext; // survives this dialog closing
 
-    if (!hasRated && mounted) {
-      // ✅ Close settings dialog first
-      if (!mounted) return;
-      Navigator.of(context).pop();
+    Navigator.of(context).pop(); // close the settings dialog
 
-      // Small delay for smooth transition
-      await Future.delayed(const Duration(milliseconds: 150));
-
-      // ✅ Show the proper rating dialog (standalone popup)
-      if (!mounted) return;
+    if (!hasRated) {
+      if (!homeContext.mounted) return;
       await showDialog(
-        context: context,
+        context: homeContext,
         barrierDismissible: true,
         builder: (dialogContext) => _RatingDialog(
           userId: widget.userId,
           baseUrl: widget.baseUrl,
           onRatingSubmitted: () async {
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('hasRated_${widget.userId}', true);
+            await prefs.setBool('has_rated_${widget.userId}', true);
           },
         ),
       );
     } else {
-      // User already rated - close settings and show snackbar
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!homeContext.mounted) return;
+      ScaffoldMessenger.of(homeContext).showSnackBar(
         const SnackBar(
           content: Text('You have already rated this game. Thank you!'),
           backgroundColor: Colors.orange,
@@ -1279,7 +1254,6 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   }
 
   void _handleLogout() async {
-    // Show initial confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -1287,103 +1261,72 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 400,
+          width: 380,
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Image.asset(
-                "assets/images-icons/sadlogout.png",
-                width: 80,
-                height: 80,
-              ),
+              Image.asset("assets/images-icons/sadlogout.png",
+                  width: 80, height: 80),
               const SizedBox(height: 15),
-              const Text(
-                "Logout Confirmation",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
+              const Text("Logout Confirmation",
+                  style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20)),
               const SizedBox(height: 10),
-              const Text(
-                "Are you sure you want to log out?",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                ),
-              ),
+              const Text("Are you sure you want to log out?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 14)),
               const SizedBox(height: 25),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(false),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(
-                          color: Color(0xFF046EB8),
-                          width: 1,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: const Text(
-                        "No",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          color: Color(0xFF046EB8),
-                        ),
-                      ),
+              Row(children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: Color(0xFF046EB8), width: 1),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
                     ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFDD000),
-                        foregroundColor: const Color(0xFF816A03),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: const Text(
-                        "Yes",
+                    child: const Text("No",
                         style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: Color(0xFF046EB8))),
                   ),
-                ],
-              )
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFDD000),
+                      foregroundColor: const Color(0xFF816A03),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: const Text("Yes",
+                        style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ])
             ],
           ),
         ),
       ),
     );
-
     if (confirmed != true) {
-      // User clicked "No" - close settings dialog and stay logged in
       if (!mounted) return;
       Navigator.of(context).pop();
       return;
     }
-
-    // User clicked "Yes" - close settings dialog and logout immediately
     if (!mounted) return;
     Navigator.of(context).pop();
-
-    // Proceed with logout directly without rating prompts
-    if (!mounted) return;
     debugPrint('✅ Logging out');
     widget.onLogout();
   }
@@ -1402,209 +1345,176 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       width: 340,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
+          color: Colors.white, borderRadius: BorderRadius.circular(20)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with close button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.settings, color: Color(0xFF046EB8), size: 28),
-                  SizedBox(width: 12),
-                  Text(
-                    'Settings',
-                    style: TextStyle(
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Row(children: [
+              Icon(Icons.settings, color: Color(0xFF046EB8), size: 28),
+              SizedBox(width: 12),
+              Text('Settings',
+                  style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF046EB8),
-                    ),
-                  ),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Color(0xFF046EB8)),
-                onPressed: () => Navigator.of(context).pop(),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
+                      color: Color(0xFF046EB8))),
+            ]),
+            IconButton(
+              icon: const Icon(Icons.close, color: Color(0xFF046EB8)),
+              onPressed: () => Navigator.of(context).pop(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ]),
           const SizedBox(height: 24),
-
-          // Volume Control
-          const Row(
-            children: [
-              Icon(Icons.music_note, color: Color(0xFF046EB8), size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Music Volume',
+          const Row(children: [
+            Icon(Icons.music_note, color: Color(0xFF046EB8), size: 20),
+            SizedBox(width: 8),
+            Text('Music Volume',
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  value: _volumeLevel,
-                  min: 0,
-                  max: 100,
-                  divisions: 20,
-                  activeColor: const Color(0xFF046EB8),
-                  inactiveColor: Colors.grey[300],
-                  onChanged: _onVolumeChanged,
-                ),
-              ),
-              SizedBox(
-                width: 35,
-                child: Text(
-                  '${_volumeLevel.round()}',
-                  style: const TextStyle(
                     fontFamily: 'Poppins',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+              child: Slider(
+                value: _volumeLevel,
+                min: 0,
+                max: 100,
+                divisions: 20,
+                activeColor: const Color(0xFF046EB8),
+                inactiveColor: Colors.grey[300],
+                onChanged: _onVolumeChanged,
               ),
-            ],
-          ),
+            ),
+            SizedBox(
+              width: 35,
+              child: Text('${_volumeLevel.round()}',
+                  style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
+            ),
+          ]),
           const SizedBox(height: 16),
-
-          // SFX Volume Control
-          const Row(
-            children: [
-              Icon(Icons.graphic_eq, color: Color(0xFF046EB8), size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Sound Effects Volume',
+          const Row(children: [
+            Icon(Icons.graphic_eq, color: Color(0xFF046EB8), size: 20),
+            SizedBox(width: 8),
+            Text('Sound Effects Volume',
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  value: _sfxLevel,
-                  min: 0,
-                  max: 100,
-                  divisions: 20,
-                  activeColor: const Color(0xFF046EB8),
-                  inactiveColor: Colors.grey[300],
-                  onChanged: _onSfxVolumeChanged,
-                ),
-              ),
-              SizedBox(
-                width: 35,
-                child: Text(
-                  '${_sfxLevel.round()}',
-                  style: const TextStyle(
                     fontFamily: 'Poppins',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+              child: Slider(
+                value: _sfxLevel,
+                min: 0,
+                max: 100,
+                divisions: 20,
+                activeColor: const Color(0xFF046EB8),
+                inactiveColor: Colors.grey[300],
+                onChanged: _onSfxVolumeChanged,
               ),
-            ],
-          ),
+            ),
+            SizedBox(
+              width: 35,
+              child: Text('${_sfxLevel.round()}',
+                  style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
+            ),
+          ]),
           const SizedBox(height: 24),
-
-          // Divider
           const Divider(),
           const SizedBox(height: 16),
-
-          // Rate Game Button
+          // On mobile/portrait, show Leaderboard button here since the top nav is hidden
+          if (widget.showLeaderboardButton) ...[
+            SizedBox(
+              key: widget.leaderboardKey,
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.onLeaderboard?.call();
+                },
+                icon: const Icon(Icons.leaderboard, size: 20),
+                label: const Text('Leaderboard',
+                    style: TextStyle(
+                        fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF046EB8),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: _handleRateGame,
               icon: const Icon(Icons.star_rounded, size: 20),
-              label: const Text(
-                'Rate Game',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              label: const Text('Rate Game',
+                  style: TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFDD000),
                 foregroundColor: const Color(0xFF816A03),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
+                    borderRadius: BorderRadius.circular(15)),
               ),
             ),
           ),
           const SizedBox(height: 12),
-
-          // ✅ Edit Profile Button (between Rate Game and Logout)
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () {
-                Navigator.of(context).pop(); // close settings dialog
-                widget.onEditProfile();      // open edit profile dialog
+                Navigator.of(context).pop();
+                widget.onEditProfile();
               },
               icon: const Icon(Icons.edit, size: 20),
-              label: const Text(
-                'Edit Profile',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              label: const Text('Edit Profile',
+                  style: TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF046EB8),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
+                    borderRadius: BorderRadius.circular(15)),
               ),
             ),
           ),
           const SizedBox(height: 12),
-
-          // Logout Button
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: _handleLogout,
               icon: const Icon(Icons.logout, size: 20),
-              label: const Text(
-                'Logout',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              label: const Text('Logout',
+                  style: TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF046EB8),
                 side: const BorderSide(color: Color(0xFF046EB8), width: 1.5),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
+                    borderRadius: BorderRadius.circular(15)),
               ),
             ),
           ),
@@ -1614,8 +1524,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   }
 }
 
-
-// ✅ Rating Dialog Widget
+// ✅ Rating Dialog (unchanged)
 class _RatingDialog extends StatefulWidget {
   final String userId;
   final String baseUrl;
@@ -1637,63 +1546,51 @@ class _RatingDialogState extends State<_RatingDialog> {
   bool _isSubmitting = false;
 
   Future<void> _submitRating() async {
-    debugPrint('🔍 Submit button clicked in rating dialog');
-
     if (_rating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a rating')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Please select a rating')));
       return;
     }
-
     setState(() => _isSubmitting = true);
-
     try {
-      // ✅ FRONTEND-ONLY: Store rating locally using SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-
-      // Save rating data
       await prefs.setInt('rating_${widget.userId}', _rating);
       await prefs.setString('feedback_${widget.userId}', _feedback);
-      await prefs.setString('rating_timestamp_${widget.userId}', DateTime.now().toIso8601String());
+      await prefs.setString('rating_timestamp_${widget.userId}',
+          DateTime.now().toIso8601String());
 
-      // Optional: Print to console for debugging (you can see the ratings)
-      debugPrint('⭐ Rating saved locally:');
-      debugPrint('User ID: ${widget.userId}');
-      debugPrint('Rating: $_rating stars');
-      debugPrint('Feedback: $_feedback');
-      debugPrint('Timestamp: ${DateTime.now()}');
+      // ✅ Send to the backend so it shows up in the admin Analytics
+      // "Player Comments" panel. Best-effort: if this fails (offline, etc.)
+      // we still keep the local copy above and don't block the thank-you UX.
+      try {
+        await http.post(
+          Uri.parse('${widget.baseUrl}/players/${widget.userId}/feedback'),
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: jsonEncode({'rating': _rating, 'comment': _feedback}),
+        ).timeout(const Duration(seconds: 8));
+      } catch (e) {
+        debugPrint('⚠️ Feedback upload failed (kept locally only): $e');
+      }
 
       if (mounted) {
-        // Call the callback to mark user as rated
         widget.onRatingSubmitted?.call();
-
-        // ✅ Pop dialog first to return the result
-        Navigator.pop(context, true); // Return true when rating is submitted
-
-        // Small delay to ensure context is valid
+        Navigator.pop(context, true);
         await Future.delayed(const Duration(milliseconds: 100));
-
-        // Then show snackbar
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Thank you for your rating!'),
-              backgroundColor: Colors.green,
-            ),
+                content: Text('Thank you for your rating!'),
+                backgroundColor: Colors.green),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving rating: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error saving rating: $e')));
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -1702,43 +1599,28 @@ class _RatingDialogState extends State<_RatingDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        width: 350,
+        width: 340,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
+            color: Colors.white, borderRadius: BorderRadius.circular(20)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.star_rounded,
-              color: Color(0xFFFDD000),
-              size: 60,
-            ),
+            const Icon(Icons.star_rounded,
+                color: Color(0xFFFDD000), size: 60),
             const SizedBox(height: 16),
-            const Text(
-              'Rate Our Game!',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF046EB8),
-              ),
-            ),
+            const Text('Rate Our Game!',
+                style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF046EB8))),
             const SizedBox(height: 8),
-            const Text(
-              'Your feedback helps us improve',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                color: Colors.black54,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            const Text('Your feedback helps us improve',
+                style: TextStyle(
+                    fontFamily: 'Poppins', fontSize: 14, color: Colors.black54),
+                textAlign: TextAlign.center),
             const SizedBox(height: 24),
-
-            // Star Rating
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (index) {
@@ -1747,18 +1629,14 @@ class _RatingDialogState extends State<_RatingDialog> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Icon(
-                      index < _rating ? Icons.star : Icons.star_border,
-                      color: const Color(0xFFFDD000),
-                      size: 40,
-                    ),
+                        index < _rating ? Icons.star : Icons.star_border,
+                        color: const Color(0xFFFDD000),
+                        size: 40),
                   ),
                 );
               }),
             ),
-
             const SizedBox(height: 24),
-
-            // Feedback TextField
             Container(
               decoration: BoxDecoration(
                 color: Colors.grey[100],
@@ -1777,56 +1655,43 @@ class _RatingDialogState extends State<_RatingDialog> {
                 onChanged: (value) => _feedback = value,
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: _isSubmitting ? null : () {
-                      debugPrint('🔍 Later button clicked in rating dialog');
-                      Navigator.pop(context, false);
-                    },
-                    child: const Text(
-                      'Later',
-                      style: TextStyle(fontFamily: 'Poppins', color: Colors.grey),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submitRating,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFDD000),
-                      foregroundColor: const Color(0xFF816A03),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF816A03)),
-                      ),
-                    )
-                        : const Text(
-                      'Submit',
+            Row(children: [
+              Expanded(
+                child: TextButton(
+                  onPressed:
+                      _isSubmitting ? null : () => Navigator.pop(context, false),
+                  child: const Text('Later',
                       style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                          fontFamily: 'Poppins', color: Colors.grey)),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submitRating,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFDD000),
+                    foregroundColor: const Color(0xFF816A03),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15)),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF816A03))))
+                      : const Text('Submit',
+                          style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ]),
           ],
         ),
       ),

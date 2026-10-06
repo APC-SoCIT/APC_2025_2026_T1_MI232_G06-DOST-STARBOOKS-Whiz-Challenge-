@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'config.dart';
 
 class GameTutorialOverlay extends StatefulWidget {
   final String userId;
@@ -16,7 +17,7 @@ class GameTutorialOverlay extends StatefulWidget {
     required this.onComplete,
   });
 
-  static const String _baseUrl = 'http://localhost/api';
+    static String get _baseUrl => '${AppConfig.baseUrl}';
 
   /// Check if tutorial should be shown for this user and game type.
   /// Checks local cache first (fast), then verifies with backend (source of truth).
