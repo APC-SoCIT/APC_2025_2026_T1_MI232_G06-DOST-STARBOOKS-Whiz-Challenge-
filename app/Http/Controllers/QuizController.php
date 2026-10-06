@@ -6,6 +6,24 @@ use Illuminate\Http\Request;
 
 class QuizController extends Controller
 {
+
+    /**
+     * Attach CORS headers so Flutter web (port 80) can reach the API (port 8000).
+     */
+    private function cors($response)
+    {
+        return $response
+            ->header('Access-Control-Allow-Origin', '*')
+            ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With');
+    }
+
+    /** Handle browser pre-flight OPTIONS requests. */
+    public function handleOptions()
+    {
+        return $this->cors(response()->json(['ok' => true], 200));
+    }
+
     /**
      * Get questions — yearLevel is optional.
      * Route:  GET /api/quiz/questions/{category}/{difficulty}/{yearLevel?}
@@ -50,11 +68,12 @@ class QuizController extends Controller
 
             if ($rawQuestions->isEmpty()) {
                 $levelLabel = $normalizedYearLevel ?? 'ALL year levels';
-                return response()->json([
+                // ✅ FIX: Added missing closing ))
+                return $this->cors(response()->json([
                     'success' => false,
                     'message' => "No questions found for {$normalizedCategory} - {$normalizedDifficulty} ({$levelLabel})",
                     'questions' => []
-                ], 404);
+                ], 404));
             }
 
             // Format questions with image support
@@ -99,7 +118,6 @@ class QuizController extends Controller
             ->values();
 
             // Look up num_questions from difficulty settings (admin-configurable)
-            // ✅ Use mongodb connection — quiz_difficulty_settings is in MongoDB
             $diffSetting = \DB::connection('mongodb')
                 ->table('quiz_difficulty_settings')
                 ->where('difficulty_level', $normalizedDifficulty)
@@ -122,12 +140,13 @@ class QuizController extends Controller
                 \Log::warning($warning);
             }
 
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => true,
                 'count' => $finalCount,
                 'warning' => $warning,
                 'questions' => $formattedQuestions
-            ]);
+            ]));
 
         } catch (\Exception $e) {
             \Log::error("Error in getQuestions (yearLevel=" . ($yearLevel ?? 'ALL') . ")", [
@@ -137,11 +156,12 @@ class QuizController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => false,
                 'message' => 'Error fetching questions',
                 'error' => $e->getMessage()
-            ], 500);
+            ], 500));
         }
     }
 
@@ -183,18 +203,20 @@ class QuizController extends Controller
                 ->table('quiz_questions')
                 ->insertGetId($validated);
 
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => true,
                 'message' => 'Question added successfully',
                 'question_id' => (string) $result
-            ], 201);
+            ], 201));
 
         } catch (\Exception $e) {
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => false,
                 'message' => 'Error adding question',
                 'error' => $e->getMessage()
-            ], 500);
+            ], 500));
         }
     }
 
@@ -246,7 +268,7 @@ class QuizController extends Controller
                             ->where('category', $cat)
                             ->where('difficulty_level', $diff)
                             ->where('year_level', $year)
-                            ->where('is_active', 1)  // Only count active
+                            ->where('is_active', 1)
                             ->count();
                         $breakdown["{$cat} - {$diff} - {$year}"] = $count;
                     }
@@ -267,7 +289,8 @@ class QuizController extends Controller
                 $samples[$cat] = $sample;
             }
 
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => true,
                 'total_questions' => $total,
                 'active_questions' => $active,
@@ -279,14 +302,15 @@ class QuizController extends Controller
                 'year_levels_found' => $yearLevels,
                 'breakdown' => $breakdown,
                 'sample_questions' => $samples,
-            ]);
+            ]));
 
         } catch (\Exception $e) {
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => false,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
-            ], 500);
+            ], 500));
         }
     }
 
@@ -314,17 +338,19 @@ class QuizController extends Controller
                 ],
             ];
 
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => true,
                 'statistics' => $stats
-            ]);
+            ]));
 
         } catch (\Exception $e) {
-            return response()->json([
+            // ✅ FIX: Added missing closing ))
+            return $this->cors(response()->json([
                 'success' => false,
                 'message' => 'Error fetching statistics',
                 'error' => $e->getMessage()
-            ], 500);
+            ], 500));
         }
     }
 }

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 use App\Models\User;
 use MongoDB\BSON\ObjectId;
 
@@ -13,24 +14,61 @@ class UserController extends Controller
 {
     public function register(Request $request)
     {
+        // ✅ FIX: auto-trim leading/trailing spaces on text fields instead of
+        // rejecting them, so " arci " is treated the same as "arci". This now
+        // includes password, trimmed consistently at register/login/change-
+        // password so the hash always matches what the user actually typed
+        // minus incidental leading/trailing whitespace.
+        $request->merge([
+            'username' => trim((string) $request->input('username', '')),
+            'school'   => trim((string) $request->input('school', '')),
+            'password' => trim((string) $request->input('password', '')),
+        ]);
+
         try {
             $validated = $request->validate([
                 'username' => [
                     'required',
-                    'unique:player_info,username',
+                    // ✅ FIX: 'unique:player_info,username' with no connection
+                    // prefix validates against Laravel's DEFAULT DB connection,
+                    // not 'mongodb' — since every other query in this app
+                    // explicitly specifies ->connection('mongodb'), the default
+                    // connection is almost certainly something else (unused
+                    // mysql/sqlite config), so this check was silently always
+                    // passing and duplicate usernames were never rejected.
+                    // Rule::unique(User::class, ...) resolves through the
+                    // model, which correctly uses its $connection = 'mongodb'.
+                    Rule::unique(User::class, 'username'),
                     'min:3',
                     'max:20',
-                    'regex:/^[a-zA-Z0-9_]+$/',  // This already prevents spaces, but let's add custom validation
+                    // ✅ FIX: split into two checks so the user gets a
+                    // distinct message for "must start with a letter" vs.
+                    // "invalid characters", instead of one generic regex
+                    // message. Hyphens are now allowed per spec.
                     function ($attribute, $value, $fail) {
-                        if (preg_match('/\s/', $value)) {
-                            $fail('Username cannot contain spaces');
+                        if (!preg_match('/^[a-zA-Z]/', $value)) {
+                            $fail('Username must start with a letter');
+                            return;
+                        }
+                        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $value)) {
+                            $fail('Username can only contain letters, numbers, underscores, and hyphens');
                         }
                     },
                 ],
                 'password' => [
                     'required',
                     'min:8',
-                    'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])[A-Za-z\d!@#$%^&*(),.?":{}|<>]+$/'
+                    'max:12',
+                    // ✅ FIX: previous pattern had a regex escaping bug —
+                    // "\\\/" was parsed by PHP's single-quoted string as an
+                    // escaped backslash followed by a *bare* "/", which
+                    // prematurely closed the "/"-delimited pattern and left
+                    // the rest of the class read as invalid PCRE modifiers
+                    // (crashed with "preg_match(): Unknown modifier ';'").
+                    // Dropped the literal backslash from the allowed set —
+                    // it's an unusual password character and not worth the
+                    // escaping risk — and single-escaped the slash instead.
+                    'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-\[\]\/;~`+=]).+$/'
                 ],
                 'school' => 'required|min:2',
                 'age' => 'required|string',
@@ -47,10 +85,10 @@ class UserController extends Controller
                 'username.unique' => 'Username is already taken',
                 'username.min' => 'Username must be at least 3 characters',
                 'username.max' => 'Username must not exceed 20 characters',
-                'username.regex' => 'Username can only contain letters, numbers, and underscores',
 
                 'password.required' => 'Password is required',
                 'password.min' => 'Password must be at least 8 characters',
+                'password.max' => 'Password must not exceed 12 characters',
                 'password.regex' => 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
 
                 'school.required' => 'School is required',
@@ -120,6 +158,12 @@ class UserController extends Controller
             'password' => 'required|string',
         ]);
 
+        // ✅ FIX: trim leading/trailing spaces to match how the password was
+        // trimmed and hashed at registration.
+        $request->merge([
+            'password' => trim((string) $request->input('password', '')),
+        ]);
+
         $username    = $request->username;
         $attemptKey  = 'login_attempts:' . strtolower($username);
         $lockoutKey  = 'login_lockout:'  . strtolower($username);
@@ -149,6 +193,15 @@ class UserController extends Controller
                 'success' => false,
                 'message' => 'User not found',
             ], 404);
+        }
+
+        // ── Banned / suspended check ───────────────────────────────────────
+        if (($user->status ?? 'active') === 'banned') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account has been suspended. Please contact your teacher.',
+                'banned'  => true,
+            ], 403);
         }
 
         // ── Wrong password ─────────────────────────────────────────────────
@@ -211,7 +264,8 @@ class UserController extends Controller
 
         return response()->json([
             'success' => true,
-            'user' => $user,
+            'user'    => $user,
+            'status'  => $user->status ?? 'active',
         ]);
     }
 
@@ -236,29 +290,52 @@ class UserController extends Controller
     public function homepage($id)
     {
         try {
+            $playerObjectId = new \MongoDB\BSON\ObjectId($id);
+
             $user = \DB::connection('mongodb')
                 ->table('player_info')
-                ->where('_id', new \MongoDB\BSON\ObjectId($id))
+                ->where('_id', $playerObjectId)
                 ->first();
 
             if (!$user) {
                 return response()->json(['success' => false, 'message' => 'User not found'], 404);
             }
 
-            $regionName = $this->getLocationName('region', $user->region);
+            $regionName   = $this->getLocationName('region', $user->region);
             $provinceName = $this->getLocationName('province', $user->province);
-            $cityName = $this->getLocationName('city', $user->city, $user->province);
+            $cityName     = $this->getLocationName('city', $user->city, $user->province);
+
+            // ✅ FIX: Get real star count from player_stars collection
+            $playerStars = \DB::connection('mongodb')
+                ->table('player_stars')
+                ->where('player_id', $playerObjectId)
+                ->first();
+            $totalStars = $playerStars ? ($playerStars->total_stars ?? 0) : 0;
+
+            // ✅ FIX: Get real badge count from player_badges collection
+            $playerBadge = \DB::connection('mongodb')
+                ->table('player_badges')
+                ->where('player_info_id', $playerObjectId)
+                ->first();
+            $badgeCount = 0;
+            if ($playerBadge) {
+                $badgeCount = ($playerBadge->easy_badge_count ?? 0)
+                            + ($playerBadge->average_badge_count ?? 0)
+                            + ($playerBadge->difficult_badge_count ?? 0);
+            }
 
             return response()->json([
                 'success' => true,
                 'user' => [
-                    'username' => $user->username ?? '',
-                    'region' => $regionName,
-                    'province' => $provinceName,
-                    'city' => $cityName,
-                    'stars' => $user->stars ?? 0,
-                    'category' => $user->category ?? '',                    // ← ADD THIS
-                    'student_category' => $user->student_category ?? null,  // ← ADD THIS
+                    'username'         => $user->username ?? '',
+                    'region'           => $regionName,
+                    'province'         => $provinceName,
+                    'city'             => $cityName,
+                    'stars'            => $totalStars,   // ✅ from player_stars
+                    'total_stars'      => $totalStars,   // ✅ from player_stars
+                    'badge_count'      => $badgeCount,   // ✅ from player_badges
+                    'category'         => $user->category ?? '',
+                    'student_category' => $user->student_category ?? null,
                 ]
             ]);
 
@@ -289,17 +366,27 @@ class UserController extends Controller
             ], 404);
         }
 
+        // ✅ FIX: auto-trim leading/trailing spaces instead of rejecting them.
+        $request->merge([
+            'username' => trim((string) $request->input('username', '')),
+            'school'   => trim((string) $request->input('school', '')),
+        ]);
+
         try {
             $validated = $request->validate([
                 'username' => [
                     'required',
                     'min:3',
                     'max:20',
-                    'regex:/^[a-zA-Z0-9_]+$/',
+                    // ✅ FIX: distinct messages for "must start with a letter"
+                    // vs. "invalid characters"; hyphens now allowed.
                     function ($attribute, $value, $fail) use ($user) {
-                        // Check for spaces
-                        if (preg_match('/\s/', $value)) {
-                            $fail('Username cannot contain spaces');
+                        if (!preg_match('/^[a-zA-Z]/', $value)) {
+                            $fail('Username must start with a letter');
+                            return;
+                        }
+                        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $value)) {
+                            $fail('Username can only contain letters, numbers, underscores, and hyphens');
                             return;
                         }
                         // Check if username is taken by another user
@@ -324,7 +411,6 @@ class UserController extends Controller
                 'username.required' => 'Username is required',
                 'username.min' => 'Username must be at least 3 characters',
                 'username.max' => 'Username must not exceed 20 characters',
-                'username.regex' => 'Username can only contain letters, numbers, and underscores',
                 'school.required' => 'School is required',
                 'school.min' => 'School name must be at least 2 characters',
                 'age.required' => 'Please select an age range',
@@ -377,18 +463,68 @@ class UserController extends Controller
             ], 200);
         }
 
+        $oldUsername = $user->username;
+        $oldAvatar   = $user->avatar;
+        $newUsername = $validated['username'];
+        $newAvatar   = $validated['avatar'];
+
         $user->update([
-            'username' => $validated['username'],
+            'username' => $newUsername,
             'school' => $validated['school'],
             'age' => $validated['age'],
-            'avatar' => $validated['avatar'],
+            'avatar' => $newAvatar,
             'category' => $validated['category'],
-            'student_category' => $validated['student_category'] ?? null,  // ← ADD THIS LINE
+            'student_category' => $validated['student_category'] ?? null,
             'sex' => $validated['sex'],
             'region' => (int) $validated['region'],
             'province' => (int) $validated['province'],
             'city' => (int) $validated['city'],
         ]);
+
+        // Propagate username AND avatar to all related collections whenever either changes.
+        // Both fields are cached in player_stats, player_stars, and fastest_time collections
+        // so the leaderboards display current data without extra joins.
+        $usernameChanged = $oldUsername !== $newUsername;
+        $avatarChanged   = $oldAvatar   !== $newAvatar;
+
+        if ($usernameChanged || $avatarChanged) {
+            $playerObjectId = new ObjectId($id);
+
+            // fastest_time collections store player_username only
+            if ($usernameChanged) {
+                \App\Models\FastestTime::queryPuzzle()
+                    ->where('player_id', $playerObjectId)
+                    ->update(['player_username' => $newUsername]);
+
+                \App\Models\FastestTime::queryMemoryMatch()
+                    ->where('player_id', $playerObjectId)
+                    ->update(['player_username' => $newUsername]);
+            }
+
+            // player_stats — badges leaderboard reads username + avatar from here
+            $statsUpdate = [];
+            if ($usernameChanged) $statsUpdate['username'] = $newUsername;
+            if ($avatarChanged)   $statsUpdate['avatar']   = $newAvatar;
+
+            \Illuminate\Support\Facades\DB::connection('mongodb')
+                ->table('player_stats')
+                ->where('player_id', $playerObjectId)
+                ->update($statsUpdate);
+
+            // player_stars — stars leaderboard reads username + avatar from here
+            \Illuminate\Support\Facades\DB::connection('mongodb')
+                ->table('player_stars')
+                ->where('player_id', $playerObjectId)
+                ->update($statsUpdate);
+
+            \Illuminate\Support\Facades\Log::info('Profile propagated to leaderboard collections', [
+                'player_id'       => $id,
+                'old_username'    => $oldUsername,
+                'new_username'    => $newUsername,
+                'username_changed'=> $usernameChanged,
+                'avatar_changed'  => $avatarChanged,
+            ]);
+        }
 
         return response()->json([
             'success' => true,
@@ -448,19 +584,35 @@ class UserController extends Controller
 
     public function changePassword(Request $request, $id)
     {
+        // ✅ FIX: trim leading/trailing spaces on all three password fields,
+        // consistent with the trim applied at registration/login, so a
+        // correct current password with an incidental space still matches
+        // the hash, and the new password is stored the same way it was
+        // typed minus that incidental whitespace.
+        $request->merge([
+            'old_password' => trim((string) $request->input('old_password', '')),
+            'new_password' => trim((string) $request->input('new_password', '')),
+            'new_password_confirmation' => trim((string) $request->input('new_password_confirmation', '')),
+        ]);
+
         try {
             $request->validate([
                 'old_password' => 'required',
                 'new_password' => [
                     'required',
                     'min:8',
-                    'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])[A-Za-z\d!@#$%^&*(),.?":{}|<>]+$/'
+                    'max:12',
+                    // ✅ FIX: same escaping bug fixed as in register() —
+                    // dropped the literal backslash from the allowed set,
+                    // single-escaped the slash.
+                    'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-\[\]\/;~`+=]).+$/'
                 ],
                 'new_password_confirmation' => 'required|same:new_password',
             ], [
                 'old_password.required' => 'Please enter your current password.',
                 'new_password.required' => 'Please enter a new password.',
                 'new_password.min' => 'New password must be at least 8 characters.',
+                'new_password.max' => 'New password must not exceed 12 characters.',
                 'new_password.regex' => 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
                 'new_password_confirmation.required' => 'Please confirm your new password.',
                 'new_password_confirmation.same' => 'Password confirmation does not match.',

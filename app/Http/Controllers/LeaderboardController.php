@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\PlayerBadge;
 use App\Models\PlayerStats;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use MongoDB\BSON\ObjectId;
@@ -19,69 +21,110 @@ use MongoDB\BSON\ObjectId;
 class LeaderboardController extends Controller
 {
     /**
-     * Get leaderboard with top 20 players by total badges
-     * Shows cumulative totals across ALL categories (Math + Science)
-     * Supports filtering by mode (challenge/battle)
+     * Normalize any Mongo id representation (BSON ObjectId object, plain
+     * hex string, or an extended-JSON-style ['$oid' => ...] array/object)
+     * down to a plain hex string.
+     *
+     * ✅ FIX: $playerInfoById is built from a *raw* query builder result
+     * (DB::table('player_info')->get()), while badge/stat rows come from
+     * an *Eloquent* model — the two don't necessarily stringify an
+     * ObjectId identically. A silent mismatch here makes every
+     * isset($playerInfoById[$pid]) check fail, filtering out every row
+     * even when totals are nonzero — exactly the "no rankings" symptom
+     * even though the underlying data is fine. Routing every id through
+     * this one helper guarantees both sides compare the same format.
+     */
+    private static function normalizeId($value): string
+    {
+        if ($value instanceof \MongoDB\BSON\ObjectId) return (string) $value;
+        if (is_array($value) && isset($value['$oid'])) return (string) $value['$oid'];
+        if (is_object($value) && isset($value->{'$oid'})) return (string) $value->{'$oid'};
+        return (string) ($value ?? '');
+    }
+
+    /**
+     * Get leaderboard ranked by earned badges (top N players).
+     *
+     * ✅ FIX (2nd pass): the previous version(s) of this method read from
+     * `player_stats` (challenge_stats / battle_stats category arrays).
+     * Checking the actual database showed that collection isn't where
+     * badge data lives at all — `player_badges` is, with a much simpler
+     * flat schema (easy_badge_count / average_badge_count /
+     * difficult_badge_count, keyed by player_info_id), and that's the
+     * exact same collection + model (PlayerBadge) that BadgeController
+     * already reads successfully elsewhere in the app. Rewritten to match
+     * that real schema instead of the unused player_stats one.
+     *
+     * `?mode=challenge|battle` is still accepted (existing callers, e.g.
+     * the admin dashboard, pass it) but is now a no-op — player_badges
+     * tracks one running total per player, not split by game mode.
      */
     public function getLeaderboard(Request $request)
     {
         try {
-            $limit = $request->query('limit', 20); // Default 20 users
-            $mode = $request->query('mode', 'challenge'); // 'challenge' or 'battle'
+            $limit = (int) $request->query('limit', 20);
 
-            \Log::info('Leaderboard request:', [
-                'mode' => $mode,
-                'limit' => $limit
-            ]);
+            // player_info_id => [username, avatar] for display
+            //
+            // ✅ FIX: this used to read player_info via the raw query builder
+            // (DB::connection('mongodb')->table('player_info')->get()), which
+            // was silently coming back with zero rows on this environment —
+            // even though the collection has real data and this exact same
+            // raw-query pattern works elsewhere in the app. Rather than chase
+            // that connection/driver quirk further, this now goes through the
+            // App\Models\User Eloquent model instead — the same model
+            // FastestTimeController already uses successfully to look up a
+            // player by _id — since Eloquent models are consistently working
+            // (PlayerBadge::all() below has never had this problem).
+            $playerInfoById = [];
+            foreach (User::all() as $p) {
+                $pid = self::normalizeId($p->_id ?? null);
+                if ($pid === '') continue;
+                $playerInfoById[$pid] = [
+                    'username' => $p->username ?? 'Player',
+                    'avatar'   => $p->avatar ?? 'assets/images-avatars/Adventurer.png',
+                ];
+            }
 
-            // Get all player stats
-            $allPlayers = PlayerStats::all();
+            $allBadges = PlayerBadge::all();
 
-            // Build leaderboard with cumulative badge counts across all categories
-            $leaderboard = $allPlayers->map(function($player) use ($mode) {
-                $statsField = $mode . '_stats'; // 'challenge_stats' or 'battle_stats'
-                $stats = $player->$statsField ?? [];
+            $leaderboard = $allBadges->map(function ($badge) use ($playerInfoById) {
+                $pid = self::normalizeId($badge->player_info_id ?? null);
 
-                // Initialize counters
-                $easyCount = 0;
-                $averageCount = 0;
-                $difficultCount = 0;
+                // Skip badge rows whose player no longer exists
+                if ($pid === '' || !isset($playerInfoById[$pid])) return null;
 
-                // Sum up ALL categories (math, science, etc.)
-                foreach ($stats as $categoryKey => $categoryStats) {
-                    $easyCount += $categoryStats['easy'] ?? 0;
-                    $averageCount += $categoryStats['average'] ?? 0;
-                    $difficultCount += $categoryStats['difficult'] ?? 0;
-                }
+                $easy      = (int) ($badge->easy_badge_count      ?? 0);
+                $average   = (int) ($badge->average_badge_count   ?? 0);
+                $difficult = (int) ($badge->difficult_badge_count ?? 0);
 
-                $totalBadges = $easyCount + $averageCount + $difficultCount;
+                $total = $easy + $average + $difficult;
+                if ($total === 0) return null;
+
+                $info = $playerInfoById[$pid];
 
                 return [
-                    'player_id' => (string)$player->player_id,
-                    'username' => $player->username,
-                    'avatar' => $player->avatar,
-                    'easy_count' => $easyCount,
-                    'average_count' => $averageCount,
-                    'difficult_count' => $difficultCount,
-                    'total_badges' => $totalBadges,
+                    'player_id'       => $pid,
+                    'username'        => $info['username'],
+                    'avatar'          => $info['avatar'],
+                    'easy_count'      => $easy,
+                    'average_count'   => $average,
+                    'difficult_count' => $difficult,
+                    'total_badges'    => $total,
                 ];
             })
-            ->filter(function($player) {
-                // Only include players with at least 1 badge
-                return $player['total_badges'] > 0;
-            })
-            ->sortByDesc('total_badges') // Sort by total badges descending
-            ->take($limit) // Limit to top N players
+            ->filter()
+            ->sortByDesc('total_badges')
+            ->take($limit)
             ->values()
-            ->map(function($player, $index) {
+            ->map(function ($player, $index) {
                 $player['rank'] = $index + 1;
                 return $player;
             });
 
             return response()->json([
-                'success' => true,
-                'mode' => $mode,
-                'users' => $leaderboard,
+                'success'       => true,
+                'users'         => $leaderboard,
                 'total_players' => $leaderboard->count(),
             ], 200);
 
@@ -92,7 +135,7 @@ class LeaderboardController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching leaderboard',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
@@ -177,16 +220,19 @@ class LeaderboardController extends Controller
     /**
      * Get player badge counts for leaderboard display
      * This is for the badge section in the user stats panel
+     *
+     * ✅ FIX: same schema correction as getLeaderboard() — reads
+     * player_badges (via PlayerBadge, joined on player_info_id) instead
+     * of the unused player_stats challenge_stats/battle_stats shape.
      */
     public function getPlayerBadges($playerId)
     {
         try {
             $playerObjectId = new ObjectId($playerId);
 
-            // Get from player_stats collection
-            $playerStats = PlayerStats::where('player_id', $playerObjectId)->first();
+            $playerBadge = PlayerBadge::where('player_info_id', $playerObjectId)->first();
 
-            if (!$playerStats) {
+            if (!$playerBadge) {
                 return response()->json([
                     'success' => true,
                     'easy_count' => 0,
@@ -195,27 +241,9 @@ class LeaderboardController extends Controller
                 ]);
             }
 
-            // Aggregate all badge counts from both challenge and battle
-            $challengeStats = $playerStats->challenge_stats ?? [];
-            $battleStats = $playerStats->battle_stats ?? [];
-
-            $easyCount = 0;
-            $averageCount = 0;
-            $difficultCount = 0;
-
-            // Sum up from all categories in challenge stats
-            foreach ($challengeStats as $categoryStats) {
-                $easyCount += $categoryStats['easy'] ?? 0;
-                $averageCount += $categoryStats['average'] ?? 0;
-                $difficultCount += $categoryStats['difficult'] ?? 0;
-            }
-
-            // Sum up from all categories in battle stats
-            foreach ($battleStats as $categoryStats) {
-                $easyCount += $categoryStats['easy'] ?? 0;
-                $averageCount += $categoryStats['average'] ?? 0;
-                $difficultCount += $categoryStats['difficult'] ?? 0;
-            }
+            $easyCount      = (int) ($playerBadge->easy_badge_count      ?? 0);
+            $averageCount   = (int) ($playerBadge->average_badge_count   ?? 0);
+            $difficultCount = (int) ($playerBadge->difficult_badge_count ?? 0);
 
             return response()->json([
                 'success' => true,

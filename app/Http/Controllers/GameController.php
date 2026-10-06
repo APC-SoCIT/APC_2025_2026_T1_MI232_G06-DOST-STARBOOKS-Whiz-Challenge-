@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PlayerBadge;
 use App\Models\PlayerReward;
 use App\Models\PlayerStats;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use MongoDB\BSON\ObjectId;
@@ -14,66 +15,76 @@ use Illuminate\Support\Facades\DB;
 class GameController extends Controller
 {
     /**
-     * Record badge progress for a player
-     * Awards official badge every 3 wins/perfect scores
-     * Creates claimable reward in player_rewards collection
+     * Record badge progress for a player.
+     * Awards official badge every 3 wins/perfect scores.
+     * Creates claimable reward in player_rewards collection.
      *
-     * @param string $playerId
-     * @param string $difficulty (Easy, Average, Difficult)
-     * @param string $source ('challenge' or 'battle')
-     * @return array|null
+     * ✅ FIX: previously used firstOrCreate() then a separate increment()
+     * call — two steps, with a race window where concurrent requests could
+     * both firstOrCreate() a fresh doc, producing duplicate player_badges
+     * rows per player (same bug as PlayerStats, same fix: one atomic
+     * findOneAndUpdate with $inc + upsert).
      */
     private function recordBadgeProgress($playerId, $difficulty, $source = 'challenge')
     {
         try {
-            $playerObjectId = new ObjectId($playerId);
+            $playerObjectId  = new ObjectId($playerId);
             $difficultyLower = strtolower($difficulty);
+            $badgeCountField = $difficultyLower . '_badge_count';
 
             Log::info("🎯 Recording badge progress from {$source}", [
-                'player_id' => $playerId,
-                'difficulty' => $difficultyLower
+                'player_id'  => $playerId,
+                'difficulty' => $difficultyLower,
             ]);
 
-            // Get or create player badge record in player_badges collection
-            $playerBadge = PlayerBadge::firstOrCreate(
-                ['player_info_id' => $playerObjectId],
-                [
-                    'easy_badge_count' => 0,
-                    'average_badge_count' => 0,
-                    'difficult_badge_count' => 0,
-                    'easy_official_badge' => 0,
-                    'average_official_badge' => 0,
-                    'difficult_official_badge' => 0,
-                ]
-            );
+            // $setOnInsert must NOT include $badgeCountField — it's already
+            // being touched by $inc in this same update, and Mongo rejects
+            // an update that targets the same field with two operators.
+            // $inc creates the field starting from 0 automatically when the
+            // doc is new, so we only need to seed the OTHER fields here.
+            $allBadgeFields = [
+                'easy_badge_count', 'average_badge_count', 'difficult_badge_count',
+                'easy_official_badge', 'average_official_badge', 'difficult_official_badge',
+            ];
+            $setOnInsert = ['player_info_id' => $playerObjectId];
+            foreach ($allBadgeFields as $field) {
+                if ($field !== $badgeCountField) {
+                    $setOnInsert[$field] = 0;
+                }
+            }
 
-            // Increment the badge count for this difficulty
-            $badgeCountField = $difficultyLower . '_badge_count';
-            $playerBadge->increment($badgeCountField);
-            $playerBadge->refresh();
-            // Track that we incremented so we can roll back if reward insert fails
+            $updatedDoc = PlayerBadge::raw(function ($collection) use ($playerObjectId, $badgeCountField, $setOnInsert) {
+                return $collection->findOneAndUpdate(
+                    ['player_info_id' => $playerObjectId],
+                    [
+                        '$inc'         => [$badgeCountField => 1],
+                        '$setOnInsert' => $setOnInsert,
+                    ],
+                    [
+                        'upsert'         => true,
+                        'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER,
+                    ]
+                );
+            });
 
-            $currentCount = $playerBadge->$badgeCountField;
+            $currentCount = $updatedDoc->$badgeCountField ?? 1;
             $currentInSet = $currentCount % 3;
 
             Log::info('📊 Badge progress updated', [
-                'total_count' => $currentCount,
-                'current_in_set' => $currentInSet,
-                'milestone_reached' => ($currentInSet === 0)
+                'total_count'        => $currentCount,
+                'current_in_set'     => $currentInSet,
+                'milestone_reached'  => ($currentInSet === 0),
             ]);
 
-            // Check if milestone reached (every 3rd win)
             if ($currentInSet === 0 && $currentCount > 0) {
-                // Calculate which badge number this is (1st, 2nd, 3rd, etc.)
                 $badgeNumber = intdiv($currentCount, 3);
 
                 Log::info('🎊 MILESTONE REACHED!', [
-                    'difficulty' => $difficultyLower,
-                    'badge_number' => $badgeNumber,
-                    'total_badges_earned' => $currentCount
+                    'difficulty'          => $difficultyLower,
+                    'badge_number'        => $badgeNumber,
+                    'total_badges_earned' => $currentCount,
                 ]);
 
-                // ✅ CHECK: Don't create duplicate rewards
                 $existingReward = DB::connection('mongodb')
                     ->table('player_rewards')
                     ->where('player_id', $playerObjectId)
@@ -83,7 +94,7 @@ class GameController extends Controller
 
                 if ($existingReward) {
                     Log::warning('⚠️ Reward already exists, skipping creation', [
-                        'difficulty' => $difficultyLower,
+                        'difficulty'   => $difficultyLower,
                         'badge_number' => $badgeNumber,
                     ]);
                 } else {
@@ -95,7 +106,7 @@ class GameController extends Controller
                             'earned_date'    => now(),
                             'claimed'        => false,
                             'claimed_date'   => null,
-                            'requested'      => false,   // player must tap Claim themselves
+                            'requested'      => false,
                             'requested_date' => null,
                             'created_at'     => now(),
                             'updated_at'     => now(),
@@ -106,42 +117,45 @@ class GameController extends Controller
                             'badge_number' => $badgeNumber,
                         ]);
                     } catch (\Exception $insertEx) {
-                        // Roll back badge count so player doesn't lose their milestone
                         Log::error('Reward insert failed — rolling back badge count', [
                             'error' => $insertEx->getMessage(),
                         ]);
-                        $playerBadge->decrement($badgeCountField);
+                        PlayerBadge::raw(function ($collection) use ($playerObjectId, $badgeCountField) {
+                            return $collection->updateOne(
+                                ['player_info_id' => $playerObjectId],
+                                ['$inc' => [$badgeCountField => -1]]
+                            );
+                        });
                         throw $insertEx;
                     }
                 }
 
                 return [
-                    'difficulty' => $difficulty,
-                    'badge_unlocked' => true,
-                    'badge_number' => $badgeNumber,
-                    'can_claim' => true,
-                    'message' => "Congratulations! You've earned badge #{$badgeNumber} for {$difficulty} difficulty! Visit the badge screen to claim it.",
+                    'difficulty'      => $difficulty,
+                    'badge_unlocked'  => true,
+                    'badge_number'    => $badgeNumber,
+                    'can_claim'       => true,
+                    'message'         => "Congratulations! You've earned badge #{$badgeNumber} for {$difficulty} difficulty! Visit the badge screen to claim it.",
                 ];
             }
 
-            // No milestone reached yet
             $remaining = 3 - $currentInSet;
             $progressMessage = $source === 'battle'
                 ? sprintf('%d more battle win%s needed for next badge', $remaining, $remaining === 1 ? '' : 's')
                 : sprintf('%d more perfect score%s needed for next badge', $remaining, $remaining === 1 ? '' : 's');
 
             return [
-                'difficulty' => $difficulty,
-                'progress' => $currentInSet,
-                'remaining' => $remaining,
+                'difficulty'     => $difficulty,
+                'progress'       => $currentInSet,
+                'remaining'      => $remaining,
                 'badge_unlocked' => false,
-                'message' => $progressMessage,
+                'message'        => $progressMessage,
             ];
 
         } catch (\Exception $e) {
             Log::error('❌ Error recording badge progress', [
                 'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace'   => $e->getTraceAsString(),
             ]);
             return null;
         }
@@ -165,6 +179,22 @@ class GameController extends Controller
             ]);
 
             $playerObjectId = new ObjectId($validated['player_id']);
+
+            // ✅ FIX: this used to skip straight to writing game_results /
+            // player_stats for whatever player_id the client sent, with no
+            // check that it actually corresponds to a player_info document.
+            // A stale id (old session, wiped/reseeded DB, typo) would still
+            // write a "successful" result — creating an orphaned player_stats
+            // row with no matching player. Admin analytics (gender/age by
+            // game mode) then has no player to attribute that play to and
+            // has to skip it. StarsController/FastestTimeController already
+            // guard this with User::find(); doing the same here so bad ids
+            // are rejected before anything is written instead of silently
+            // producing unattributable data downstream.
+            if (!User::find($playerObjectId)) {
+                return response()->json(['success' => false, 'message' => 'Player not found'], 404);
+            }
+
             $isPerfect      = $validated['correct_answers'] === $validated['total_questions'];
             $badgeAwarded   = null;
 
@@ -188,28 +218,34 @@ class GameController extends Controller
                 'is_perfect'      => $isPerfect,
             ]);
 
+            // FIX: player_stats (used by admin analytics — Gender by Game Mode,
+            // Most Played Game Mode by Age, etc.) used to only update when the
+            // score was perfect, same gate as badge awarding. That's wrong:
+            // reaching the result screen is a *completed session* regardless
+            // of score, so it should always count toward analytics. Badges
+            // still require a perfect score — that condition is unchanged and
+            // stays separate below.
+            try {
+                PlayerStats::updateStats(
+                    $validated['player_id'],
+                    'challenge',
+                    $validated['category'],
+                    $validated['difficulty_level'],
+                    'won',
+                    $validated['score'] ?? $validated['correct_answers'],
+                );
+                Log::info('Player stats updated');
+            } catch (\Exception $e) {
+                Log::error('Stats update failed (non-fatal): ' . $e->getMessage());
+            }
+
             if ($isPerfect) {
                 Log::info('Perfect score detected', [
                     'player_id'  => $validated['player_id'],
                     'difficulty' => $validated['difficulty_level'],
                 ]);
 
-                // Update player stats — non-fatal if it fails
-                try {
-                    PlayerStats::updateStats(
-                        $validated['player_id'],
-                        'challenge',
-                        $validated['category'],
-                        $validated['difficulty_level'],
-                        'won',
-                        $validated['score'] ?? $validated['correct_answers'],
-                    );
-                    Log::info('Player stats updated');
-                } catch (\Exception $e) {
-                    Log::error('Stats update failed (non-fatal): ' . $e->getMessage());
-                }
-
-                // Record badge progress
+                // Record badge progress — perfect score only
                 $badgeAwarded = $this->recordBadgeProgress(
                     $validated['player_id'],
                     $validated['difficulty_level'],
@@ -263,7 +299,6 @@ class GameController extends Controller
             if (!$request->has('difficulty_level') && $request->has('difficulty')) {
                 $request->merge(['difficulty_level' => $request->input('difficulty')]);
             }
-
             $validated = $request->validate([
                 'player_id' => 'required|string',
                 'opponent_id' => 'nullable|string',
@@ -282,6 +317,14 @@ class GameController extends Controller
 
             $playerId = new ObjectId($validated['player_id']);
             $opponentId = isset($validated['opponent_id']) ? new ObjectId($validated['opponent_id']) : null;
+
+            // ✅ FIX: same missing-player guard as saveChallengeResult() above —
+            // reject an unknown player_id before writing anything instead of
+            // creating an orphaned battle/player_stats row analytics can't
+            // attribute to anyone.
+            if (!User::find($playerId)) {
+                return response()->json(['success' => false, 'message' => 'Player not found'], 404);
+            }
 
             // 1. Save to battle collection (for history)
             DB::connection('mongodb')->table('battle')->insert([

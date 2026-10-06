@@ -1,185 +1,168 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\GameController;
+use App\Http\Controllers\QuizController;
+use App\Http\Controllers\BadgeController;
+use App\Http\Controllers\StarsController;
+use App\Http\Controllers\FeedbackController;
+use App\Http\Controllers\LeaderboardController;
+use App\Http\Controllers\FastestTimeController;
 use App\Http\Controllers\RegionController;
 use App\Http\Controllers\ProvinceController;
 use App\Http\Controllers\CityController;
-use App\Http\Controllers\LeaderboardController;
-use App\Http\Controllers\QuizController;
-use App\Http\Controllers\GameController;
-use App\Http\Controllers\FastestTimeController;
-use App\Http\Controllers\BadgeController;
-use App\Http\Controllers\StarsController;
-use App\Http\Controllers\AdminController;
 
-// ==========================================
-// AUTH & USER
-// ==========================================
-Route::post('/user/register',               [UserController::class, 'register']);
-Route::post('/login',                        [UserController::class, 'login']);
-Route::get('/user/profile/{id}',            [UserController::class, 'profile']);
-Route::put('/user/update/{id}',             [UserController::class, 'update']);
-Route::get('/homepage/{id}',                [UserController::class, 'homepage']);
-Route::put('/user/change-password/{id}',    [UserController::class, 'changePassword']);
-Route::post('/user/logout',                 [UserController::class, 'logout']);
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+| Reconstructed from every controller method + every endpoint the Flutter
+| app (AppConfig.baseUrl + path) actually calls. No "/api" prefix here —
+| the Flutter app hits these paths directly off AppConfig.baseUrl, so
+| bootstrap/app.php's ->withRouting(...) must have apiPrefix set to ''
+| (empty string), not the Laravel default 'api'. Double-check that first
+| or every one of these routes will 404 with a phantom /api/ in front.
+*/
 
-// ==========================================
-// LOCATION
-// ==========================================
-Route::get('/region',                       [RegionController::class, 'index']);
-Route::get('/province/{regionId}',          [ProvinceController::class, 'getByRegion']);
-Route::get('/city/{provinceId}',            [CityController::class, 'getByProvince']);
+// ─────────────────────────────────────────────────────────────────────────
+//  LOCATION (Region / Province / City)
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/region', [RegionController::class, 'index']);
+Route::get('/province/{regionId}', [ProvinceController::class, 'getByRegion']);
+Route::get('/city/{provinceId}', [CityController::class, 'getByProvince']);
 
-// ==========================================
-// TUTORIALS
-// ==========================================
-Route::get('/user/tutorial-status/{id}',    [UserController::class, 'getTutorialStatus']);
-Route::post('/user/tutorial-complete/{id}', [UserController::class, 'markTutorialComplete']);
-Route::get('/user/game-tutorial-status/{id}',   [UserController::class, 'getGameTutorialStatus']);
-Route::post('/user/complete-game-tutorial',     [UserController::class, 'markGameTutorialComplete']);
+// ─────────────────────────────────────────────────────────────────────────
+//  PLAYER AUTH / ACCOUNT
+// ─────────────────────────────────────────────────────────────────────────
+Route::post('/login', [UserController::class, 'login']);           // login.dart hits this exact top-level path
+Route::post('/user/register', [UserController::class, 'register']);
+Route::post('/user/logout', [UserController::class, 'logout']);
+Route::get('/user/profile/{id}', [UserController::class, 'profile']);
+Route::get('/homepage/{id}', [UserController::class, 'homepage']);
+Route::put('/user/update/{id}', [UserController::class, 'update']);
+Route::put('/user/change-password/{id}', [UserController::class, 'changePassword']);
+Route::get('/user/fix-location-ids', [UserController::class, 'fixUserLocationIds']);
 
-// ==========================================
-// QUIZ QUESTIONS
-// ==========================================
+// Tutorials
+Route::get('/user/{id}/tutorial-status', [UserController::class, 'getTutorialStatus']);
+Route::get('/user/{id}/game-tutorial-status', [UserController::class, 'getGameTutorialStatus']);
+Route::post('/user/mark-game-tutorial-complete', [UserController::class, 'markGameTutorialComplete']);
+
+// ─────────────────────────────────────────────────────────────────────────
+//  QUIZ QUESTIONS (player-facing)
+// ─────────────────────────────────────────────────────────────────────────
 Route::get('/quiz/questions/{category}/{difficulty}/{yearLevel}', [QuizController::class, 'getQuestions']);
-Route::get('/quiz/questions/{category}/{difficulty}',             [QuizController::class, 'getQuestionsWithoutYearLevel']);
-Route::get('/quiz/statistics',              [QuizController::class, 'getStatistics']);
-Route::get('/quiz/debug',                   [QuizController::class, 'debug']);
+Route::get('/quiz/questions/{category}/{difficulty}', [QuizController::class, 'getQuestionsWithoutYearLevel']);
+Route::post('/quiz/questions', [QuizController::class, 'addQuestion']);
+Route::get('/quiz/debug', [QuizController::class, 'debug']);
+Route::get('/quiz/statistics', [QuizController::class, 'getStatistics']);
 
-// ==========================================
-// GAME RESULTS
-// ==========================================
-Route::post('/game/save-challenge-result',  [GameController::class, 'saveChallengeResult']);
-Route::post('/game/save-battle-result',     [GameController::class, 'saveBattleResult']);
+// ─────────────────────────────────────────────────────────────────────────
+//  GAME RESULTS (Challenge / Battle)
+// ─────────────────────────────────────────────────────────────────────────
+Route::post('/game/save-challenge-result', [GameController::class, 'saveChallengeResult']);
+Route::post('/game/save-battle-result', [GameController::class, 'saveBattleResult']);
+// NOTE: quiz_api.dart has a getPlayerStats() calling GET /game/stats/{userId}, but it's
+// never actually called anywhere in the app, and no controller method returns that shape
+// of data. Left out — add a route + controller method if you start using it.
 
-// ==========================================
-// LEADERBOARD
-// ==========================================
-Route::get('/leaderboard',                          [LeaderboardController::class, 'getLeaderboard']);
-Route::get('/leaderboard/player/{playerId}',        [LeaderboardController::class, 'getPlayerRank']);
-Route::get('/players/{playerId}/badges',            [LeaderboardController::class, 'getPlayerBadges']);
+// ─────────────────────────────────────────────────────────────────────────
+//  FASTEST TIME (Memory Match / Puzzle)
+//  NOTE: literal "all-categories" MUST be registered before the {category}
+//  wildcard below it, or Laravel will swallow it as a category value.
+// ─────────────────────────────────────────────────────────────────────────
+Route::post('/game/fastest-time', [FastestTimeController::class, 'saveFastestTime']);
+Route::get('/game/fastest-times/leaderboard', [FastestTimeController::class, 'getGlobalLeaderboard']);
+Route::get('/game/fastest-time/{playerId}/all', [FastestTimeController::class, 'getPlayerAllRecords']);
+Route::get('/game/fastest-time/{playerId}/rank', [FastestTimeController::class, 'getPlayerRank']);
+Route::get('/game/fastest-time/{playerId}/puzzle/{difficulty}/all-categories', [FastestTimeController::class, 'getPlayerPuzzleRecordsByDifficulty']);
+Route::get('/game/fastest-time/{playerId}/puzzle/{difficulty}/{category}', [FastestTimeController::class, 'getPlayerPuzzleFastestTimeByCategory']);
+Route::get('/game/fastest-time/{playerId}/{gameType}/{difficulty}', [FastestTimeController::class, 'getPlayerFastestTime']);
 
-// ==========================================
-// FASTEST TIME (Memory Match & Puzzle)
-// ==========================================
-Route::prefix('game')->group(function () {
-    Route::post('/fastest-time',                                                    [FastestTimeController::class, 'saveFastestTime']);
-    Route::get('/fastest-time/{playerId}/{gameType}/{difficulty}',                  [FastestTimeController::class, 'getPlayerFastestTime']);
-    Route::get('/fastest-time/{playerId}/all',                                      [FastestTimeController::class, 'getPlayerAllRecords']);
-    Route::get('/fastest-time/{playerId}/rank',                                     [FastestTimeController::class, 'getPlayerRank']);
-    Route::get('/fastest-time/{playerId}/puzzle/{difficulty}/all-categories',       [FastestTimeController::class, 'getPlayerPuzzleRecordsByDifficulty']);
-    Route::get('/fastest-times/leaderboard',                                        [FastestTimeController::class, 'getGlobalLeaderboard']);
-});
+// ─────────────────────────────────────────────────────────────────────────
+//  STARS
+// ─────────────────────────────────────────────────────────────────────────
+Route::post('/players/{playerId}/stars', [StarsController::class, 'awardStars']);
+Route::get('/players/{playerId}/stars', [StarsController::class, 'getPlayerStars']);
+Route::get('/players/{playerId}/stars/rank', [StarsController::class, 'getPlayerStarsRank']);
+Route::get('/players/{playerId}/milestones', [StarsController::class, 'getMilestoneHistory']);
+Route::get('/stars/leaderboard', [StarsController::class, 'getStarsLeaderboard']);
 
-// ==========================================
-// BADGE & REWARD SYSTEM
-// ==========================================
-Route::prefix('badges')->group(function () {
-    Route::get('/player/{playerId}/summary',    [BadgeController::class, 'getPlayerSummary']);
-    Route::get('/player/{playerId}/rewards',    [BadgeController::class, 'getPlayerRewards']);
-    Route::get('/player/{playerId}/unclaimed',  [BadgeController::class, 'getUnclaimedRewards']);
-    Route::post('/player/{playerId}/claim',     [BadgeController::class, 'claimBadge']);
-    Route::post('/player/{playerId}/claim-all', [BadgeController::class, 'claimAllByDifficulty']);
-});
+// ─────────────────────────────────────────────────────────────────────────
+//  BADGES (player-facing claim flow)
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/badges/player/{playerId}/summary', [BadgeController::class, 'getPlayerSummary']);
+Route::get('/badges/player/{playerId}/rewards', [BadgeController::class, 'getPlayerRewards']);
+Route::get('/badges/player/{playerId}/unclaimed', [BadgeController::class, 'getUnclaimedRewards']);
+Route::post('/badges/player/{playerId}/claim', [BadgeController::class, 'claimBadge']);
+Route::post('/badges/player/{playerId}/claim-all', [BadgeController::class, 'claimAllByDifficulty']);
+Route::get('/badges/player/{playerId}/prize-notifications', [BadgeController::class, 'getPrizeNotifications']);
+Route::post('/badges/player/{playerId}/prize-notifications/ack', [BadgeController::class, 'ackPrizeNotifications']);
 
-// ==========================================
-// STARS SYSTEM
-// ==========================================
-Route::post('/players/{playerId}/stars',            [StarsController::class, 'awardStars']);
-Route::get('/players/{playerId}/stars',             [StarsController::class, 'getPlayerStars']);
-Route::get('/players/{playerId}/stars/milestones',  [StarsController::class, 'getMilestoneHistory']);
-Route::get('/stars/leaderboard',                    [StarsController::class, 'getStarsLeaderboard']);
-Route::get('/players/{playerId}/stars/rank',        [StarsController::class, 'getPlayerStarsRank']);
+// ─────────────────────────────────────────────────────────────────────────
+//  LEADERBOARD (cumulative badges + per-player rank)
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/leaderboard', [LeaderboardController::class, 'getLeaderboard']);
+Route::get('/players/{playerId}/rank', [LeaderboardController::class, 'getPlayerRank']);
+Route::get('/players/{playerId}/badges', [LeaderboardController::class, 'getPlayerBadges']);
 
-// ==========================================
-// CLEANUP (temporary — remove after use)
-// ==========================================
-Route::get('/badges/cleanup/{playerId}', function ($playerId) {
-    $playerObjectId = new \MongoDB\BSON\ObjectId($playerId);
-    $playerBadge = \App\Models\PlayerBadge::where('player_info_id', $playerObjectId)->first();
+// ─────────────────────────────────────────────────────────────────────────
+//  FEEDBACK ("Rate Our Game!" dialog)
+// ─────────────────────────────────────────────────────────────────────────
+Route::post('/players/{playerId}/feedback', [FeedbackController::class, 'submit']);
+Route::get('/players/{playerId}/feedback', [FeedbackController::class, 'index']);
 
-    if (!$playerBadge) {
-        return response()->json(['message' => 'No player badge record found']);
-    }
+// ─────────────────────────────────────────────────────────────────────────
+//  ADMIN — Auth
+// ─────────────────────────────────────────────────────────────────────────
+Route::post('/admin/login', [AdminController::class, 'login']);
+Route::post('/admin/logout', [AdminController::class, 'logout']);
+Route::get('/admin/profile', [AdminController::class, 'profile']);
 
-    foreach (['easy', 'average', 'difficult'] as $difficulty) {
-        $badgeCountField = $difficulty . '_badge_count';
-        $currentCount    = $playerBadge->$badgeCountField ?? 0;
-        $currentInSet    = $currentCount % 3;
-
-        if ($currentInSet != 0) {
-            $deleted = \Illuminate\Support\Facades\DB::connection('mongodb')
-                ->table('player_rewards')
-                ->where('player_id', $playerObjectId)
-                ->where('difficulty', $difficulty)
-                ->where('claimed', false)
-                ->delete();
-
-            if ($deleted > 0) {
-                \Log::info("Cleaned up {$deleted} invalid {$difficulty} rewards");
-            }
-        }
-    }
-
-    return response()->json(['message' => 'Cleanup complete']);
-});
-
-// ==========================================
-// ADMIN — Public (no token needed)
-// ==========================================
-Route::post('/admin/login',                 [AdminController::class, 'login']);
-Route::get('/admin/difficulty-settings',    [AdminController::class, 'getDifficultySettings']);
-
-// ==========================================
-// ADMIN — Protected (Bearer token required)
-// ==========================================
-Route::post('/admin/logout',                [AdminController::class, 'logout']);
-Route::get('/admin/profile',                [AdminController::class, 'profile']);
-
-// Questions CRUD
-Route::get('/admin/questions',              [AdminController::class, 'getQuestions']);
-Route::post('/admin/questions',             [AdminController::class, 'addQuestion']);
-Route::put('/admin/questions/{id}',         [AdminController::class, 'updateQuestion']);
-Route::delete('/admin/questions/{id}',      [AdminController::class, 'deleteQuestion']);
+// ─────────────────────────────────────────────────────────────────────────
+//  ADMIN — Questions
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/admin/questions', [AdminController::class, 'getQuestions']);
+Route::post('/admin/questions', [AdminController::class, 'addQuestion']);
+Route::post('/admin/questions/import', [AdminController::class, 'importQuestions']);
+Route::post('/admin/questions/upload-image', [AdminController::class, 'uploadQuestionImage']);
+Route::put('/admin/questions/{id}', [AdminController::class, 'updateQuestion']);
+Route::delete('/admin/questions/{id}/permanent', [AdminController::class, 'permanentDeleteQuestion']); // must sit above the plain {id} delete below
+Route::delete('/admin/questions/{id}', [AdminController::class, 'deleteQuestion']);
 Route::patch('/admin/questions/{id}/restore', [AdminController::class, 'restoreQuestion']);
 
-// Difficulty Settings
+// ─────────────────────────────────────────────────────────────────────────
+//  ADMIN — Difficulty settings
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/admin/difficulty-settings', [AdminController::class, 'getDifficultySettings']);
 Route::put('/admin/difficulty-settings/{level}', [AdminController::class, 'updateDifficultySettings']);
 
-// Players Management
-Route::get('/admin/players',                [AdminController::class, 'getPlayers']);
-Route::post('/admin/players',               [AdminController::class, 'addPlayer']);
-Route::put('/admin/players/{id}',           [AdminController::class, 'updatePlayer']);
-Route::delete('/admin/players/{id}',        [AdminController::class, 'deletePlayer']);
+// ─────────────────────────────────────────────────────────────────────────
+//  ADMIN — Players
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/admin/players', [AdminController::class, 'getPlayers']);
+Route::post('/admin/players', [AdminController::class, 'addPlayer']);
+Route::post('/admin/players/{id}/change-password', [AdminController::class, 'changePlayerPassword']);
+Route::post('/admin/players/{playerId}/award-badge', [AdminController::class, 'awardBadge']);
+Route::put('/admin/players/{id}', [AdminController::class, 'updatePlayer']);
+Route::delete('/admin/players/{id}', [AdminController::class, 'deletePlayer']);
 
-// Admins Management
-Route::get('/admin/admins',                         [AdminController::class, 'getAdmins']);
-Route::post('/admin/admins',                        [AdminController::class, 'addAdmin']);
-Route::put('/admin/admins/{id}',                    [AdminController::class, 'updateAdmin']);
-Route::delete('/admin/admins/{id}',                 [AdminController::class, 'deleteAdmin']);
-Route::post('/admin/admins/{id}/change-password',   [AdminController::class, 'changeAdminPassword']);
+// ─────────────────────────────────────────────────────────────────────────
+//  ADMIN — Admins management
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/admin/admins', [AdminController::class, 'getAdmins']);
+Route::post('/admin/admins', [AdminController::class, 'addAdmin']);
+Route::post('/admin/admins/{id}/change-password', [AdminController::class, 'changeAdminPassword']);
+Route::put('/admin/admins/{id}', [AdminController::class, 'updateAdmin']);
+Route::delete('/admin/admins/{id}', [AdminController::class, 'deleteAdmin']);
 
-// Badge Award
-Route::post('/admin/players/{id}/award-badge',      [AdminController::class, 'awardBadge']);
-Route::post('/admin/players/{id}/change-password',  [AdminController::class, 'changePlayerPassword']);
-
-// Audit Logs
-Route::get('/admin/audit-logs',                     [AdminController::class, 'getAuditLogs']);
-
-// ==========================================
-// IMAGE PROXY (serves uploads with CORS headers)
-// ==========================================
-Route::get('/uploads/{folder}/{filename}', function ($folder, $filename) {
-    $path = public_path("uploads/{$folder}/{$filename}");
-    if (!file_exists($path)) {
-        return response()->json(['error' => 'Not found'], 404);
-    }
-    $mimeType = mime_content_type($path);
-    return response()->file($path, [
-        'Access-Control-Allow-Origin' => '*',
-        'Cache-Control' => 'public, max-age=86400',
-    ]);
-})->where(['folder' => '[a-zA-Z0-9_-]+', 'filename' => '[a-zA-Z0-9_.\-]+']);
-
-Route::delete('/admin/questions/{id}/permanent', [AdminController::class, 'permanentDeleteQuestion']);
+// ─────────────────────────────────────────────────────────────────────────
+//  ADMIN — Analytics / Leaderboard / Audit log
+// ─────────────────────────────────────────────────────────────────────────
+Route::get('/admin/analytics', [AdminController::class, 'getAnalytics']);
+Route::get('/admin/leaderboard/challenge', [AdminController::class, 'getChallengeLeaderboard']);
+Route::get('/admin/leaderboard/battle', [AdminController::class, 'getBattleLeaderboard']);
+Route::get('/admin/audit-logs', [AdminController::class, 'getAuditLogs']);

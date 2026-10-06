@@ -222,45 +222,58 @@ class StarsController extends Controller
      * Leaderboard ranked by total stars (reads from player_stars + joins player_info).
      */
     public function getStarsLeaderboard(Request $request)
-    {
-        try {
-            $limit = $request->query('limit', 100);
+{
+    try {
+        $limit = $request->query('limit', 100);
 
-            // Get all star records sorted desc
-            $starRecords = DB::connection('mongodb')
-                ->table('player_stars')
-                ->orderBy('total_stars', 'desc')
-                ->limit($limit)
-                ->get();
+        $starRecords = DB::connection('mongodb')
+            ->table('player_stars')
+            ->orderBy('total_stars', 'desc')
+            ->limit($limit)
+            ->get();
 
-            $leaderboard = $starRecords->map(function ($record, $index) {
-                // Look up player info
-                $playerInfo = DB::connection('mongodb')
-                    ->table('player_info')
-                    ->where('_id', $record->player_id)
-                    ->first();
+        $leaderboard = $starRecords->map(function ($record, $index) {
+            $stars = $record->total_stars ?? 0;
+            $tier  = $this->getStarTier($stars);
 
-                $stars = $record->total_stars ?? 0;
-                $tier  = $this->getStarTier($stars);
+            // Use username/avatar stored directly on player_stars (seeder puts them there).
+            // Fall back to a player_info lookup only for older records that predate the fix.
+            $username = $record->username ?? null;
+            $avatar   = $record->avatar   ?? null;
 
-                return [
-                    'rank'       => $index + 1,
-                    'player_id'  => (string) $record->player_id,
-                    'username'   => $playerInfo->username ?? 'Unknown',
-                    'avatar'     => $playerInfo->avatar   ?? 'assets/images-avatars/Adventurer.png',
-                    'stars'      => $stars,
-                    'tier'       => $tier['tier'],
-                    'tier_icon'  => $tier['icon'],
-                    'tier_color' => $tier['color'],
-                ];
-            });
+            if (!$username || !$avatar) {
+                try {
+                    $playerInfo = DB::connection('mongodb')
+                        ->table('player_info')
+                        ->where('_id', new ObjectId((string) $record->player_id))
+                        ->first();
 
-            return response()->json(['success' => true, 'data' => $leaderboard], 200);
+                    $username = $username ?? ($playerInfo->username ?? 'Unknown');
+                    $avatar   = $avatar   ?? ($playerInfo->avatar   ?? 'assets/images-avatars/Adventurer.png');
+                } catch (\Exception $e) {
+                    $username = $username ?? 'Unknown';
+                    $avatar   = $avatar   ?? 'assets/images-avatars/Adventurer.png';
+                }
+            }
 
-        } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Error fetching stars leaderboard', 'error' => $e->getMessage()], 500);
-        }
+            return [
+                'rank'       => $index + 1,
+                'player_id'  => (string) $record->player_id,
+                'username'   => $username,
+                'avatar'     => $avatar,
+                'stars'      => $stars,
+                'tier'       => $tier['tier'],
+                'tier_icon'  => $tier['icon'],
+                'tier_color' => $tier['color'],
+            ];
+        });
+
+        return response()->json(['success' => true, 'data' => $leaderboard], 200);
+
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'message' => 'Error fetching stars leaderboard', 'error' => $e->getMessage()], 500);
     }
+}
 
     /**
      * Get player's rank in the stars leaderboard.

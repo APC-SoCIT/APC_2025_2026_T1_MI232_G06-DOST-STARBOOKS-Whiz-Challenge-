@@ -34,118 +34,80 @@ class PlayerStats extends Model
     }
 
     /**
-     * Update player stats for any game type
+     * Update player stats for any game type.
+     *
+     * ✅ FIX: previously did "check if a player_stats doc exists → create
+     * one, else update the existing one" as two separate steps. Two
+     * near-simultaneous requests could both see "doesn't exist yet" and
+     * both create a doc — that's why you had duplicate player_stats rows
+     * per player in Compass, each holding a partial count. A single
+     * $inc + upsert is atomic: Mongo either creates the doc or increments
+     * the existing one in ONE operation, so this can't happen anymore.
      */
     public static function updateStats($playerId, $gameType, $category, $difficulty, $result, $score = 0)
     {
         try {
             $playerObjectId = new \MongoDB\BSON\ObjectId($playerId);
-            $categoryKey = $category ? strtolower($category) : 'general';
-            $difficultyKey = strtolower($difficulty);
+            $categoryKey    = $category ? strtolower($category) : 'general';
+            $difficultyKey  = strtolower($difficulty);
 
-            // Get existing player stats record
-            $playerStats = self::where('player_id', $playerObjectId)->first();
+            $shouldIncrement = in_array($gameType, ['challenge', 'battle'])
+                ? ($result === 'won')
+                : true;
 
-            if (!$playerStats) {
-                // ✅ Only create record if there's something to count
-                $shouldCreate = false;
-
-                if (in_array($gameType, ['challenge', 'battle'])) {
-                    $shouldCreate = ($result === 'won');
-                } else {
-                    $shouldCreate = true;
-                }
-
-                if (!$shouldCreate) {
-                    \Illuminate\Support\Facades\Log::info('Skipping player_stats creation - no win to record', [
-                        'player_id' => $playerId,
-                        'game_type' => $gameType,
-                        'result' => $result
-                    ]);
-                    return true;
-                }
-
-                // Get username and avatar from player_info
-                $player = \Illuminate\Support\Facades\DB::connection('mongodb')
-                    ->table('player_info')
-                    ->where('_id', $playerObjectId)
-                    ->first();
-
-                // Initialize stats structure
-                $statsData = [
-                    'player_id' => $playerObjectId,
-                    'username' => $player->username ?? 'Unknown',
-                    'avatar' => $player->avatar ?? 'assets/images-avatars/Adventurer.png',
-                    'challenge_stats' => [],
-                    'battle_stats' => [],
-                    'memory_match_stats' => [],
-                    'puzzle_stats' => [],
-                ];
-
-                // Set initial count
-                $statsField = $gameType . '_stats';
-                $statsData[$statsField] = [
-                    $categoryKey => [
-                        $difficultyKey => 1
-                    ]
-                ];
-
-                self::create($statsData);
-
-                \Illuminate\Support\Facades\Log::info('Created new player_stats record', [
+            if (!$shouldIncrement) {
+                \Illuminate\Support\Facades\Log::info('Skipping player_stats increment - no win to record', [
                     'player_id' => $playerId,
-                    'game_type' => $gameType
+                    'game_type' => $gameType,
+                    'result'    => $result,
                 ]);
-            } else {
-                // ✅ FIX: Update using Eloquent model to preserve array structure
-                $shouldIncrement = false;
-
-                if (in_array($gameType, ['challenge', 'battle'])) {
-                    $shouldIncrement = ($result === 'won');
-                } else {
-                    $shouldIncrement = true;
-                }
-
-                if ($shouldIncrement) {
-                    $statsField = $gameType . '_stats';
-                    $currentStats = $playerStats->$statsField ?? [];
-
-                    // Ensure proper array structure
-                    if (!is_array($currentStats)) {
-                        $currentStats = [];
-                    }
-
-                    // Initialize category if needed
-                    if (!isset($currentStats[$categoryKey])) {
-                        $currentStats[$categoryKey] = [];
-                    }
-
-                    // Initialize difficulty if needed
-                    if (!isset($currentStats[$categoryKey][$difficultyKey])) {
-                        $currentStats[$categoryKey][$difficultyKey] = 0;
-                    }
-
-                    // Increment the count
-                    $currentStats[$categoryKey][$difficultyKey]++;
-
-                    // Update using Eloquent (preserves array structure)
-                    $playerStats->$statsField = $currentStats;
-                    $playerStats->save();
-
-                    \Illuminate\Support\Facades\Log::info('✅ Incremented stats', [
-                        'player_id' => $playerId,
-                        'game_type' => $gameType,
-                        'category' => $categoryKey,
-                        'difficulty' => $difficultyKey,
-                        'new_count' => $currentStats[$categoryKey][$difficultyKey]
-                    ]);
-                } else {
-                    \Illuminate\Support\Facades\Log::info('Skipping stats increment - loss recorded', [
-                        'player_id' => $playerId,
-                        'result' => $result
-                    ]);
-                }
+                return true;
             }
+
+            $statsField = $gameType . '_stats';
+            $incPath    = "{$statsField}.{$categoryKey}.{$difficultyKey}";
+
+            // Only needed if this upsert ends up CREATING a new doc.
+            $player = \Illuminate\Support\Facades\DB::connection('mongodb')
+                ->table('player_info')
+                ->where('_id', $playerObjectId)
+                ->first();
+
+            // ✅ FIX: previously fell back to 'Unknown'/default avatar and
+            // wrote the increment anyway when $player was null — producing a
+            // player_stats row with no matching player_info document. Admin
+            // analytics (gender/age by game mode) then has nothing to
+            // attribute that play to and has to skip it. Callers
+            // (GameController) now check the player exists before calling
+            // this, but bail here too as a second line of defense so this
+            // method can never create an orphaned row on its own.
+            if (!$player) {
+                \Illuminate\Support\Facades\Log::warning('Skipping player_stats update - no matching player_info document', [
+                    'player_id' => $playerId,
+                    'game_type' => $gameType,
+                ]);
+                return false;
+            }
+
+            self::raw(function ($collection) use ($playerObjectId, $player, $incPath) {
+                return $collection->updateOne(
+                    ['player_id' => $playerObjectId],
+                    [
+                        '$inc'         => [$incPath => 1],
+                        '$setOnInsert' => [
+                            'player_id' => $playerObjectId,
+                            'username'  => $player->username ?? 'Unknown',
+                            'avatar'    => $player->avatar ?? 'assets/images-avatars/Adventurer.png',
+                        ],
+                    ],
+                    ['upsert' => true]
+                );
+            });
+
+            \Illuminate\Support\Facades\Log::info('✅ Player stats incremented (atomic upsert)', [
+                'player_id' => $playerId,
+                'path'      => $incPath,
+            ]);
 
             return true;
         } catch (\Exception $e) {

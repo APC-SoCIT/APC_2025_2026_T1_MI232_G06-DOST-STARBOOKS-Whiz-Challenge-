@@ -4,7 +4,7 @@
 
 namespace Composer\Autoload;
 
-class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
+class ComposerStaticInit660e21ede525ddbce6694c2a1ff91875
 {
     public static $files = array (
         '6e3fae29631ef280660b3cdad06f25a8' => __DIR__ . '/..' . '/symfony/deprecation-contracts/function.php',
@@ -540,18 +540,32 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
     );
 
     public static $classMap = array (
+        'App\\Console\\Kernel' => __DIR__ . '/../..' . '/app/Console/Kernel.php',
+        'App\\Http\\Controllers\\AdminController' => __DIR__ . '/../..' . '/app/Http/Controllers/AdminController.php',
+        'App\\Http\\Controllers\\BadgeController' => __DIR__ . '/../..' . '/app/Http/Controllers/BadgeController.php',
         'App\\Http\\Controllers\\CityController' => __DIR__ . '/../..' . '/app/Http/Controllers/CityController.php',
         'App\\Http\\Controllers\\Controller' => __DIR__ . '/../..' . '/app/Http/Controllers/Controller.php',
-        'App\\Http\\Controllers\\PostController' => __DIR__ . '/../..' . '/app/Http/Controllers/PostController.php',
+        'App\\Http\\Controllers\\FastestTimeController' => __DIR__ . '/../..' . '/app/Http/Controllers/FastestTimeController.php',
+        'App\\Http\\Controllers\\GameController' => __DIR__ . '/../..' . '/app/Http/Controllers/GameController.php',
+        'App\\Http\\Controllers\\LeaderboardController' => __DIR__ . '/../..' . '/app/Http/Controllers/LeaderboardController.php',
         'App\\Http\\Controllers\\ProvinceController' => __DIR__ . '/../..' . '/app/Http/Controllers/ProvinceController.php',
+        'App\\Http\\Controllers\\QuizController' => __DIR__ . '/../..' . '/app/Http/Controllers/QuizController.php',
         'App\\Http\\Controllers\\RegionController' => __DIR__ . '/../..' . '/app/Http/Controllers/RegionController.php',
-        'App\\Http\\Controllers\\TestController' => __DIR__ . '/../..' . '/app/Http/Controllers/TestController.php',
+        'App\\Http\\Controllers\\StarsController' => __DIR__ . '/../..' . '/app/Http/Controllers/StarsController.php',
         'App\\Http\\Controllers\\UserController' => __DIR__ . '/../..' . '/app/Http/Controllers/UserController.php',
+        'App\\Http\\Middleware\\HandleCors' => __DIR__ . '/../..' . '/app/Http/Middleware/HandleCors.php',
+        'App\\Models\\Battle' => __DIR__ . '/../..' . '/app/Models/Battle.php',
         'App\\Models\\City' => __DIR__ . '/../..' . '/app/Models/City.php',
+        'App\\Models\\FastestTime' => __DIR__ . '/../..' . '/app/Models/FastestTime.php',
+        'App\\Models\\PlayerBadge' => __DIR__ . '/../..' . '/app/Models/PlayerBadge.php',
+        'App\\Models\\PlayerReward' => __DIR__ . '/../..' . '/app/Models/PlayerReward.php',
+        'App\\Models\\PlayerStar' => __DIR__ . '/../..' . '/app/Models/PlayerStar.php',
+        'App\\Models\\PlayerStats' => __DIR__ . '/../..' . '/app/Models/PlayerStats.php',
         'App\\Models\\Province' => __DIR__ . '/../..' . '/app/Models/Province.php',
         'App\\Models\\Region' => __DIR__ . '/../..' . '/app/Models/Region.php',
         'App\\Models\\User' => __DIR__ . '/../..' . '/app/Models/User.php',
         'App\\Providers\\AppServiceProvider' => __DIR__ . '/../..' . '/app/Providers/AppServiceProvider.php',
+        'App\\Services\\LeaderboardService' => __DIR__ . '/../..' . '/app/Services/LeaderboardService.php',
         'Attribute' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/Attribute.php',
         'Brick\\Math\\BigDecimal' => __DIR__ . '/..' . '/brick/math/src/BigDecimal.php',
         'Brick\\Math\\BigInteger' => __DIR__ . '/..' . '/brick/math/src/BigInteger.php',
@@ -671,7 +685,8 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'Cron\\MinutesField' => __DIR__ . '/..' . '/dragonmantank/cron-expression/src/Cron/MinutesField.php',
         'Cron\\MonthField' => __DIR__ . '/..' . '/dragonmantank/cron-expression/src/Cron/MonthField.php',
         'Database\\Factories\\UserFactory' => __DIR__ . '/../..' . '/database/factories/UserFactory.php',
-        'Database\\Seeders\\DatabaseSeeder' => __DIR__ . '/../..' . '/database/seeders/DatabaseSeeder.php',
+        'Database\\Seeders\\LeaderboardDataSeeder' => __DIR__ . '/../..' . '/database/seeders/LeaderboardDataSeeder.php',
+        'Database\\Seeders\\MongoDBCollectionsSeeder' => __DIR__ . '/../..' . '/database/seeders/MongoDBCollectionsSeeder.php',
         'DateError' => __DIR__ . '/..' . '/symfony/polyfill-php83/Resources/stubs/DateError.php',
         'DateException' => __DIR__ . '/..' . '/symfony/polyfill-php83/Resources/stubs/DateException.php',
         'DateInvalidOperationException' => __DIR__ . '/..' . '/symfony/polyfill-php83/Resources/stubs/DateInvalidOperationException.php',
@@ -7282,9 +7297,9 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
-            $loader->prefixLengthsPsr4 = ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584::$prefixLengthsPsr4;
-            $loader->prefixDirsPsr4 = ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584::$prefixDirsPsr4;
-            $loader->classMap = ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584::$classMap;
+            $loader->prefixLengthsPsr4 = ComposerStaticInit660e21ede525ddbce6694c2a1ff91875::$prefixLengthsPsr4;
+            $loader->prefixDirsPsr4 = ComposerStaticInit660e21ede525ddbce6694c2a1ff91875::$prefixDirsPsr4;
+            $loader->classMap = ComposerStaticInit660e21ede525ddbce6694c2a1ff91875::$classMap;
 
         }, null, ClassLoader::class);
     }

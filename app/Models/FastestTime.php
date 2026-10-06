@@ -7,15 +7,13 @@ use MongoDB\Laravel\Eloquent\Model;
 class FastestTime extends Model
 {
     protected $connection = 'mongodb';
-    // Collection is dynamically set based on game_type
-    // 'fastest_time_memory_match' or 'fastest_time_puzzle'
 
     protected $fillable = [
         'player_id',
         'player_username',
-        'game_type', // 'memory_match' or 'puzzle'
-        'difficulty', // 'EASY', 'AVERAGE', 'DIFFICULT'
-        'category', // For puzzle only
+        'game_type',
+        'difficulty',
+        'category',
         'time_seconds',
         'moves',
         'achieved_at',
@@ -23,61 +21,81 @@ class FastestTime extends Model
 
     protected $casts = [
         'time_seconds' => 'integer',
-        'moves' => 'integer',
-        'achieved_at' => 'datetime',
+        'moves'        => 'integer',
+        'achieved_at'  => 'datetime',
     ];
 
     /**
-     * Override collection based on game_type
+     * Dynamic collection based on game_type attribute (used on instances).
+     * If $table was explicitly set (via forGameType / queryPuzzle / queryMemoryMatch),
+     * respect that value first — otherwise fall back to the game_type attribute.
      */
-    public function getTable()
+    public function getTable(): string
     {
+        // If table was explicitly set, use it
+        if (isset($this->table)) {
+            return $this->table;
+        }
+        // Otherwise derive from game_type attribute
         if (isset($this->attributes['game_type'])) {
-            $gameType = $this->attributes['game_type'];
-            return $gameType === 'memory_match'
+            return $this->attributes['game_type'] === 'memory_match'
                 ? 'fastest_time_memory_match'
                 : 'fastest_time_puzzle';
         }
-        return 'fastest_time_memory_match'; // default
+        return 'fastest_time_memory_match';
     }
 
-    /**
-     * Get player info
-     */
-    public function player()
+    // ─── Static factory methods ───────────────────────────────────────────────
+    // Use these instead of FastestTime::where(...) so the correct
+    // collection is selected BEFORE the query is built.
+
+    public static function forGameType(string $gameType): self
     {
-        return $this->belongsTo(User::class, 'player_id', '_id');
+        $instance = new self();
+        $instance->table = $gameType === 'memory_match'
+            ? 'fastest_time_memory_match'
+            : 'fastest_time_puzzle';
+        return $instance;
     }
 
-    /**
-     * Scope: Get records by game type
-     */
+    public static function queryMemoryMatch()
+    {
+        $instance = new self();
+        $instance->table = 'fastest_time_memory_match';
+        return $instance->newQuery();
+    }
+
+    public static function queryPuzzle()
+    {
+        $instance = new self();
+        $instance->table = 'fastest_time_puzzle';
+        return $instance->newQuery();
+    }
+
+    // ─── Scopes ───────────────────────────────────────────────────────────────
+
     public function scopeByGameType($query, $gameType)
     {
         return $query->where('game_type', $gameType);
     }
 
-    /**
-     * Scope: Get records by difficulty
-     */
     public function scopeByDifficulty($query, $difficulty)
     {
         return $query->where('difficulty', $difficulty);
     }
 
-    /**
-     * Scope: Get records by category (for puzzle)
-     */
     public function scopeByCategory($query, $category)
     {
         return $query->where('category', $category);
     }
 
-    /**
-     * Scope: Get top N fastest times
-     */
     public function scopeTopFastest($query, $limit = 10)
     {
         return $query->orderBy('time_seconds', 'asc')->limit($limit);
+    }
+
+    public function player()
+    {
+        return $this->belongsTo(User::class, 'player_id', '_id');
     }
 }

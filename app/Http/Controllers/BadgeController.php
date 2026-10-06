@@ -34,17 +34,23 @@ class BadgeController extends Controller
                 ]);
             }
 
-            // Count unclaimed rewards per difficulty (regardless of requested flag)
-            // This handles both old records (no requested field) and new ones (requested=true)
-            $allUnclaimed = \Illuminate\Support\Facades\DB::connection('mongodb')
+            // ✅ FIX: this used to count every un-awarded reward regardless of
+            // whether the player had tapped "Claim" (i.e. requested=false/null
+            // rewards were counted too). That fed straight into the admin
+            // Players page's "Give Reward" button, which enabled itself as
+            // soon as a player hit a 3/3 milestone — before the player ever
+            // claimed anything. Only rewards the player has actually
+            // requested should count here.
+            $allRequested = \Illuminate\Support\Facades\DB::connection('mongodb')
                 ->table('player_rewards')
                 ->where('player_id', $playerObjectId)
                 ->where('claimed', '!=', true)
+                ->where('requested', true)
                 ->get();
             $requestedCounts = [
-                'easy'      => $allUnclaimed->where('difficulty', 'easy')->count(),
-                'average'   => $allUnclaimed->where('difficulty', 'average')->count(),
-                'difficult' => $allUnclaimed->where('difficulty', 'difficult')->count(),
+                'easy'      => $allRequested->where('difficulty', 'easy')->count(),
+                'average'   => $allRequested->where('difficulty', 'average')->count(),
+                'difficult' => $allRequested->where('difficulty', 'difficult')->count(),
             ];
 
             return response()->json([
@@ -122,50 +128,13 @@ class BadgeController extends Controller
                 return response()->json(['success' => false, 'message' => 'Already requested — waiting for admin to confirm.'], 400);
             }
 
-            $playerBadge = PlayerBadge::where('player_info_id', $playerObjectId)->first();
-
-            if (!$playerBadge) {
-                $playerBadge = PlayerBadge::create([
-                    'player_info_id'          => $playerObjectId,
-                    'easy_badge_count'         => 0,
-                    'average_badge_count'      => 0,
-                    'difficult_badge_count'    => 0,
-                    'easy_official_badge'      => 0,
-                    'average_official_badge'   => 0,
-                    'difficult_official_badge' => 0,
-                ]);
-            }
-
-            $difficulty        = $reward->difficulty;
-            $badgeCountField   = strtolower($difficulty) . '_badge_count';
-            $currentBadgeCount = $playerBadge->$badgeCountField ?? 0;
-
-            // Must have at least 3 badges AND be on a milestone boundary
-            if ($currentBadgeCount < 3 || $currentBadgeCount % 3 !== 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Not eligible to claim reward. You need 3 badges first.'
-                ], 400);
-            }
-
-            // Double-check: make sure this specific reward record belongs to a valid milestone
-            $alreadyRequestedCount = PlayerReward::where('player_id', $playerObjectId)
-                ->where('difficulty', $difficulty)
-                ->where('requested', true)
-                ->count();
-            $alreadyClaimedCount = PlayerReward::where('player_id', $playerObjectId)
-                ->where('difficulty', $difficulty)
-                ->where('claimed', true)
-                ->count();
-            $totalProcessed = $alreadyRequestedCount + $alreadyClaimedCount;
-            $milestoneNumber = (int) floor($currentBadgeCount / 3);
-
-            if ($totalProcessed >= $milestoneNumber) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This milestone reward has already been requested or claimed.'
-                ], 400);
-            }
+            // Eligibility comes from the reward record itself: one player_rewards
+            // row exists per completed set of 3 badges, and it was already
+            // verified above (belongs to this player, not requested, not claimed).
+            // The old check required the badge total to be an exact multiple of 3,
+            // so a player with 4 badges (one full set + 1 toward the next) was
+            // wrongly told "Not eligible" even though a set of 3 was complete.
+            $difficulty = $reward->difficulty;
 
             // Mark as REQUESTED — admin will confirm and grant the official badge
             $reward->requested      = true;
@@ -312,6 +281,71 @@ class BadgeController extends Controller
         } catch (\Exception $e) {
             \Log::error('Error claiming all badges: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Error claiming badges'], 500);
+        }
+    }
+
+    /**
+     * Prize notifications: rewards the admin has just handed out that the
+     * player hasn't been told about yet. The Flutter app polls this every few
+     * seconds and shows a "prize claimed" message.
+     *
+     * Only rewards explicitly flagged player_notified === false are returned,
+     * so rewards awarded before this feature existed never trigger a message.
+     */
+    public function getPrizeNotifications($playerId)
+    {
+        try {
+            $playerObjectId = new ObjectId($playerId);
+
+            $rewards = \Illuminate\Support\Facades\DB::connection('mongodb')
+                ->table('player_rewards')
+                ->where('player_id', $playerObjectId)
+                ->where('claimed', true)
+                ->where('player_notified', false)
+                ->get();
+
+            $counts = [
+                'easy'      => $rewards->where('difficulty', 'easy')->count(),
+                'average'   => $rewards->where('difficulty', 'average')->count(),
+                'difficult' => $rewards->where('difficulty', 'difficult')->count(),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data'    => [
+                    'has_new' => $rewards->count() > 0,
+                    'total'   => $rewards->count(),
+                    'counts'  => $counts,
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error fetching prize notifications: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Error fetching notifications'], 500);
+        }
+    }
+
+    /**
+     * Player app calls this once the message has been shown, so it is not
+     * shown again.
+     */
+    public function ackPrizeNotifications($playerId)
+    {
+        try {
+            $playerObjectId = new ObjectId($playerId);
+
+            \Illuminate\Support\Facades\DB::connection('mongodb')
+                ->table('player_rewards')
+                ->where('player_id', $playerObjectId)
+                ->where('claimed', true)
+                ->where('player_notified', false)
+                ->update(['player_notified' => true, 'updated_at' => now()]);
+
+            return response()->json(['success' => true]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error acknowledging prize notifications: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Error'], 500);
         }
     }
 }
